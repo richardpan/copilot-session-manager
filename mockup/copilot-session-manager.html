@@ -1,0 +1,1967 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Copilot Session Manager</title>
+  <style>
+    :root {
+      --bg-primary: #0d1117;
+      --bg-secondary: #161b22;
+      --bg-tertiary: #21262d;
+      --border: #30363d;
+      --text-primary: #e6edf3;
+      --text-secondary: #8b949e;
+      --text-muted: #6e7681;
+      --accent-blue: #58a6ff;
+      --accent-green: #3fb950;
+      --accent-yellow: #d29922;
+      --accent-orange: #db6d28;
+      --accent-red: #f85149;
+      --accent-purple: #bc8cff;
+      --status-working: #238636;
+      --status-working-bg: rgba(35, 134, 54, 0.15);
+      --status-waiting: #9e6a03;
+      --status-waiting-bg: rgba(158, 106, 3, 0.15);
+      --status-inactive: #484f58;
+      --status-inactive-bg: rgba(72, 79, 88, 0.15);
+      --card-shadow: 0 3px 12px rgba(0,0,0,0.4);
+      --radius: 8px;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      min-height: 100vh;
+    }
+
+    /* Header */
+    .header {
+      background: var(--bg-secondary);
+      border-bottom: 1px solid var(--border);
+      padding: 16px 32px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .logo {
+      width: 32px;
+      height: 32px;
+      background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 16px;
+    }
+
+    .header h1 {
+      font-size: 18px;
+      font-weight: 600;
+    }
+
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    /* Toggle Switch */
+    .toggle-container {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      color: var(--text-secondary);
+    }
+
+    .toggle {
+      position: relative;
+      width: 40px;
+      height: 22px;
+      cursor: pointer;
+    }
+
+    .toggle input { opacity: 0; width: 0; height: 0; }
+
+    .toggle-slider {
+      position: absolute;
+      inset: 0;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border);
+      border-radius: 11px;
+      transition: 0.2s;
+    }
+
+    .toggle-slider::before {
+      content: '';
+      position: absolute;
+      width: 16px;
+      height: 16px;
+      left: 2px;
+      top: 2px;
+      background: var(--text-secondary);
+      border-radius: 50%;
+      transition: 0.2s;
+    }
+
+    .toggle input:checked + .toggle-slider {
+      background: var(--accent-blue);
+      border-color: var(--accent-blue);
+    }
+
+    .toggle input:checked + .toggle-slider::before {
+      transform: translateX(18px);
+      background: #fff;
+    }
+
+    /* Stats Bar */
+    .stats-bar {
+      display: flex;
+      gap: 24px;
+      padding: 16px 32px;
+      background: var(--bg-secondary);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .stat-card {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 16px;
+      background: var(--bg-tertiary);
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      min-width: 160px;
+    }
+
+    .stat-icon {
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+    }
+
+    .stat-value {
+      font-size: 20px;
+      font-weight: 700;
+      line-height: 1.2;
+    }
+
+    .stat-label {
+      font-size: 11px;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    /* Main Content */
+    .main {
+      padding: 24px 32px;
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+
+    .section-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+    }
+
+    .section-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .search-box {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 6px 12px;
+      width: 280px;
+    }
+
+    .search-box input {
+      background: none;
+      border: none;
+      color: var(--text-primary);
+      font-size: 13px;
+      outline: none;
+      width: 100%;
+    }
+
+    .search-box input::placeholder { color: var(--text-muted); }
+
+    /* Session Grid */
+    .session-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+      gap: 16px;
+      margin-bottom: 32px;
+    }
+
+    /* Session Card */
+    .session-card {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+      transition: border-color 0.2s, box-shadow 0.2s, transform 0.15s;
+      cursor: pointer;
+      position: relative;
+    }
+
+    .session-card:hover {
+      border-color: var(--accent-blue);
+      box-shadow: var(--card-shadow);
+      transform: translateY(-2px);
+    }
+
+    .session-card.selected {
+      border-color: var(--accent-purple);
+      box-shadow: 0 0 0 2px rgba(188, 140, 255, 0.3);
+    }
+
+    .session-card.inactive {
+      opacity: 0.6;
+    }
+
+    .session-card.inactive:hover {
+      opacity: 0.85;
+    }
+
+    .card-status-bar {
+      height: 3px;
+      width: 100%;
+    }
+
+    .card-status-bar.working { background: var(--accent-green); }
+    .card-status-bar.waiting { background: var(--accent-yellow); }
+    .card-status-bar.inactive { background: var(--status-inactive); }
+
+    .card-body {
+      padding: 16px;
+    }
+
+    .card-top {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+
+    .card-title-area {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .card-name {
+      font-size: 15px;
+      font-weight: 600;
+      margin-bottom: 2px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .card-name .edit-icon {
+      opacity: 0;
+      cursor: pointer;
+      font-size: 12px;
+      color: var(--text-secondary);
+      transition: opacity 0.15s;
+    }
+
+    .card-top:hover .edit-icon { opacity: 1; }
+
+    .card-id {
+      font-size: 11px;
+      color: var(--text-muted);
+      font-family: 'SFMono-Regular', Consolas, monospace;
+    }
+
+    .status-badge {
+      font-size: 11px;
+      font-weight: 600;
+      padding: 3px 10px;
+      border-radius: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    .status-badge.working {
+      color: var(--accent-green);
+      background: var(--status-working-bg);
+      border: 1px solid rgba(35, 134, 54, 0.4);
+    }
+
+    .status-badge.waiting {
+      color: var(--accent-yellow);
+      background: var(--status-waiting-bg);
+      border: 1px solid rgba(158, 106, 3, 0.4);
+    }
+
+    .status-badge.inactive {
+      color: var(--text-muted);
+      background: var(--status-inactive-bg);
+      border: 1px solid rgba(72, 79, 88, 0.4);
+    }
+
+    .card-description {
+      font-size: 13px;
+      color: var(--text-secondary);
+      margin-bottom: 14px;
+      line-height: 1.5;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+
+    .card-metrics {
+      display: flex;
+      gap: 16px;
+      margin-bottom: 14px;
+    }
+
+    .metric {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+
+    .metric-icon {
+      font-size: 14px;
+    }
+
+    .metric-value {
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    /* Token Usage Bar */
+    .token-bar-container {
+      margin-bottom: 14px;
+    }
+
+    .token-bar-header {
+      display: flex;
+      justify-content: space-between;
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-bottom: 4px;
+    }
+
+    .token-bar {
+      height: 6px;
+      background: var(--bg-tertiary);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+
+    .token-bar-fill {
+      height: 100%;
+      border-radius: 3px;
+      transition: width 0.6s ease;
+    }
+
+    .token-bar-fill.low { background: var(--accent-green); }
+    .token-bar-fill.medium { background: var(--accent-yellow); }
+    .token-bar-fill.high { background: var(--accent-orange); }
+    .token-bar-fill.critical { background: var(--accent-red); }
+
+    .card-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-bottom: 14px;
+    }
+
+    .tag {
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 12px;
+      background: var(--bg-tertiary);
+      color: var(--text-secondary);
+      border: 1px solid var(--border);
+    }
+
+    .card-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding-top: 12px;
+      border-top: 1px solid var(--border);
+    }
+
+    .card-actions {
+      display: flex;
+      gap: 4px;
+    }
+
+    .action-btn {
+      background: none;
+      border: 1px solid transparent;
+      color: var(--text-muted);
+      padding: 4px 8px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      transition: all 0.15s;
+    }
+
+    .action-btn:hover {
+      background: var(--bg-tertiary);
+      color: var(--text-primary);
+      border-color: var(--border);
+    }
+
+    .action-btn.merge:hover {
+      color: var(--accent-purple);
+      border-color: rgba(188, 140, 255, 0.4);
+      background: rgba(188, 140, 255, 0.1);
+    }
+
+    .card-time {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    /* Rename Modal */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.6);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 200;
+    }
+
+    .modal-overlay.active { display: flex; }
+
+    .modal {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 24px;
+      width: 480px;
+      max-width: 90vw;
+      box-shadow: 0 16px 48px rgba(0,0,0,0.5);
+    }
+
+    .modal h2 {
+      font-size: 16px;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .modal-input {
+      width: 100%;
+      padding: 10px 12px;
+      background: var(--bg-primary);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text-primary);
+      font-size: 14px;
+      outline: none;
+      margin-bottom: 16px;
+    }
+
+    .modal-input:focus {
+      border-color: var(--accent-blue);
+      box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.15);
+    }
+
+    .modal-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+
+    .btn {
+      padding: 8px 16px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      border: 1px solid var(--border);
+      transition: 0.15s;
+    }
+
+    .btn-secondary {
+      background: var(--bg-tertiary);
+      color: var(--text-primary);
+    }
+
+    .btn-secondary:hover { background: var(--border); }
+
+    .btn-primary {
+      background: var(--accent-blue);
+      color: #fff;
+      border-color: var(--accent-blue);
+    }
+
+    .btn-primary:hover { filter: brightness(1.1); }
+
+    .btn-purple {
+      background: var(--accent-purple);
+      color: #fff;
+      border-color: var(--accent-purple);
+    }
+
+    .btn-purple:hover { filter: brightness(1.1); }
+
+    /* Merge Panel */
+    .merge-panel {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: var(--bg-secondary);
+      border-top: 2px solid var(--accent-purple);
+      padding: 16px 32px;
+      display: none;
+      align-items: center;
+      justify-content: space-between;
+      z-index: 150;
+      box-shadow: 0 -4px 24px rgba(0,0,0,0.4);
+    }
+
+    .merge-panel.active { display: flex; }
+
+    .merge-info {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .merge-sessions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .merge-session-chip {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 13px;
+    }
+
+    .merge-arrow {
+      font-size: 18px;
+      color: var(--accent-purple);
+    }
+
+    .merge-actions {
+      display: flex;
+      gap: 8px;
+    }
+
+    /* Notification Toast */
+    .toast {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      background: var(--bg-secondary);
+      border: 1px solid var(--accent-green);
+      border-radius: 8px;
+      padding: 12px 20px;
+      display: none;
+      align-items: center;
+      gap: 8px;
+      z-index: 300;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+      font-size: 13px;
+      animation: slideIn 0.3s ease;
+    }
+
+    .toast.active { display: flex; }
+
+    @keyframes slideIn {
+      from { transform: translateX(100px); opacity: 0; }
+      to { transform: translateX(0); opacity: 1; }
+    }
+
+    /* Checkbox for merge selection */
+    .select-checkbox {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      width: 20px;
+      height: 20px;
+      border: 2px solid var(--border);
+      border-radius: 4px;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      background: var(--bg-tertiary);
+      transition: 0.15s;
+      z-index: 10;
+    }
+
+    .select-checkbox.visible { display: flex; }
+
+    .select-checkbox.checked {
+      background: var(--accent-purple);
+      border-color: var(--accent-purple);
+    }
+
+    /* Pulse animation for working status */
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
+    .pulse-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      display: inline-block;
+      animation: pulse 2s ease-in-out infinite;
+    }
+
+    .pulse-dot.working { background: var(--accent-green); }
+    .pulse-dot.waiting { background: var(--accent-yellow); }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      .header { padding: 12px 16px; }
+      .stats-bar { padding: 12px 16px; flex-wrap: wrap; gap: 8px; }
+      .main { padding: 16px; }
+      .session-grid { grid-template-columns: 1fr; }
+      .search-box { width: 200px; }
+    }
+
+    .group-label {
+      font-size: 12px;
+      padding: 2px 8px;
+      border-radius: 12px;
+      font-weight: 600;
+    }
+
+    .group-label.frontend {
+      background: rgba(88, 166, 255, 0.15);
+      color: var(--accent-blue);
+      border: 1px solid rgba(88, 166, 255, 0.3);
+    }
+
+    .group-label.backend {
+      background: rgba(63, 185, 80, 0.15);
+      color: var(--accent-green);
+      border: 1px solid rgba(63, 185, 80, 0.3);
+    }
+
+    .group-label.infra {
+      background: rgba(219, 109, 40, 0.15);
+      color: var(--accent-orange);
+      border: 1px solid rgba(219, 109, 40, 0.3);
+    }
+
+    .group-label.docs {
+      background: rgba(188, 140, 255, 0.15);
+      color: var(--accent-purple);
+      border: 1px solid rgba(188, 140, 255, 0.3);
+    }
+
+    /* Terminal Window Indicator */
+    .terminal-indicator {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 10px;
+      background: rgba(63, 185, 80, 0.15);
+      color: var(--accent-green);
+      border: 1px solid rgba(63, 185, 80, 0.3);
+      font-weight: 500;
+    }
+
+    .terminal-indicator .dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--accent-green);
+      animation: pulse 2s ease-in-out infinite;
+    }
+
+    /* README Modal - large */
+    .modal.large {
+      width: 800px;
+      max-width: 95vw;
+      max-height: 85vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .modal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 16px;
+    }
+
+    .modal-tabs {
+      display: flex;
+      gap: 4px;
+      margin-bottom: 12px;
+    }
+
+    .modal-tab {
+      padding: 6px 14px;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 12px;
+      color: var(--text-secondary);
+      transition: 0.15s;
+    }
+
+    .modal-tab.active {
+      background: var(--accent-blue);
+      color: #fff;
+      border-color: var(--accent-blue);
+    }
+
+    .readme-content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px;
+      background: var(--bg-primary);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 14px;
+      line-height: 1.7;
+      min-height: 360px;
+      max-height: 480px;
+    }
+
+    .readme-content h1 {
+      font-size: 22px;
+      margin-bottom: 12px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border);
+    }
+    .readme-content h2 {
+      font-size: 17px;
+      margin: 18px 0 10px;
+      color: var(--accent-blue);
+    }
+    .readme-content h3 {
+      font-size: 14px;
+      margin: 14px 0 6px;
+      color: var(--text-primary);
+    }
+    .readme-content p { margin-bottom: 10px; color: var(--text-secondary); }
+    .readme-content ul, .readme-content ol { margin: 8px 0 12px 24px; color: var(--text-secondary); }
+    .readme-content li { margin-bottom: 4px; }
+    .readme-content code {
+      background: var(--bg-tertiary);
+      padding: 1px 6px;
+      border-radius: 3px;
+      font-family: 'SFMono-Regular', Consolas, monospace;
+      font-size: 12px;
+      color: var(--accent-purple);
+    }
+    .readme-content pre {
+      background: var(--bg-tertiary);
+      padding: 12px;
+      border-radius: 6px;
+      overflow-x: auto;
+      margin-bottom: 12px;
+      border: 1px solid var(--border);
+    }
+    .readme-content pre code {
+      background: none;
+      padding: 0;
+      color: var(--text-primary);
+    }
+    .readme-content blockquote {
+      border-left: 3px solid var(--accent-blue);
+      padding-left: 12px;
+      margin: 8px 0;
+      color: var(--text-secondary);
+      font-style: italic;
+    }
+    .readme-content a { color: var(--accent-blue); text-decoration: none; }
+    .readme-content a:hover { text-decoration: underline; }
+    .readme-content hr { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
+    .readme-content table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 12px;
+      font-size: 13px;
+    }
+    .readme-content th, .readme-content td {
+      padding: 6px 12px;
+      border: 1px solid var(--border);
+      text-align: left;
+    }
+    .readme-content th { background: var(--bg-tertiary); }
+
+    .readme-editor {
+      flex: 1;
+      width: 100%;
+      padding: 16px;
+      background: var(--bg-primary);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text-primary);
+      font-family: 'SFMono-Regular', Consolas, monospace;
+      font-size: 13px;
+      line-height: 1.6;
+      resize: none;
+      outline: none;
+      min-height: 360px;
+      max-height: 480px;
+    }
+
+    .readme-editor:focus {
+      border-color: var(--accent-blue);
+    }
+
+    .readme-meta {
+      display: flex;
+      gap: 12px;
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 8px;
+    }
+
+    /* Terminal mock window */
+    .terminal-window {
+      position: fixed;
+      bottom: 80px;
+      right: 24px;
+      width: 560px;
+      height: 360px;
+      background: #0a0e14;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      box-shadow: 0 16px 48px rgba(0,0,0,0.6);
+      display: none;
+      flex-direction: column;
+      z-index: 250;
+      overflow: hidden;
+      resize: both;
+    }
+
+    .terminal-window.active {
+      display: flex;
+      animation: terminalPop 0.25s ease;
+    }
+
+    .terminal-window.focused {
+      border-color: var(--accent-blue);
+      box-shadow: 0 0 0 2px rgba(88, 166, 255, 0.3), 0 16px 48px rgba(0,0,0,0.6);
+    }
+
+    @keyframes terminalPop {
+      from { transform: scale(0.85); opacity: 0; }
+      to { transform: scale(1); opacity: 1; }
+    }
+
+    .terminal-titlebar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 12px;
+      background: #161b22;
+      border-bottom: 1px solid var(--border);
+      cursor: move;
+      user-select: none;
+    }
+
+    .terminal-title {
+      font-size: 12px;
+      color: var(--text-secondary);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .terminal-title .ps-icon {
+      width: 16px;
+      height: 16px;
+      background: #012456;
+      border-radius: 3px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 10px;
+      color: #fff;
+      font-weight: 700;
+    }
+
+    .terminal-controls {
+      display: flex;
+      gap: 6px;
+    }
+
+    .terminal-control {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      cursor: pointer;
+      border: none;
+    }
+
+    .terminal-control.minimize { background: #f1c40f; }
+    .terminal-control.maximize { background: #2ecc71; }
+    .terminal-control.close { background: #e74c3c; }
+
+    .terminal-body {
+      flex: 1;
+      padding: 12px 14px;
+      overflow-y: auto;
+      font-family: 'Cascadia Code', 'Consolas', monospace;
+      font-size: 12px;
+      line-height: 1.6;
+      color: #c9d1d9;
+    }
+
+    .terminal-body .ps-prompt { color: #58a6ff; }
+    .terminal-body .ps-path { color: #d29922; }
+    .terminal-body .ps-cmd { color: #fff; }
+    .terminal-body .ps-output { color: #8b949e; }
+    .terminal-body .ps-success { color: #3fb950; }
+    .terminal-body .ps-banner { color: #bc8cff; }
+
+    .terminal-cursor {
+      display: inline-block;
+      width: 7px;
+      height: 13px;
+      background: #c9d1d9;
+      vertical-align: middle;
+      animation: blink 1s step-end infinite;
+    }
+
+    @keyframes blink {
+      50% { opacity: 0; }
+    }
+
+    .launch-btn {
+      background: rgba(63, 185, 80, 0.15);
+      border: 1px solid rgba(63, 185, 80, 0.4);
+      color: var(--accent-green);
+    }
+
+    .launch-btn:hover {
+      background: rgba(63, 185, 80, 0.25);
+      color: var(--accent-green);
+      border-color: var(--accent-green);
+    }
+
+    .readme-btn {
+      background: rgba(88, 166, 255, 0.1);
+      border: 1px solid rgba(88, 166, 255, 0.3);
+      color: var(--accent-blue);
+    }
+
+    .readme-btn:hover {
+      background: rgba(88, 166, 255, 0.2);
+      color: var(--accent-blue);
+      border-color: var(--accent-blue);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <div class="header">
+    <div class="header-left">
+      <div class="logo">⚡</div>
+      <h1>Copilot Session Manager</h1>
+    </div>
+    <div class="header-right">
+      <div class="toggle-container">
+        <span>Show inactive</span>
+        <label class="toggle">
+          <input type="checkbox" id="toggleInactive" onchange="toggleInactiveSessions()">
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+      <button class="btn btn-secondary" id="mergeMode" onclick="toggleMergeMode()">🔗 Merge Sessions</button>
+    </div>
+  </div>
+
+  <!-- Stats Bar -->
+  <div class="stats-bar">
+    <div class="stat-card">
+      <div class="stat-icon" style="background: rgba(88,166,255,0.15);">📊</div>
+      <div>
+        <div class="stat-value" id="totalSessions">5</div>
+        <div class="stat-label">Active Sessions</div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon" style="background: rgba(63,185,80,0.15);">🔄</div>
+      <div>
+        <div class="stat-value" id="workingSessions">2</div>
+        <div class="stat-label">Working</div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon" style="background: rgba(210,153,34,0.15);">⏳</div>
+      <div>
+        <div class="stat-value" id="waitingSessions">3</div>
+        <div class="stat-label">Awaiting Input</div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon" style="background: rgba(248,81,73,0.15);">🎯</div>
+      <div>
+        <div class="stat-value" id="totalTokens">847K</div>
+        <div class="stat-label">Total Tokens</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main -->
+  <div class="main">
+    <div class="section-header">
+      <span class="section-title">Sessions</span>
+      <div class="search-box">
+        <span>🔍</span>
+        <input type="text" placeholder="Search sessions..." oninput="filterSessions(this.value)">
+      </div>
+    </div>
+
+    <div class="session-grid" id="sessionGrid"></div>
+
+    <div class="section-header" id="inactiveHeader" style="display:none;">
+      <span class="section-title">Inactive Sessions</span>
+    </div>
+    <div class="session-grid" id="inactiveGrid" style="display:none;"></div>
+  </div>
+
+  <!-- Rename Modal -->
+  <div class="modal-overlay" id="renameModal">
+    <div class="modal">
+      <h2>✏️ Rename Session</h2>
+      <label style="font-size:12px; color:var(--text-secondary); display:block; margin-bottom:6px;">Session Name</label>
+      <input type="text" class="modal-input" id="renameInput" placeholder="Enter new session name...">
+      <label style="font-size:12px; color:var(--text-secondary); display:block; margin-bottom:6px;">Group (optional)</label>
+      <select class="modal-input" id="groupSelect" style="cursor:pointer;">
+        <option value="">No group</option>
+        <option value="frontend">Frontend</option>
+        <option value="backend">Backend</option>
+        <option value="infra">Infrastructure</option>
+        <option value="docs">Documentation</option>
+      </select>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" onclick="closeRenameModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="saveRename()">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Merge Confirmation Modal -->
+  <div class="modal-overlay" id="mergeConfirmModal">
+    <div class="modal">
+      <h2>🔗 Merge Session Context</h2>
+      <p style="font-size:13px; color:var(--text-secondary); margin-bottom:16px; line-height:1.6;">
+        This will load all context from the <strong>source session</strong> into the <strong>target session</strong>. 
+        The source session will remain unchanged. The target session will gain access to all files, conversation history, 
+        and working context from the source.
+      </p>
+      <div id="mergeDetails" style="margin-bottom:16px;"></div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" onclick="closeMergeConfirm()">Cancel</button>
+        <button class="btn btn-purple" onclick="executeMerge()">Merge Context</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- README Modal -->
+  <div class="modal-overlay" id="readmeModal">
+    <div class="modal large">
+      <div class="modal-header">
+        <h2 style="margin:0;">📄 Session README — <span id="readmeSessionName" style="color:var(--accent-blue);"></span></h2>
+        <button class="action-btn" onclick="closeReadme()" style="font-size:18px;">✕</button>
+      </div>
+      <div class="modal-tabs">
+        <div class="modal-tab active" onclick="switchReadmeTab('preview')" id="tabPreview">👁️ Preview</div>
+        <div class="modal-tab" onclick="switchReadmeTab('edit')" id="tabEdit">✏️ Edit Markdown</div>
+      </div>
+      <div class="readme-content" id="readmePreview"></div>
+      <textarea class="readme-editor" id="readmeEditor" style="display:none;"></textarea>
+      <div class="readme-meta">
+        <span>📁 <span id="readmePath"></span></span>
+        <span>🕒 Last updated: <span id="readmeUpdated"></span></span>
+        <span>📝 <span id="readmeWords"></span> words</span>
+      </div>
+      <div class="modal-actions" style="margin-top:16px;">
+        <button class="btn btn-secondary" onclick="exportReadme()">⬇️ Export .md</button>
+        <button class="btn btn-secondary" onclick="closeReadme()">Close</button>
+        <button class="btn btn-primary" onclick="saveReadme()">💾 Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Terminal Window (mock PowerShell) -->
+  <div class="terminal-window" id="terminalWindow">
+    <div class="terminal-titlebar" id="terminalTitlebar">
+      <div class="terminal-title">
+        <div class="ps-icon">PS</div>
+        <span id="terminalTitle">Windows PowerShell — Copilot Session</span>
+      </div>
+      <div class="terminal-controls">
+        <button class="terminal-control minimize" title="Minimize" onclick="minimizeTerminal()"></button>
+        <button class="terminal-control maximize" title="Maximize"></button>
+        <button class="terminal-control close" title="Close" onclick="closeTerminal()"></button>
+      </div>
+    </div>
+    <div class="terminal-body" id="terminalBody"></div>
+  </div>
+
+  <!-- Toast -->
+  <div class="toast" id="toast">
+    <span id="toastIcon">✅</span>
+    <span id="toastMsg"></span>
+  </div>
+
+  <!-- Merge Panel -->
+  <div class="merge-panel" id="mergePanel">
+    <div class="merge-info">
+      <span style="color:var(--accent-purple); font-weight:600;">🔗 Merge Mode</span>
+      <div class="merge-sessions" id="mergeSessions">
+        <span style="color:var(--text-secondary); font-size:13px;">Select two sessions to merge their context</span>
+      </div>
+    </div>
+    <div class="merge-actions">
+      <button class="btn btn-secondary" onclick="toggleMergeMode()">Cancel</button>
+      <button class="btn btn-purple" id="mergeBtn" onclick="showMergeConfirm()" disabled>Merge →</button>
+    </div>
+  </div>
+
+  <script>
+    // Mock session data
+    const sessions = [
+      {
+        id: 'a1b2c3d4',
+        name: 'Auth Service Refactor',
+        group: 'backend',
+        status: 'working',
+        description: 'Refactoring the authentication service to use JWT tokens with refresh token rotation and implementing RBAC middleware.',
+        tokens: { used: 245000, limit: 1000000 },
+        startTime: new Date(Date.now() - 2 * 60 * 60 * 1000),
+        lastActivity: new Date(Date.now() - 30 * 1000),
+        tags: ['auth', 'security', 'API'],
+        files: 12,
+        terminalOpen: true,
+        cwd: 'C:\\ws\\auth-service',
+        readme: `# Auth Service Refactor
+
+## Goal
+Migrate the legacy session-based authentication to JWT with refresh token rotation, and add role-based access control (RBAC) middleware to the API gateway.
+
+## Status
+🟢 **In progress** — JWT issuance + validation complete. Currently implementing refresh rotation.
+
+## Key Decisions
+- **Token format:** JWT (RS256) with 15-min access token / 7-day refresh
+- **Storage:** Refresh tokens in Redis with rotation tracking
+- **RBAC:** Middleware reads roles claim; permissions resolved via role-to-permission map
+
+## Files Modified
+| File | Purpose |
+|------|---------|
+| \`src/auth/jwt.service.ts\` | Token signing/verification |
+| \`src/auth/refresh.service.ts\` | Rotation logic |
+| \`src/middleware/rbac.ts\` | Role gate |
+| \`src/config/auth.config.ts\` | RS256 keys, TTLs |
+
+## Open Questions
+- [ ] Should we revoke all refresh tokens on password change?
+- [ ] What's the policy for token reuse detection?
+
+## Next Steps
+1. Finish refresh rotation with reuse detection
+2. Wire RBAC middleware into all protected routes
+3. Add integration tests for token lifecycle
+
+> **Note:** Coordinate with the Database Migration session — the new \`user_roles\` table needs to land first.
+`
+      },
+      {
+        id: 'e5f6g7h8',
+        name: 'Dashboard Components',
+        group: 'frontend',
+        status: 'waiting',
+        description: 'Building React dashboard components with chart visualizations, data tables, and real-time WebSocket updates.',
+        tokens: { used: 189000, limit: 1000000 },
+        startTime: new Date(Date.now() - 4.5 * 60 * 60 * 1000),
+        lastActivity: new Date(Date.now() - 15 * 60 * 1000),
+        tags: ['react', 'charts', 'websocket'],
+        files: 8,
+        terminalOpen: false,
+        cwd: 'C:\\ws\\dashboard-ui',
+        readme: `# Dashboard Components
+
+## Goal
+Build a real-time analytics dashboard with chart visualizations, sortable data tables, and live WebSocket updates from the metrics service.
+
+## Status
+🟡 **Awaiting input** — Need design approval for chart color palette before continuing.
+
+## Components Built
+- \`<MetricCard />\` — KPI tiles with sparkline
+- \`<TimeSeriesChart />\` — Recharts-based with zoom/pan
+- \`<DataTable />\` — Virtualized rows, column sort, CSV export
+- \`<LiveBadge />\` — WebSocket connection state
+
+## Tech Stack
+- React 18 + TypeScript
+- Recharts for visualization
+- TanStack Table for data grid
+- Socket.IO client for live updates
+
+## Outstanding Items
+1. Final chart color palette (blocked on design)
+2. Mobile responsive breakpoints
+3. Empty state illustrations
+`
+      },
+      {
+        id: 'i9j0k1l2',
+        name: 'CI/CD Pipeline',
+        group: 'infra',
+        status: 'working',
+        description: 'Setting up GitHub Actions workflows for automated testing, Docker builds, and deployment to Azure Kubernetes Service.',
+        tokens: { used: 678000, limit: 1000000 },
+        startTime: new Date(Date.now() - 1.2 * 60 * 60 * 1000),
+        lastActivity: new Date(Date.now() - 5 * 1000),
+        tags: ['CI/CD', 'Docker', 'AKS'],
+        files: 6,
+        terminalOpen: true,
+        cwd: 'C:\\ws\\platform-infra',
+        readme: `# CI/CD Pipeline
+
+## Goal
+Establish a complete CI/CD pipeline: PR validation → Docker build → AKS deployment via GitHub Actions.
+
+## Status
+🟢 **Working** — Pipeline running. Currently optimizing Docker layer caching.
+
+## Workflow Stages
+1. **Lint & Test** — ESLint, Jest unit tests, integration tests
+2. **Build** — Multi-stage Dockerfile with BuildKit cache
+3. **Scan** — Trivy vulnerability scan
+4. **Push** — Tagged push to ACR
+5. **Deploy** — Helm upgrade to AKS staging
+6. **Smoke Test** — Synthetic traffic against new deployment
+
+## Files
+- \`.github/workflows/ci.yml\` — PR validation
+- \`.github/workflows/cd.yml\` — Main branch deploy
+- \`Dockerfile\` — Multi-stage build
+- \`charts/api/values.yaml\` — Helm config
+`
+      },
+      {
+        id: 'm3n4o5p6',
+        name: 'API Documentation',
+        group: 'docs',
+        status: 'waiting',
+        description: 'Generating OpenAPI specs and interactive documentation for the REST API endpoints using Swagger UI.',
+        tokens: { used: 92000, limit: 1000000 },
+        startTime: new Date(Date.now() - 6 * 60 * 60 * 1000),
+        lastActivity: new Date(Date.now() - 45 * 60 * 1000),
+        tags: ['docs', 'OpenAPI', 'swagger'],
+        files: 4,
+        terminalOpen: false,
+        cwd: 'C:\\ws\\api-docs',
+        readme: `# API Documentation
+
+## Goal
+Auto-generate OpenAPI 3.1 specs from controller annotations and host an interactive Swagger UI portal.
+
+## Status
+🟡 **Awaiting input** — Need clarification on auth scheme documentation.
+
+## Approach
+- Use \`@nestjs/swagger\` decorators on existing controllers
+- Generate spec at build time
+- Host Swagger UI at \`/docs\` (gated by internal-only middleware)
+- Publish redoc-rendered version to docs portal
+
+## Coverage
+- ✅ Auth endpoints
+- ✅ User endpoints
+- ⏳ Admin endpoints (in progress)
+- ❌ Webhook endpoints (not started)
+`
+      },
+      {
+        id: 'q7r8s9t0',
+        name: 'Database Migration',
+        group: 'backend',
+        status: 'waiting',
+        description: 'Planning and executing PostgreSQL schema migration for the new multi-tenant architecture with row-level security.',
+        tokens: { used: 156000, limit: 1000000 },
+        startTime: new Date(Date.now() - 3 * 60 * 60 * 1000),
+        lastActivity: new Date(Date.now() - 30 * 60 * 1000),
+        tags: ['postgres', 'migration', 'multi-tenant'],
+        files: 5,
+        terminalOpen: false,
+        cwd: 'C:\\ws\\db-migrations',
+        readme: `# Database Migration
+
+## Goal
+Migrate single-tenant PostgreSQL schema to multi-tenant with row-level security (RLS).
+
+## Status
+🟡 **Awaiting input** — Need approval on tenant_id propagation strategy.
+
+## Strategy
+- Add \`tenant_id\` column to all tenant-scoped tables
+- Enable RLS with policies keyed on \`current_setting('app.tenant_id')\`
+- Backfill existing rows from organization mapping
+- Connection middleware sets \`SET LOCAL app.tenant_id = ...\`
+
+## Migration Files
+\`\`\`
+migrations/
+  001_add_tenant_id.sql
+  002_backfill_tenant_id.sql
+  003_enable_rls.sql
+  004_create_policies.sql
+  005_add_indexes.sql
+\`\`\`
+`
+      },
+      {
+        id: 'u1v2w3x4',
+        name: 'Performance Testing',
+        group: 'infra',
+        status: 'inactive',
+        description: 'Load testing with k6 scripts targeting API endpoints. Completed baseline benchmarks and identified bottlenecks.',
+        tokens: { used: 410000, limit: 1000000 },
+        startTime: new Date(Date.now() - 26 * 60 * 60 * 1000),
+        lastActivity: new Date(Date.now() - 20 * 60 * 60 * 1000),
+        tags: ['k6', 'load-test', 'performance'],
+        files: 3,
+        terminalOpen: false,
+        cwd: 'C:\\ws\\perf-tests',
+        readme: `# Performance Testing
+
+## Goal
+Establish baseline performance metrics for all API endpoints under realistic load.
+
+## Status
+⚪ **Inactive** — Baseline complete, follow-up work paused.
+
+## Findings
+- \`/api/search\` p99 = 1.8s (target 500ms) → DB query needs index
+- \`/api/users/:id\` cold cache = 240ms → add Redis read-through
+- Auth middleware overhead = 12ms avg → acceptable
+
+## Scripts
+- \`scripts/baseline.js\` — 100 VU ramp over 5min
+- \`scripts/spike.js\` — 0 → 1000 VU in 30s
+- \`scripts/soak.js\` — 50 VU steady for 1hr
+`
+      },
+      {
+        id: 'y5z6a7b8',
+        name: 'Legacy API Wrapper',
+        group: 'backend',
+        status: 'inactive',
+        description: 'Wrapping legacy SOAP endpoints with a modern REST interface. Completed initial mapping and error handling.',
+        tokens: { used: 320000, limit: 1000000 },
+        startTime: new Date(Date.now() - 48 * 60 * 60 * 1000),
+        lastActivity: new Date(Date.now() - 24 * 60 * 60 * 1000),
+        tags: ['legacy', 'REST', 'SOAP'],
+        files: 7,
+        terminalOpen: false,
+        cwd: 'C:\\ws\\legacy-wrapper',
+        readme: `# Legacy API Wrapper
+
+## Goal
+Wrap legacy SOAP endpoints (CustomerService, OrderService) with a modern REST interface.
+
+## Status
+⚪ **Inactive** — Phase 1 done, awaiting phase 2 prioritization.
+
+## Completed
+- ✅ SOAP client generation from WSDL
+- ✅ REST → SOAP request mapping
+- ✅ Error code translation table
+- ✅ Response normalization (XML → JSON)
+
+## Pending Phase 2
+- Caching layer (Redis)
+- Circuit breaker for upstream failures
+- Request batching for bulk operations
+`
+      }
+    ];
+
+    let mergeMode = false;
+    let selectedForMerge = [];
+    let renamingSessionId = null;
+    let activeReadmeId = null;
+    let activeTerminalId = null;
+
+    function formatTokens(n) {
+      if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
+      if (n >= 1000) return (n / 1000).toFixed(0) + 'K';
+      return n.toString();
+    }
+
+    function formatDuration(ms) {
+      const hours = Math.floor(ms / 3600000);
+      const mins = Math.floor((ms % 3600000) / 60000);
+      if (hours > 24) return Math.floor(hours / 24) + 'd ' + (hours % 24) + 'h';
+      if (hours > 0) return hours + 'h ' + mins + 'm';
+      return mins + 'm';
+    }
+
+    function timeAgo(date) {
+      const secs = Math.floor((Date.now() - date) / 1000);
+      if (secs < 60) return secs + 's ago';
+      const mins = Math.floor(secs / 60);
+      if (mins < 60) return mins + 'm ago';
+      const hrs = Math.floor(mins / 60);
+      if (hrs < 24) return hrs + 'h ago';
+      return Math.floor(hrs / 24) + 'd ago';
+    }
+
+    function getTokenLevel(pct) {
+      if (pct < 40) return 'low';
+      if (pct < 65) return 'medium';
+      if (pct < 85) return 'high';
+      return 'critical';
+    }
+
+    const groupLabels = {
+      frontend: '<span class="group-label frontend">Frontend</span>',
+      backend: '<span class="group-label backend">Backend</span>',
+      infra: '<span class="group-label infra">Infra</span>',
+      docs: '<span class="group-label docs">Docs</span>',
+    };
+
+    function renderCard(s) {
+      const pct = Math.round((s.tokens.used / s.tokens.limit) * 100);
+      const level = getTokenLevel(pct);
+      const duration = Date.now() - s.startTime.getTime();
+      const isInactive = s.status === 'inactive';
+      const isSelected = selectedForMerge.includes(s.id);
+
+      return `
+        <div class="session-card ${isInactive ? 'inactive' : ''} ${isSelected ? 'selected' : ''}" 
+             data-id="${s.id}" data-status="${s.status}" data-name="${s.name.toLowerCase()}"
+             onclick="handleCardClick('${s.id}')">
+          <div class="select-checkbox ${mergeMode && !isInactive ? 'visible' : ''} ${isSelected ? 'checked' : ''}">
+            ${isSelected ? '✓' : ''}
+          </div>
+          <div class="card-status-bar ${s.status}"></div>
+          <div class="card-body">
+            <div class="card-top">
+              <div class="card-title-area">
+                <div class="card-name">
+                  ${s.status === 'working' ? '<span class="pulse-dot working"></span>' : ''}
+                  ${s.status === 'waiting' ? '<span class="pulse-dot waiting"></span>' : ''}
+                  ${s.name}
+                  <span class="edit-icon" onclick="event.stopPropagation(); openRenameModal('${s.id}')">✏️</span>
+                </div>
+                <div class="card-id">${s.id} ${s.group ? '· ' + groupLabels[s.group] : ''}</div>
+              </div>
+              <span class="status-badge ${s.status}">
+                ${s.status === 'working' ? 'Working' : s.status === 'waiting' ? 'Awaiting Input' : 'Inactive'}
+              </span>
+            </div>
+            <div class="card-description">${s.description}</div>
+            <div class="card-metrics">
+              <div class="metric">
+                <span class="metric-icon">⏱️</span>
+                <span>Active: <span class="metric-value">${formatDuration(duration)}</span></span>
+              </div>
+              <div class="metric">
+                <span class="metric-icon">📁</span>
+                <span>Files: <span class="metric-value">${s.files}</span></span>
+              </div>
+              <div class="metric">
+                <span class="metric-icon">💬</span>
+                <span>Last: <span class="metric-value">${timeAgo(s.lastActivity)}</span></span>
+              </div>
+            </div>
+            <div class="token-bar-container">
+              <div class="token-bar-header">
+                <span>Tokens: ${formatTokens(s.tokens.used)} / ${formatTokens(s.tokens.limit)}</span>
+                <span>${pct}%</span>
+              </div>
+              <div class="token-bar">
+                <div class="token-bar-fill ${level}" style="width: ${pct}%"></div>
+              </div>
+            </div>
+            <div class="card-tags">
+              ${s.tags.map(t => `<span class="tag">${t}</span>`).join('')}
+            </div>
+            <div class="card-footer">
+              <div class="card-actions">
+                <button class="action-btn launch-btn" onclick="event.stopPropagation(); launchSession('${s.id}')">
+                  ${s.terminalOpen ? '🪟 Focus' : '⚡ Launch'}
+                </button>
+                <button class="action-btn readme-btn" onclick="event.stopPropagation(); openReadme('${s.id}')">📄 README</button>
+                <button class="action-btn" onclick="event.stopPropagation(); openRenameModal('${s.id}')">✏️</button>
+                <button class="action-btn merge" onclick="event.stopPropagation(); quickMerge('${s.id}')">🔗</button>
+              </div>
+              <span class="card-time">${s.terminalOpen ? '<span class="terminal-indicator"><span class="dot"></span>Terminal open</span>' : 'Started ' + timeAgo(s.startTime)}</span>
+            </div>
+          </div>
+        </div>`;
+    }
+
+    function renderSessions() {
+      const active = sessions.filter(s => s.status !== 'inactive');
+      const inactive = sessions.filter(s => s.status === 'inactive');
+      const showInactive = document.getElementById('toggleInactive').checked;
+
+      document.getElementById('sessionGrid').innerHTML = active.map(renderCard).join('');
+
+      document.getElementById('inactiveHeader').style.display = showInactive ? 'flex' : 'none';
+      document.getElementById('inactiveGrid').style.display = showInactive ? 'grid' : 'none';
+      if (showInactive) {
+        document.getElementById('inactiveGrid').innerHTML = inactive.map(renderCard).join('');
+      }
+
+      // Update stats
+      document.getElementById('totalSessions').textContent = active.length;
+      document.getElementById('workingSessions').textContent = active.filter(s => s.status === 'working').length;
+      document.getElementById('waitingSessions').textContent = active.filter(s => s.status === 'waiting').length;
+      const totalTok = sessions.filter(s => s.status !== 'inactive').reduce((sum, s) => sum + s.tokens.used, 0);
+      document.getElementById('totalTokens').textContent = formatTokens(totalTok);
+    }
+
+    function toggleInactiveSessions() {
+      renderSessions();
+    }
+
+    function filterSessions(query) {
+      const q = query.toLowerCase();
+      document.querySelectorAll('.session-card').forEach(card => {
+        const name = card.dataset.name;
+        const tags = card.querySelector('.card-tags')?.textContent.toLowerCase() || '';
+        card.style.display = (name.includes(q) || tags.includes(q)) ? '' : 'none';
+      });
+    }
+
+    // Rename
+    function openRenameModal(id) {
+      renamingSessionId = id;
+      const s = sessions.find(s => s.id === id);
+      document.getElementById('renameInput').value = s.name;
+      document.getElementById('groupSelect').value = s.group || '';
+      document.getElementById('renameModal').classList.add('active');
+      setTimeout(() => document.getElementById('renameInput').focus(), 100);
+    }
+
+    function closeRenameModal() {
+      document.getElementById('renameModal').classList.remove('active');
+      renamingSessionId = null;
+    }
+
+    function saveRename() {
+      const s = sessions.find(s => s.id === renamingSessionId);
+      const newName = document.getElementById('renameInput').value.trim();
+      const newGroup = document.getElementById('groupSelect').value;
+      if (s && newName) {
+        s.name = newName;
+        s.group = newGroup;
+        closeRenameModal();
+        renderSessions();
+        showToast('✅', `Session renamed to "${newName}"`);
+      }
+    }
+
+    // Merge
+    function toggleMergeMode() {
+      mergeMode = !mergeMode;
+      selectedForMerge = [];
+      document.getElementById('mergeMode').style.background = mergeMode ? 'var(--accent-purple)' : '';
+      document.getElementById('mergeMode').style.color = mergeMode ? '#fff' : '';
+      document.getElementById('mergeMode').style.borderColor = mergeMode ? 'var(--accent-purple)' : '';
+      document.getElementById('mergePanel').classList.toggle('active', mergeMode);
+      renderSessions();
+      updateMergePanel();
+    }
+
+    function handleCardClick(id) {
+      if (mergeMode) {
+        const s = sessions.find(s => s.id === id);
+        if (s.status === 'inactive') return;
+        const idx = selectedForMerge.indexOf(id);
+        if (idx > -1) {
+          selectedForMerge.splice(idx, 1);
+        } else if (selectedForMerge.length < 2) {
+          selectedForMerge.push(id);
+        }
+        renderSessions();
+        updateMergePanel();
+      } else {
+        // Default action: launch / focus the session terminal
+        launchSession(id);
+      }
+    }
+
+    function updateMergePanel() {
+      const container = document.getElementById('mergeSessions');
+      const btn = document.getElementById('mergeBtn');
+
+      if (selectedForMerge.length === 0) {
+        container.innerHTML = '<span style="color:var(--text-secondary); font-size:13px;">Select two sessions to merge their context</span>';
+        btn.disabled = true;
+      } else if (selectedForMerge.length === 1) {
+        const s = sessions.find(s => s.id === selectedForMerge[0]);
+        container.innerHTML = `
+          <div class="merge-session-chip">📤 ${s.name} (source)</div>
+          <span class="merge-arrow">→</span>
+          <span style="color:var(--text-muted); font-size:13px;">Select target session...</span>`;
+        btn.disabled = true;
+      } else {
+        const s1 = sessions.find(s => s.id === selectedForMerge[0]);
+        const s2 = sessions.find(s => s.id === selectedForMerge[1]);
+        container.innerHTML = `
+          <div class="merge-session-chip">📤 ${s1.name}</div>
+          <span class="merge-arrow">→</span>
+          <div class="merge-session-chip">📥 ${s2.name}</div>`;
+        btn.disabled = false;
+      }
+    }
+
+    function quickMerge(id) {
+      if (!mergeMode) {
+        mergeMode = true;
+        selectedForMerge = [id];
+        document.getElementById('mergeMode').style.background = 'var(--accent-purple)';
+        document.getElementById('mergeMode').style.color = '#fff';
+        document.getElementById('mergeMode').style.borderColor = 'var(--accent-purple)';
+        document.getElementById('mergePanel').classList.add('active');
+        renderSessions();
+        updateMergePanel();
+      }
+    }
+
+    function showMergeConfirm() {
+      if (selectedForMerge.length !== 2) return;
+      const s1 = sessions.find(s => s.id === selectedForMerge[0]);
+      const s2 = sessions.find(s => s.id === selectedForMerge[1]);
+      document.getElementById('mergeDetails').innerHTML = `
+        <div style="display:flex; align-items:center; gap:12px; padding:12px; background:var(--bg-tertiary); border-radius:8px; border:1px solid var(--border);">
+          <div style="flex:1; text-align:center;">
+            <div style="font-size:11px; color:var(--text-muted); margin-bottom:4px;">SOURCE</div>
+            <div style="font-weight:600;">${s1.name}</div>
+            <div style="font-size:12px; color:var(--text-secondary);">${formatTokens(s1.tokens.used)} tokens · ${s1.files} files</div>
+          </div>
+          <div style="font-size:24px; color:var(--accent-purple);">→</div>
+          <div style="flex:1; text-align:center;">
+            <div style="font-size:11px; color:var(--text-muted); margin-bottom:4px;">TARGET</div>
+            <div style="font-weight:600;">${s2.name}</div>
+            <div style="font-size:12px; color:var(--text-secondary);">${formatTokens(s2.tokens.used)} tokens · ${s2.files} files</div>
+          </div>
+        </div>`;
+      document.getElementById('mergeConfirmModal').classList.add('active');
+    }
+
+    function closeMergeConfirm() {
+      document.getElementById('mergeConfirmModal').classList.remove('active');
+    }
+
+    function executeMerge() {
+      const s1 = sessions.find(s => s.id === selectedForMerge[0]);
+      const s2 = sessions.find(s => s.id === selectedForMerge[1]);
+      s2.tokens.used += Math.round(s1.tokens.used * 0.3);
+      s2.files += s1.files;
+      s2.tags = [...new Set([...s2.tags, ...s1.tags])];
+      closeMergeConfirm();
+      toggleMergeMode();
+      renderSessions();
+      showToast('🔗', `Context from "${s1.name}" merged into "${s2.name}"`);
+    }
+
+    function showToast(icon, msg) {
+      const toast = document.getElementById('toast');
+      document.getElementById('toastIcon').textContent = icon;
+      document.getElementById('toastMsg').textContent = msg;
+      toast.classList.add('active');
+      setTimeout(() => toast.classList.remove('active'), 3000);
+    }
+
+    // Handle Enter in rename modal
+    document.getElementById('renameInput').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') saveRename();
+      if (e.key === 'Escape') closeRenameModal();
+    });
+
+    // ===== PowerShell Launch / Focus =====
+    function launchSession(id) {
+      const s = sessions.find(s => s.id === id);
+      if (!s) return;
+
+      if (s.terminalOpen && activeTerminalId === id) {
+        // Already open and focused — just flash to draw attention
+        flashTerminal();
+        showToast('🪟', `Terminal for "${s.name}" is already focused`);
+        return;
+      }
+
+      if (s.terminalOpen) {
+        // Open but not focused — bring to focus
+        activeTerminalId = id;
+        renderTerminal(s, /*newSession*/ false);
+        showToast('🪟', `Brought "${s.name}" terminal to focus`);
+        renderSessions();
+        return;
+      }
+
+      // New launch
+      s.terminalOpen = true;
+      activeTerminalId = id;
+      renderTerminal(s, /*newSession*/ true);
+      showToast('⚡', `Launched PowerShell session for "${s.name}"`);
+      renderSessions();
+    }
+
+    function renderTerminal(s, newSession) {
+      const win = document.getElementById('terminalWindow');
+      const body = document.getElementById('terminalBody');
+      document.getElementById('terminalTitle').textContent =
+        `Windows PowerShell — ${s.name} (${s.id})`;
+
+      const promptLine = `<span class="ps-prompt">PS</span> <span class="ps-path">${s.cwd}&gt;</span> <span class="ps-cmd">copilot --resume ${s.id}</span>`;
+
+      if (newSession) {
+        body.innerHTML = `
+<span class="ps-banner">Windows PowerShell</span>
+<span class="ps-output">Copyright (C) Microsoft Corporation. All rights reserved.</span>
+
+<span class="ps-prompt">PS</span> <span class="ps-path">C:\\Users\\ripan&gt;</span> <span class="ps-cmd">cd ${s.cwd}</span>
+<span class="ps-prompt">PS</span> <span class="ps-path">${s.cwd}&gt;</span> <span class="ps-cmd">copilot --resume ${s.id}</span>
+
+<span class="ps-banner">  ╭────────────────────────────────────────────╮</span>
+<span class="ps-banner">  │   GitHub Copilot CLI — Agency Mode         │</span>
+<span class="ps-banner">  │   Session: ${s.name.padEnd(32)}│</span>
+<span class="ps-banner">  ╰────────────────────────────────────────────╯</span>
+
+<span class="ps-success">✓ Resumed session ${s.id}</span>
+<span class="ps-output">  Tokens used: ${formatTokens(s.tokens.used)} / ${formatTokens(s.tokens.limit)}</span>
+<span class="ps-output">  Working directory: ${s.cwd}</span>
+<span class="ps-output">  Status: ${s.status}</span>
+
+<span class="ps-prompt">&gt;</span> <span class="terminal-cursor"></span>`;
+      } else {
+        // Re-focus an existing one — show the "session already running" state
+        body.innerHTML = body.innerHTML.replace(/<span class="terminal-cursor"><\/span>/g, '');
+        body.innerHTML += `
+<span class="ps-output">[focus] Window brought to foreground at ${new Date().toLocaleTimeString()}</span>
+<span class="ps-prompt">&gt;</span> <span class="terminal-cursor"></span>`;
+      }
+
+      win.classList.add('active', 'focused');
+      body.scrollTop = body.scrollHeight;
+    }
+
+    function flashTerminal() {
+      const win = document.getElementById('terminalWindow');
+      win.classList.remove('focused');
+      void win.offsetWidth;
+      win.classList.add('focused');
+    }
+
+    function minimizeTerminal() {
+      document.getElementById('terminalWindow').classList.remove('active');
+      // Keep terminalOpen=true and activeTerminalId — minimize ≠ close
+      showToast('🗕', 'Terminal minimized (still running)');
+    }
+
+    function closeTerminal() {
+      const win = document.getElementById('terminalWindow');
+      win.classList.remove('active');
+      if (activeTerminalId) {
+        const s = sessions.find(s => s.id === activeTerminalId);
+        if (s) s.terminalOpen = false;
+        activeTerminalId = null;
+        renderSessions();
+      }
+    }
+
+    // Make terminal draggable
+    (function makeDraggable() {
+      const win = document.getElementById('terminalWindow');
+      const bar = document.getElementById('terminalTitlebar');
+      let isDown = false, offsetX = 0, offsetY = 0;
+      bar.addEventListener('mousedown', (e) => {
+        isDown = true;
+        const rect = win.getBoundingClientRect();
+        offsetX = e.clientX - rect.left;
+        offsetY = e.clientY - rect.top;
+        win.style.right = 'auto';
+        win.style.bottom = 'auto';
+      });
+      document.addEventListener('mousemove', (e) => {
+        if (!isDown) return;
+        win.style.left = (e.clientX - offsetX) + 'px';
+        win.style.top = (e.clientY - offsetY) + 'px';
+      });
+      document.addEventListener('mouseup', () => { isDown = false; });
+    })();
+
+    // ===== README =====
+    function openReadme(id) {
+      activeReadmeId = id;
+      const s = sessions.find(s => s.id === id);
+      document.getElementById('readmeSessionName').textContent = s.name;
+      document.getElementById('readmePath').textContent = `${s.cwd}\\SESSION-README.md`;
+      document.getElementById('readmeUpdated').textContent = timeAgo(s.lastActivity);
+      document.getElementById('readmeWords').textContent = s.readme.split(/\s+/).filter(Boolean).length;
+      document.getElementById('readmeEditor').value = s.readme;
+      document.getElementById('readmePreview').innerHTML = renderMarkdown(s.readme);
+      switchReadmeTab('preview');
+      document.getElementById('readmeModal').classList.add('active');
+    }
+
+    function closeReadme() {
+      document.getElementById('readmeModal').classList.remove('active');
+      activeReadmeId = null;
+    }
+
+    function switchReadmeTab(tab) {
+      document.getElementById('tabPreview').classList.toggle('active', tab === 'preview');
+      document.getElementById('tabEdit').classList.toggle('active', tab === 'edit');
+      document.getElementById('readmePreview').style.display = tab === 'preview' ? 'block' : 'none';
+      document.getElementById('readmeEditor').style.display = tab === 'edit' ? 'block' : 'none';
+      if (tab === 'preview' && activeReadmeId) {
+        // re-render with any edits
+        const md = document.getElementById('readmeEditor').value;
+        document.getElementById('readmePreview').innerHTML = renderMarkdown(md);
+        document.getElementById('readmeWords').textContent = md.split(/\s+/).filter(Boolean).length;
+      }
+    }
+
+    function saveReadme() {
+      const s = sessions.find(s => s.id === activeReadmeId);
+      if (!s) return;
+      s.readme = document.getElementById('readmeEditor').value;
+      s.lastActivity = new Date();
+      showToast('💾', `README saved for "${s.name}"`);
+      closeReadme();
+      renderSessions();
+    }
+
+    function exportReadme() {
+      const s = sessions.find(s => s.id === activeReadmeId);
+      if (!s) return;
+      const md = document.getElementById('readmeEditor').value || s.readme;
+      const blob = new Blob([md], { type: 'text/markdown' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `${s.name.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}-README.md`;
+      a.click();
+      showToast('⬇️', `Exported ${a.download}`);
+    }
+
+    // Minimal markdown renderer (headings, bold, italic, code, lists, tables, links, blockquotes, hr)
+    function renderMarkdown(md) {
+      const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      let html = esc(md);
+
+      // Code blocks
+      html = html.replace(/```(\w*)\n([\s\S]*?)```/g, (_, lang, code) =>
+        `<pre><code>${code}</code></pre>`);
+
+      // Headings
+      html = html.replace(/^### (.*)$/gm, '<h3>$1</h3>')
+                 .replace(/^## (.*)$/gm, '<h2>$1</h2>')
+                 .replace(/^# (.*)$/gm, '<h1>$1</h1>');
+
+      // HR
+      html = html.replace(/^---$/gm, '<hr>');
+
+      // Blockquote
+      html = html.replace(/^&gt; (.*)$/gm, '<blockquote>$1</blockquote>');
+
+      // Tables (simple)
+      html = html.replace(/^\|(.+)\|\n\|([\s\-:|]+)\|\n((?:\|.+\|\n?)+)/gm, (_, header, _sep, rows) => {
+        const ths = header.split('|').map(c => `<th>${c.trim()}</th>`).join('');
+        const trs = rows.trim().split('\n').map(r => {
+          const tds = r.replace(/^\||\|$/g, '').split('|').map(c => `<td>${c.trim()}</td>`).join('');
+          return `<tr>${tds}</tr>`;
+        }).join('');
+        return `<table><thead><tr>${ths}</tr></thead><tbody>${trs}</tbody></table>`;
+      });
+
+      // Lists
+      html = html.replace(/^(?:- \[ \] (.*)\n?)+/gm, (m) =>
+        '<ul>' + m.trim().split('\n').map(l => `<li>☐ ${l.replace(/^- \[ \] /, '')}</li>`).join('') + '</ul>');
+      html = html.replace(/^(?:- \[x\] (.*)\n?)+/gm, (m) =>
+        '<ul>' + m.trim().split('\n').map(l => `<li>☑ ${l.replace(/^- \[x\] /, '')}</li>`).join('') + '</ul>');
+      html = html.replace(/^(?:\d+\. (.*)\n?)+/gm, (m) =>
+        '<ol>' + m.trim().split('\n').map(l => `<li>${l.replace(/^\d+\. /, '')}</li>`).join('') + '</ol>');
+      html = html.replace(/^(?:- (.*)\n?)+/gm, (m) =>
+        '<ul>' + m.trim().split('\n').map(l => `<li>${l.replace(/^- /, '')}</li>`).join('') + '</ul>');
+
+      // Inline: bold, italic, code, links
+      html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+                 .replace(/\*([^*]+)\*/g, '<em>$1</em>')
+                 .replace(/`([^`]+)`/g, '<code>$1</code>')
+                 .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank">$1</a>');
+
+      // Paragraphs (anything that's not already a block element)
+      html = html.split(/\n{2,}/).map(block => {
+        if (/^\s*<(h\d|ul|ol|pre|blockquote|table|hr)/.test(block)) return block;
+        return `<p>${block.replace(/\n/g, '<br>')}</p>`;
+      }).join('\n');
+
+      return html;
+    }
+
+    // Init
+    renderSessions();
+  </script>
+</body>
+</html>
