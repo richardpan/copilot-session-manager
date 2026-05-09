@@ -1,0 +1,108 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build, format, test
+    runs-on: windows-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+
+      - name: Detect solution
+        id: detect
+        shell: pwsh
+        run: |
+          $sln = Get-ChildItem -Recurse -Filter *.sln -ErrorAction SilentlyContinue | Select-Object -First 1
+          $csproj = Get-ChildItem -Recurse -Filter *.csproj -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($sln) {
+            "target=$($sln.FullName)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+            "has_project=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+            Write-Host "Found solution: $($sln.FullName)"
+          } elseif ($csproj) {
+            "target=$($csproj.FullName)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+            "has_project=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+            Write-Host "Found project: $($csproj.FullName)"
+          } else {
+            "has_project=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+            Write-Host "::notice::No .sln or .csproj found yet. Skipping build/test/format steps."
+          }
+
+      - name: Restore
+        if: steps.detect.outputs.has_project == 'true'
+        run: dotnet restore "${{ steps.detect.outputs.target }}"
+
+      - name: Verify formatting
+        if: steps.detect.outputs.has_project == 'true'
+        run: dotnet format "${{ steps.detect.outputs.target }}" --verify-no-changes --no-restore
+
+      - name: Build
+        if: steps.detect.outputs.has_project == 'true'
+        run: dotnet build "${{ steps.detect.outputs.target }}" --configuration Release --no-restore /warnaserror
+
+      - name: Test (with coverage)
+        if: steps.detect.outputs.has_project == 'true'
+        run: |
+          dotnet test "${{ steps.detect.outputs.target }}" `
+            --configuration Release `
+            --no-build `
+            --logger "trx;LogFileName=test-results.trx" `
+            --collect:"XPlat Code Coverage" `
+            --results-directory ./TestResults
+
+      - name: Upload test results
+        if: always() && steps.detect.outputs.has_project == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: |
+            **/TestResults/*.trx
+            **/TestResults/**/coverage.cobertura.xml
+          if-no-files-found: ignore
+
+      - name: Coverage summary
+        if: steps.detect.outputs.has_project == 'true'
+        uses: irongut/CodeCoverageSummary@v1.3.0
+        with:
+          filename: '**/coverage.cobertura.xml'
+          badge: true
+          fail_below_min: false
+          format: markdown
+          hide_branch_rate: false
+          hide_complexity: true
+          indicators: true
+          output: both
+          thresholds: '60 80'
+
+      - name: Add coverage to job summary
+        if: steps.detect.outputs.has_project == 'true' && hashFiles('code-coverage-results.md') != ''
+        shell: pwsh
+        run: Get-Content code-coverage-results.md | Out-File -Append -FilePath $env:GITHUB_STEP_SUMMARY
+
+      - name: Comment coverage on PR
+        if: github.event_name == 'pull_request' && steps.detect.outputs.has_project == 'true' && hashFiles('code-coverage-results.md') != ''
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          path: code-coverage-results.md
+          recreate: true
