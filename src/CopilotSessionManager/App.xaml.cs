@@ -8,6 +8,7 @@ using CopilotSessionManager.Core.DependencyInjection;
 using CopilotSessionManager.Core.Onboarding;
 using CopilotSessionManager.Core.Settings;
 using CopilotSessionManager.Logging;
+using CopilotSessionManager.Services.Notifications;
 using CopilotSessionManager.Services.SingleInstance;
 using CopilotSessionManager.Services.Tray;
 using CopilotSessionManager.ViewModels;
@@ -130,6 +131,19 @@ public partial class App : Application
             MainWindow = mainWindow;
             mainWindow.Closing += OnMainWindowClosing;
             mainWindow.Show();
+
+            // Wire the merge wizard launcher into the sessions VM so the
+            // "Merge into…" command on each card can pop the modal wizard
+            // with the live list of candidates and the right Owner.
+            try
+            {
+                var sessionsForMerge = _host.Services.GetRequiredService<SessionsViewModel>();
+                sessionsForMerge.SetMergeWizardLauncher(source => OpenMergeWizard(source, sessionsForMerge));
+            }
+            catch (Exception mex)
+            {
+                Log.Warning(mex, "Failed to wire merge wizard launcher; merge action will be disabled.");
+            }
 
             // Tray icon goes up only after the main window is on screen, so
             // a tooltip update never beats the first session scan to the
@@ -307,6 +321,7 @@ public partial class App : Application
         // (TFM net8.0-windows), so registering the concrete service here is
         // safe. Register as singleton so the icon's lifetime tracks the host.
         services.AddSingleton<ITrayIconService, NotifyIconTrayService>();
+        services.AddSingleton<INotificationService, TrayNotificationService>();
 
         // Views
         services.AddSingleton<MainWindow>();
@@ -316,6 +331,90 @@ public partial class App : Application
         services.AddSingleton<SessionsViewModel>();
         services.AddSingleton<MainWindowViewModel>();
         services.AddTransient<OnboardingViewModel>();
+    }
+
+    /// <summary>
+    /// Builds and shows the <see cref="Views.MergeWizard"/> modal for the
+    /// supplied source card. Resolves the merge engine + share invoker from
+    /// DI at click time so the wizard always sees the live service registrations.
+    /// </summary>
+    private void OpenMergeWizard(ViewModels.SessionCardViewModel source, SessionsViewModel sessions)
+    {
+        if (source is null || _host is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var merger = _host.Services.GetRequiredService<Core.Merge.ISessionMerger>();
+            var share = _host.Services.GetRequiredService<Core.Cli.Share.ICopilotShareInvoker>();
+            var dispatcher = _host.Services.GetRequiredService<ViewModels.IUiDispatcher>();
+            var clock = _host.Services.GetRequiredService<TimeProvider>();
+            var fileLauncher = _host.Services.GetRequiredService<Services.IFileLauncher>();
+            var loggerFactory = _host.Services.GetService<ILoggerFactory>();
+            var notifier = _host.Services.GetService<INotificationService>();
+
+            // Snapshot the live sessions list — the wizard filters this set
+            // and excludes the source itself.
+            var candidates = new System.Collections.Generic.List<ViewModels.SessionCardViewModel>(sessions.Sessions);
+
+            var vm = new ViewModels.Merge.MergeWizardViewModel(
+                source,
+                candidates,
+                merger,
+                share,
+                dispatcher,
+                fileLauncher,
+                clock,
+                loggerFactory?.CreateLogger<ViewModels.Merge.MergeWizardViewModel>(),
+                onMergeComplete: target =>
+                {
+                    // Refresh the dashboard so the newly-appended README log
+                    // entry surfaces and any merge-imports/ files are visible.
+                    Dispatcher.BeginInvoke(new Action(async () =>
+                    {
+                        try
+                        {
+                            await sessions.RefreshAsync().ConfigureAwait(true);
+                        }
+                        catch (Exception rex)
+                        {
+                            Log.Warning(rex, "Post-merge dashboard refresh failed.");
+                        }
+                    }));
+                    notifier?.Show(
+                        "Merge complete",
+                        $"Imported {source.Title} into {target.Title}.",
+                        NotificationLevel.Info);
+                });
+
+            var window = new Views.MergeWizard
+            {
+                DataContext = vm,
+                Owner = MainWindow,
+            };
+            window.ShowDialog();
+
+            // If the wizard ended in an error state, raise a notification so
+            // the user sees it even if they dismissed the window quickly.
+            if (vm.CurrentStep == ViewModels.Merge.MergeWizardStep.Done && !vm.IsSuccess)
+            {
+                notifier?.Show(
+                    "Merge failed",
+                    vm.ErrorMessage ?? "Could not merge sessions.",
+                    NotificationLevel.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Failed to open merge wizard for {SessionId}.", source.Id);
+            MessageBox.Show(
+                $"The merge wizard could not be opened.\n\n{ex.Message}",
+                "Copilot Session Manager",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+        }
     }
 
     /// <summary>

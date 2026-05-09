@@ -38,6 +38,7 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
     private readonly ISessionLauncher? _sessionLauncher;
     private readonly ILoggerFactory? _loggerFactory;
     private readonly ILogger<SessionsViewModel> _logger;
+    private Action<SessionCardViewModel>? _openMergeWizard;
 
     private readonly Dictionary<string, SessionCardViewModel> _byId =
         new(StringComparer.OrdinalIgnoreCase);
@@ -192,6 +193,45 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
 
     /// <summary>One filter chip per <see cref="ModelTier"/>.</summary>
     public ObservableCollection<TierFilterChip> TierFilters { get; }
+
+    /// <summary>
+    /// Wires the callback the WPF host uses to pop the merge wizard for a
+    /// given source card. Set once at startup by <see cref="App"/> (the
+    /// callback constructs <c>MergeWizardViewModel</c> + the
+    /// <c>MergeWizard</c> window). Existing cards are reseated with the
+    /// callback so they pick up the new <see cref="SessionCardViewModel.MergeIntoCommand"/>
+    /// affordance immediately.
+    /// </summary>
+    public void SetMergeWizardLauncher(Action<SessionCardViewModel>? launcher)
+    {
+        _openMergeWizard = launcher;
+        // Existing cards captured the previous (likely null) callback; rebuild
+        // their MergeIntoCommand by re-calling UpdateFrom on the same model.
+        // The card replaces the command in its constructor, so we can't mutate
+        // it after the fact — but tests don't exercise this path, and the
+        // host calls SetMergeWizardLauncher before the first scan completes
+        // in practice. For belt-and-braces: we still rebuild the card list
+        // when the launcher changes from non-null to non-null mid-flight.
+        if (Sessions.Count == 0)
+        {
+            return;
+        }
+        // Rebuild the cards in place by replaying the snapshot. The next
+        // discovery tick will overwrite them anyway.
+        var snapshot = new List<Session>(Sessions.Count);
+        foreach (var card in Sessions)
+        {
+            snapshot.Add(card.Model);
+        }
+        var labels = new Dictionary<string, SessionType>(StringComparer.OrdinalIgnoreCase);
+        foreach (var card in Sessions)
+        {
+            labels[card.Id] = card.Label;
+        }
+        Sessions.Clear();
+        _byId.Clear();
+        ApplySnapshot(snapshot, labels);
+    }
 
     public int TotalCount => Sessions.Count;
 
@@ -436,7 +476,8 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
                 var cardLogger = _loggerFactory?.CreateLogger<SessionCardViewModel>();
                 var card = new SessionCardViewModel(
                     session, label, _timeProvider, _modelCatalog, _costCalculator,
-                    _fileLauncher, _lockCleanup, _sessionLauncher, cardLogger);
+                    _fileLauncher, _lockCleanup, _sessionLauncher, cardLogger,
+                    _openMergeWizard);
                 _byId[session.Id] = card;
                 Sessions.Add(card);
                 inserted = true;

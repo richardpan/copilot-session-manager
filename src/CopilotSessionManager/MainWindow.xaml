@@ -38,6 +38,11 @@
                     Background="#181825"
                     BorderBrush="#313244"
                     BorderThickness="1">
+                <Border.ContextMenu>
+                    <ContextMenu>
+                        <MenuItem Header="Merge into…" Command="{Binding MergeIntoCommand}" />
+                    </ContextMenu>
+                </Border.ContextMenu>
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="6" />
