@@ -25,4 +25,18 @@ public interface ISessionReadmeService
         Session session,
         SessionType label,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Appends <paramref name="markdown"/> verbatim to the end of the
+    /// session's <c>SESSION-README.md</c>. Creates the file (and folder) if
+    /// it does not yet exist. Inserts a blank line between the existing
+    /// content and the appended block when needed. Bypasses the templated
+    /// renderer — use this for ad-hoc audit entries (merge notes, manual
+    /// timestamps) where preserving the auto-rendered structure isn't
+    /// required.
+    /// </summary>
+    Task AppendAsync(
+        string sessionId,
+        string markdown,
+        CancellationToken cancellationToken = default);
 }

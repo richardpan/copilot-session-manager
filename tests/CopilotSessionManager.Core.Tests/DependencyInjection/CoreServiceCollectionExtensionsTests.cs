@@ -1,6 +1,8 @@
 using CopilotSessionManager.Core.Cli;
 using CopilotSessionManager.Core.Cli.Adapters.V1;
+using CopilotSessionManager.Core.Cli.Share;
 using CopilotSessionManager.Core.DependencyInjection;
+using CopilotSessionManager.Core.Merge;
 using CopilotSessionManager.Core.Security;
 using CopilotSessionManager.Core.Sessions;
 using FluentAssertions;
@@ -81,5 +83,35 @@ public class CoreServiceCollectionExtensionsTests
 
         first.Should().BeOfType<DpapiDataProtector>();
         second.Should().BeSameAs(first);
+    }
+
+    [Fact]
+    public async Task AddSessionMerge_registers_share_invoker_importer_and_merger_as_singletons()
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton<ILoggerFactory>(NullLoggerFactory.Instance);
+        services.AddSingleton(typeof(ILogger<>), typeof(NullLogger<>));
+
+        services.AddSessionMerge();
+        services.AddSessionMerge(); // idempotent
+
+        await using var provider = services.BuildServiceProvider();
+
+        var share1 = provider.GetRequiredService<ICopilotShareInvoker>();
+        var share2 = provider.GetRequiredService<ICopilotShareInvoker>();
+        share1.Should().BeOfType<CopilotShareInvoker>();
+        share2.Should().BeSameAs(share1);
+
+        var importer = provider.GetRequiredService<IMergeImportWriter>();
+        importer.Should().BeOfType<FileMergeImportWriter>();
+
+        var merger1 = provider.GetRequiredService<ISessionMerger>();
+        var merger2 = provider.GetRequiredService<ISessionMerger>();
+        merger1.Should().BeOfType<SessionMerger>();
+        merger2.Should().BeSameAs(merger1);
+
+        // Implied dependencies should also be resolvable.
+        provider.GetRequiredService<ISessionReadmeService>().Should().NotBeNull();
+        provider.GetRequiredService<CopilotSessionManager.Core.Onboarding.IProcessRunner>().Should().NotBeNull();
     }
 }
