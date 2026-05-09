@@ -333,6 +333,8 @@ public sealed class SessionDiscoveryService : ISessionDiscoveryService
         var version = await TryReadCopilotVersionAsync(sessionDir, hasStateDir, cancellationToken)
             .ConfigureAwait(false);
         var workspace = TryParseWorkspace(sessionDir, hasStateDir, version);
+        var modelInfo = await TryReadModelInfoAsync(sessionDir, hasStateDir, version, cancellationToken)
+            .ConfigureAwait(false);
 
         if (record is null && workspace is null)
         {
@@ -362,7 +364,8 @@ public sealed class SessionDiscoveryService : ISessionDiscoveryService
             TurnCount: record?.TurnCount ?? 0,
             Status: status,
             CopilotVersion: version,
-            Locks: locks);
+            Locks: locks,
+            ModelInfo: modelInfo);
     }
 
     private async Task<CopilotVersion> TryReadCopilotVersionAsync(
@@ -399,6 +402,50 @@ public sealed class SessionDiscoveryService : ISessionDiscoveryService
         {
             _logger.LogDebug(ex, "Could not read events.jsonl at {Path}.", eventsPath);
             return CopilotVersion.Zero;
+        }
+    }
+
+    private async Task<SessionModelInfo?> TryReadModelInfoAsync(
+        string sessionDir,
+        bool hasStateDir,
+        CopilotVersion version,
+        CancellationToken cancellationToken)
+    {
+        if (!hasStateDir)
+        {
+            return null;
+        }
+
+        var eventsPath = Path.Combine(sessionDir, EventsFileName);
+        if (!File.Exists(eventsPath))
+        {
+            return null;
+        }
+
+        var adapter = version == CopilotVersion.Zero
+            ? _adapterRegistry.Latest
+            : _adapterRegistry.Resolve(version).Adapter;
+
+        try
+        {
+            await using var stream = new FileStream(
+                eventsPath,
+                FileMode.Open,
+                FileAccess.Read,
+                FileShare.ReadWrite | FileShare.Delete);
+
+            var info = await adapter
+                .ReadSessionModelInfoAsync(stream, cancellationToken)
+                .ConfigureAwait(false);
+
+            return info.CurrentModelId is null && info.UsageByModel.Count == 0
+                ? null
+                : info;
+        }
+        catch (IOException ex)
+        {
+            _logger.LogDebug(ex, "Could not read model info from events.jsonl at {Path}.", eventsPath);
+            return null;
         }
     }
 

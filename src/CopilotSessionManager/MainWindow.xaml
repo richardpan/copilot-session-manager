@@ -21,6 +21,14 @@
                       VerticalAlignment="Center" />
         </DataTemplate>
 
+        <DataTemplate x:Key="TierFilterTemplate" DataType="{x:Type vm:TierFilterChip}">
+            <CheckBox Content="{Binding Label}"
+                      IsChecked="{Binding IsVisible, Mode=TwoWay}"
+                      Foreground="#CDD6F4"
+                      Margin="0,0,12,0"
+                      VerticalAlignment="Center" />
+        </DataTemplate>
+
         <DataTemplate x:Key="SessionCardTemplate" DataType="{x:Type vm:SessionCardViewModel}">
             <Border Margin="0,0,0,10"
                     Padding="14,12"
@@ -96,6 +104,16 @@
                                            FontSize="10"
                                            FontWeight="SemiBold" />
                             </Border>
+                            <Border Background="{Binding ModelTierBrush}"
+                                    CornerRadius="3"
+                                    Padding="6,1"
+                                    Margin="6,2,0,0"
+                                    ToolTip="{Binding ModelTooltip}">
+                                <TextBlock Text="{Binding ModelDisplay}"
+                                           Foreground="#11111B"
+                                           FontSize="10"
+                                           FontWeight="SemiBold" />
+                            </Border>
                         </StackPanel>
 
                         <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
@@ -133,6 +151,12 @@
                                    FontSize="11"
                                    FontWeight="SemiBold"
                                    HorizontalAlignment="Right" />
+                        <TextBlock Text="{Binding CostDisplay}"
+                                   Foreground="#F9E2AF"
+                                   FontSize="11"
+                                   FontWeight="SemiBold"
+                                   HorizontalAlignment="Right"
+                                   ToolTip="{Binding ModelTooltip}" />
                         <TextBlock Text="{Binding UpdatedRelative}"
                                    Foreground="#7F849C"
                                    FontSize="11"
@@ -207,19 +231,35 @@
         </Border>
 
         <Border Grid.Row="2" Padding="16,6" Background="#11111B" BorderBrush="#181825" BorderThickness="0,1,0,0">
-            <StackPanel Orientation="Horizontal">
-                <TextBlock Text="Labels:"
-                           Foreground="#7F849C"
-                           VerticalAlignment="Center"
-                           Margin="0,0,8,0" />
-                <ItemsControl ItemsSource="{Binding Sessions.LabelFilters}"
-                              ItemTemplate="{StaticResource LabelFilterTemplate}">
-                    <ItemsControl.ItemsPanel>
-                        <ItemsPanelTemplate>
-                            <StackPanel Orientation="Horizontal" />
-                        </ItemsPanelTemplate>
-                    </ItemsControl.ItemsPanel>
-                </ItemsControl>
+            <StackPanel Orientation="Vertical">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="Labels:"
+                               Foreground="#7F849C"
+                               VerticalAlignment="Center"
+                               Margin="0,0,8,0" />
+                    <ItemsControl ItemsSource="{Binding Sessions.LabelFilters}"
+                                  ItemTemplate="{StaticResource LabelFilterTemplate}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <StackPanel Orientation="Horizontal" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                    </ItemsControl>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                    <TextBlock Text="Tiers:"
+                               Foreground="#7F849C"
+                               VerticalAlignment="Center"
+                               Margin="0,0,8,0" />
+                    <ItemsControl ItemsSource="{Binding Sessions.TierFilters}"
+                                  ItemTemplate="{StaticResource TierFilterTemplate}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <StackPanel Orientation="Horizontal" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                    </ItemsControl>
+                </StackPanel>
             </StackPanel>
         </Border>
 

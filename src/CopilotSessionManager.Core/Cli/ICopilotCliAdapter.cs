@@ -35,6 +35,15 @@ public interface ICopilotCliAdapter
         Stream eventsJsonl,
         CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Walk <paramref name="eventsJsonl"/> and produce a snapshot of model
+    /// selection + token usage for the session. Returns
+    /// <see cref="SessionModelInfo.Empty"/> when nothing usable is found.
+    /// </summary>
+    Task<SessionModelInfo> ReadSessionModelInfoAsync(
+        Stream eventsJsonl,
+        CancellationToken cancellationToken = default);
+
     /// <summary>Parse the <c>workspace.yaml</c> contents.</summary>
     WorkspaceManifest ParseWorkspace(string yaml);
 }

@@ -5,6 +5,8 @@ using System.Threading;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using CopilotSessionManager.Core.Cli;
+using CopilotSessionManager.Core.Cost;
 using CopilotSessionManager.Core.Models;
 using CopilotSessionManager.Core.Sessions;
 using CopilotSessionManager.Services;
@@ -26,11 +28,14 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
     private readonly IFileLauncher _fileLauncher;
     private readonly IUiDispatcher _dispatcher;
     private readonly TimeProvider _timeProvider;
+    private readonly IModelCatalog? _modelCatalog;
+    private readonly IModelCostCalculator? _costCalculator;
     private readonly ILogger<SessionsViewModel> _logger;
 
     private readonly Dictionary<string, SessionCardViewModel> _byId =
         new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<SessionType> _hiddenLabels = new();
+    private readonly HashSet<ModelTier> _hiddenTiers = new();
     private bool _started;
     private bool _disposed;
 
@@ -51,6 +56,21 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
         IUiDispatcher dispatcher,
         TimeProvider timeProvider,
         ILogger<SessionsViewModel> logger)
+        : this(discovery, labelStore, readmeService, fileLauncher, dispatcher,
+            timeProvider, modelCatalog: null, costCalculator: null, logger)
+    {
+    }
+
+    public SessionsViewModel(
+        ISessionDiscoveryService discovery,
+        ISessionLabelStore labelStore,
+        ISessionReadmeService readmeService,
+        IFileLauncher fileLauncher,
+        IUiDispatcher dispatcher,
+        TimeProvider timeProvider,
+        IModelCatalog? modelCatalog,
+        IModelCostCalculator? costCalculator,
+        ILogger<SessionsViewModel> logger)
     {
         ArgumentNullException.ThrowIfNull(discovery);
         ArgumentNullException.ThrowIfNull(labelStore);
@@ -66,6 +86,8 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
         _fileLauncher = fileLauncher;
         _dispatcher = dispatcher;
         _timeProvider = timeProvider;
+        _modelCatalog = modelCatalog;
+        _costCalculator = costCalculator;
         _logger = logger;
 
         Sessions = new ObservableCollection<SessionCardViewModel>();
@@ -74,6 +96,11 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
         foreach (var t in Enum.GetValues<SessionType>())
         {
             LabelFilters.Add(new LabelFilterChip(t, isVisible: true, this));
+        }
+        TierFilters = new ObservableCollection<TierFilterChip>();
+        foreach (var t in Enum.GetValues<ModelTier>())
+        {
+            TierFilters.Add(new TierFilterChip(t, isVisible: true, this));
         }
     }
 
@@ -85,6 +112,9 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
 
     /// <summary>One filter chip per <see cref="SessionType"/>.</summary>
     public ObservableCollection<LabelFilterChip> LabelFilters { get; }
+
+    /// <summary>One filter chip per <see cref="ModelTier"/>.</summary>
+    public ObservableCollection<TierFilterChip> TierFilters { get; }
 
     public int TotalCount => Sessions.Count;
 
@@ -286,7 +316,7 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
             else
             {
                 var label = newLabels.TryGetValue(session.Id, out var t) ? t : SessionType.Exploratory;
-                var card = new SessionCardViewModel(session, label, _timeProvider);
+                var card = new SessionCardViewModel(session, label, _timeProvider, _modelCatalog, _costCalculator);
                 _byId[session.Id] = card;
                 Sessions.Add(card);
                 inserted = true;
@@ -343,7 +373,9 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
         VisibleSessions.Clear();
         foreach (var card in Sessions)
         {
-            if ((ShowInactive || IsActive(card.Status)) && !_hiddenLabels.Contains(card.Label))
+            if ((ShowInactive || IsActive(card.Status))
+                && !_hiddenLabels.Contains(card.Label)
+                && !_hiddenTiers.Contains(card.ModelTier))
             {
                 VisibleSessions.Add(card);
             }
@@ -357,6 +389,19 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
     internal void SetLabelVisible(SessionType type, bool isVisible)
     {
         var changed = isVisible ? _hiddenLabels.Remove(type) : _hiddenLabels.Add(type);
+        if (changed)
+        {
+            RebuildVisible();
+        }
+    }
+
+    /// <summary>
+    /// Toggles whether sessions of <paramref name="tier"/> are visible. Used
+    /// by <see cref="TierFilterChip"/> bindings.
+    /// </summary>
+    internal void SetTierVisible(ModelTier tier, bool isVisible)
+    {
+        var changed = isVisible ? _hiddenTiers.Remove(tier) : _hiddenTiers.Add(tier);
         if (changed)
         {
             RebuildVisible();
@@ -437,4 +482,37 @@ public sealed partial class LabelFilterChip : ObservableObject
     };
 
     partial void OnIsVisibleChanged(bool value) => _owner.SetLabelVisible(Type, value);
+}
+
+/// <summary>
+/// Bindable toggle representing one <see cref="ModelTier"/> in the dashboard
+/// filter row. Two-way bound to a CheckBox; setting <see cref="IsVisible"/>
+/// calls back into <see cref="SessionsViewModel.SetTierVisible"/>.
+/// </summary>
+public sealed partial class TierFilterChip : ObservableObject
+{
+    private readonly SessionsViewModel _owner;
+
+    [ObservableProperty]
+    private bool _isVisible;
+
+    public TierFilterChip(ModelTier tier, bool isVisible, SessionsViewModel owner)
+    {
+        ArgumentNullException.ThrowIfNull(owner);
+        Tier = tier;
+        _isVisible = isVisible;
+        _owner = owner;
+    }
+
+    public ModelTier Tier { get; }
+
+    public string Label => Tier switch
+    {
+        ModelTier.Premium => "Premium",
+        ModelTier.Standard => "Standard",
+        ModelTier.Fast => "Fast",
+        _ => "Unknown",
+    };
+
+    partial void OnIsVisibleChanged(bool value) => _owner.SetTierVisible(Tier, value);
 }

@@ -17,4 +17,5 @@ public sealed record Session(
     int TurnCount,
     SessionStatus Status,
     CopilotVersion CopilotVersion,
-    IReadOnlyList<SessionLockInfo> Locks);
+    IReadOnlyList<SessionLockInfo> Locks,
+    SessionModelInfo? ModelInfo = null);

@@ -84,6 +84,9 @@ public class CopilotCliAdapterRegistryTests
         public IAsyncEnumerable<SessionEvent> ParseEventsAsync(Stream eventsJsonl, CancellationToken cancellationToken = default) =>
             AsyncEnumerable.Empty<SessionEvent>();
 
+        public Task<SessionModelInfo> ReadSessionModelInfoAsync(Stream eventsJsonl, CancellationToken cancellationToken = default) =>
+            Task.FromResult(SessionModelInfo.Empty);
+
         public WorkspaceManifest ParseWorkspace(string yaml) =>
             throw new NotImplementedException();
     }
