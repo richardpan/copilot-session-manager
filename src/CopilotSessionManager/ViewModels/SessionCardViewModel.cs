@@ -1,10 +1,14 @@
 using System;
 using System.Globalization;
+using System.Threading.Tasks;
+using System.Windows.Input;
 using System.Windows.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using CopilotSessionManager.Core.Cli;
 using CopilotSessionManager.Core.Cost;
 using CopilotSessionManager.Core.Models;
+using CopilotSessionManager.Services;
 
 namespace CopilotSessionManager.ViewModels;
 
@@ -16,22 +20,25 @@ public sealed partial class SessionCardViewModel : ObservableObject
 {
     private Session _model;
     private SessionType _label;
+    private PullRequestInfo? _liveOverridePullRequest;
+    private bool _hasLiveOverride;
     private readonly TimeProvider _timeProvider;
     private readonly IModelCatalog? _modelCatalog;
     private readonly IModelCostCalculator? _costCalculator;
+    private readonly IFileLauncher? _fileLauncher;
 
     public SessionCardViewModel(Session model)
-        : this(model, SessionType.Exploratory, TimeProvider.System, modelCatalog: null, costCalculator: null)
+        : this(model, SessionType.Exploratory, TimeProvider.System, modelCatalog: null, costCalculator: null, fileLauncher: null)
     {
     }
 
     public SessionCardViewModel(Session model, TimeProvider timeProvider)
-        : this(model, SessionType.Exploratory, timeProvider, modelCatalog: null, costCalculator: null)
+        : this(model, SessionType.Exploratory, timeProvider, modelCatalog: null, costCalculator: null, fileLauncher: null)
     {
     }
 
     public SessionCardViewModel(Session model, SessionType label, TimeProvider timeProvider)
-        : this(model, label, timeProvider, modelCatalog: null, costCalculator: null)
+        : this(model, label, timeProvider, modelCatalog: null, costCalculator: null, fileLauncher: null)
     {
     }
 
@@ -41,6 +48,17 @@ public sealed partial class SessionCardViewModel : ObservableObject
         TimeProvider timeProvider,
         IModelCatalog? modelCatalog,
         IModelCostCalculator? costCalculator)
+        : this(model, label, timeProvider, modelCatalog, costCalculator, fileLauncher: null)
+    {
+    }
+
+    public SessionCardViewModel(
+        Session model,
+        SessionType label,
+        TimeProvider timeProvider,
+        IModelCatalog? modelCatalog,
+        IModelCostCalculator? costCalculator,
+        IFileLauncher? fileLauncher)
     {
         ArgumentNullException.ThrowIfNull(model);
         ArgumentNullException.ThrowIfNull(timeProvider);
@@ -50,6 +68,9 @@ public sealed partial class SessionCardViewModel : ObservableObject
         _timeProvider = timeProvider;
         _modelCatalog = modelCatalog;
         _costCalculator = costCalculator;
+        _fileLauncher = fileLauncher;
+
+        OpenUrlCommand = new AsyncRelayCommand<string?>(OpenUrlAsync, CanOpenUrl);
     }
 
     public Session Model => _model;
@@ -226,6 +247,106 @@ public sealed partial class SessionCardViewModel : ObservableObject
     }
 
     /// <summary>
+    /// Effective <see cref="PullRequestInfo"/> for this card. The live value
+    /// pushed via <see cref="SetPullRequest"/> wins; otherwise we fall back
+    /// to whatever the resolver attached to the session model (currently
+    /// always null but reserved for future persistence).
+    /// </summary>
+    public PullRequestInfo? PullRequest
+        => _hasLiveOverride ? _liveOverridePullRequest : _model.GitHubLinks?.PullRequest;
+
+    /// <summary>Web URL for the GitHub repository, or null when unknown.</summary>
+    public string? RepositoryUrl => _model.GitHubLinks?.RepositoryUrl;
+
+    /// <summary>Web URL for the working branch on GitHub, or null when unknown.</summary>
+    public string? BranchUrl => _model.GitHubLinks?.BranchUrl;
+
+    /// <summary>True when <see cref="RepositoryUrl"/> is present.</summary>
+    public bool HasRepositoryUrl => !string.IsNullOrEmpty(RepositoryUrl);
+
+    /// <summary>True when <see cref="BranchUrl"/> is present.</summary>
+    public bool HasBranchUrl => !string.IsNullOrEmpty(BranchUrl);
+
+    /// <summary>True when a PR has been resolved for this session's branch.</summary>
+    public bool HasPullRequest => PullRequest is not null;
+
+    /// <summary>PR number (e.g. 42), or null when no PR is known.</summary>
+    public int? PullRequestNumber => PullRequest?.Number;
+
+    /// <summary>Web URL of the PR, or null.</summary>
+    public string? PullRequestUrl => PullRequest?.Url;
+
+    /// <summary>Short label rendered inside the PR badge ("#42").</summary>
+    public string PullRequestBadgeText => PullRequest is null ? string.Empty : $"#{PullRequest.Number}";
+
+    /// <summary>Human label for the PR state (Open, Draft, Merged, Closed).</summary>
+    public string PullRequestStateLabel => PullRequest?.State switch
+    {
+        PullRequestState.Open => "Open",
+        PullRequestState.Draft => "Draft",
+        PullRequestState.Merged => "Merged",
+        PullRequestState.Closed => "Closed",
+        _ => string.Empty,
+    };
+
+    /// <summary>Tooltip text for the PR badge.</summary>
+    public string PullRequestTooltip => PullRequest is null
+        ? string.Empty
+        : $"PR #{PullRequest.Number} — {PullRequestStateLabel}\n{PullRequest.Title}";
+
+    /// <summary>Brush used for the PR badge background, color-coded by state.</summary>
+    public Brush PullRequestStateBrush => PullRequest?.State switch
+    {
+        // Catppuccin-ish palette consistent with model tier chips.
+        PullRequestState.Open => new SolidColorBrush(Color.FromRgb(0xA6, 0xE3, 0xA1)), // green
+        PullRequestState.Draft => new SolidColorBrush(Color.FromRgb(0x7F, 0x84, 0x9C)), // gray
+        PullRequestState.Merged => new SolidColorBrush(Color.FromRgb(0xCB, 0xA6, 0xF7)), // purple
+        PullRequestState.Closed => new SolidColorBrush(Color.FromRgb(0xF3, 0x8B, 0xA8)), // pink/red
+        _ => new SolidColorBrush(Color.FromRgb(0x7F, 0x84, 0x9C)),
+    };
+
+    /// <summary>
+    /// Opens a URL in the OS default browser. Bound to repo/branch/PR
+    /// click handlers in XAML.
+    /// </summary>
+    public ICommand OpenUrlCommand { get; }
+
+    /// <summary>
+    /// Replaces the cached PR for this card with <paramref name="info"/>
+    /// (or clears it when null). Raises change notifications for every
+    /// PR-derived property so the badge updates without a full UpdateFrom.
+    /// </summary>
+    public void SetPullRequest(PullRequestInfo? info)
+    {
+        _hasLiveOverride = true;
+        _liveOverridePullRequest = info;
+        RaisePullRequestChanged();
+    }
+
+    private bool CanOpenUrl(string? url) => !string.IsNullOrWhiteSpace(url) && _fileLauncher is not null;
+
+    private async Task OpenUrlAsync(string? url)
+    {
+        if (string.IsNullOrWhiteSpace(url) || _fileLauncher is null)
+        {
+            return;
+        }
+        await _fileLauncher.OpenAsync(url).ConfigureAwait(false);
+    }
+
+    private void RaisePullRequestChanged()
+    {
+        OnPropertyChanged(nameof(PullRequest));
+        OnPropertyChanged(nameof(HasPullRequest));
+        OnPropertyChanged(nameof(PullRequestNumber));
+        OnPropertyChanged(nameof(PullRequestUrl));
+        OnPropertyChanged(nameof(PullRequestBadgeText));
+        OnPropertyChanged(nameof(PullRequestStateLabel));
+        OnPropertyChanged(nameof(PullRequestTooltip));
+        OnPropertyChanged(nameof(PullRequestStateBrush));
+    }
+
+    /// <summary>
     /// Replaces this card's underlying model and raises change notifications
     /// for every projected property. Used by <see cref="SessionsViewModel"/>
     /// when discovery reports an updated <see cref="Session"/> for the same id.
@@ -239,6 +360,10 @@ public sealed partial class SessionCardViewModel : ObservableObject
         }
 
         _model = newModel;
+        // Discovery's snapshot is authoritative for repo/branch links; reset
+        // any live-PR override so we re-fetch on next snapshot/refresh.
+        _hasLiveOverride = false;
+        _liveOverridePullRequest = null;
         OnPropertyChanged(nameof(Title));
         OnPropertyChanged(nameof(Repository));
         OnPropertyChanged(nameof(Branch));
@@ -256,6 +381,11 @@ public sealed partial class SessionCardViewModel : ObservableObject
         OnPropertyChanged(nameof(ModelTierBrush));
         OnPropertyChanged(nameof(CostDisplay));
         OnPropertyChanged(nameof(ModelTooltip));
+        OnPropertyChanged(nameof(RepositoryUrl));
+        OnPropertyChanged(nameof(BranchUrl));
+        OnPropertyChanged(nameof(HasRepositoryUrl));
+        OnPropertyChanged(nameof(HasBranchUrl));
+        RaisePullRequestChanged();
     }
 
     /// <summary>

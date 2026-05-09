@@ -2,6 +2,7 @@ using CopilotSessionManager.Core.Cli;
 using CopilotSessionManager.Core.Cli.Adapters.V1;
 using CopilotSessionManager.Core.Configuration;
 using CopilotSessionManager.Core.Cost;
+using CopilotSessionManager.Core.GitHub;
 using CopilotSessionManager.Core.Sessions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -45,9 +46,24 @@ public static class CoreServiceCollectionExtensions
         services.AddStatusDetection();
         services.AddSessionLabels();
         services.AddSessionReadme();
+        services.AddGitHubLinks();
         services.TryAddSingleton<ICopilotPaths, DefaultCopilotPaths>();
         services.TryAddSingleton<ISessionStore, SessionStore>();
         services.TryAddSingleton<ISessionDiscoveryService, SessionDiscoveryService>();
+
+        return services;
+    }
+
+    /// <summary>
+    /// Registers the GitHub link resolver + <c>gh</c>-CLI–backed pull request
+    /// lookup. Safe to call multiple times.
+    /// </summary>
+    public static IServiceCollection AddGitHubLinks(this IServiceCollection services)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        services.TryAddSingleton<IGitHubLinkResolver, GitHubLinkResolver>();
+        services.TryAddSingleton<IGitHubClient, GhCliGitHubClient>();
 
         return services;
     }

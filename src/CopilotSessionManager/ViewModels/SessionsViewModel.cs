@@ -7,6 +7,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CopilotSessionManager.Core.Cli;
 using CopilotSessionManager.Core.Cost;
+using CopilotSessionManager.Core.GitHub;
 using CopilotSessionManager.Core.Models;
 using CopilotSessionManager.Core.Sessions;
 using CopilotSessionManager.Services;
@@ -30,6 +31,7 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
     private readonly TimeProvider _timeProvider;
     private readonly IModelCatalog? _modelCatalog;
     private readonly IModelCostCalculator? _costCalculator;
+    private readonly IGitHubClient? _githubClient;
     private readonly ILogger<SessionsViewModel> _logger;
 
     private readonly Dictionary<string, SessionCardViewModel> _byId =
@@ -57,7 +59,8 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
         TimeProvider timeProvider,
         ILogger<SessionsViewModel> logger)
         : this(discovery, labelStore, readmeService, fileLauncher, dispatcher,
-            timeProvider, modelCatalog: null, costCalculator: null, logger)
+            timeProvider, modelCatalog: null, costCalculator: null,
+            githubClient: null, logger)
     {
     }
 
@@ -70,6 +73,22 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
         TimeProvider timeProvider,
         IModelCatalog? modelCatalog,
         IModelCostCalculator? costCalculator,
+        ILogger<SessionsViewModel> logger)
+        : this(discovery, labelStore, readmeService, fileLauncher, dispatcher,
+            timeProvider, modelCatalog, costCalculator, githubClient: null, logger)
+    {
+    }
+
+    public SessionsViewModel(
+        ISessionDiscoveryService discovery,
+        ISessionLabelStore labelStore,
+        ISessionReadmeService readmeService,
+        IFileLauncher fileLauncher,
+        IUiDispatcher dispatcher,
+        TimeProvider timeProvider,
+        IModelCatalog? modelCatalog,
+        IModelCostCalculator? costCalculator,
+        IGitHubClient? githubClient,
         ILogger<SessionsViewModel> logger)
     {
         ArgumentNullException.ThrowIfNull(discovery);
@@ -88,6 +107,7 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
         _timeProvider = timeProvider;
         _modelCatalog = modelCatalog;
         _costCalculator = costCalculator;
+        _githubClient = githubClient;
         _logger = logger;
 
         Sessions = new ObservableCollection<SessionCardViewModel>();
@@ -316,7 +336,7 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
             else
             {
                 var label = newLabels.TryGetValue(session.Id, out var t) ? t : SessionType.Exploratory;
-                var card = new SessionCardViewModel(session, label, _timeProvider, _modelCatalog, _costCalculator);
+                var card = new SessionCardViewModel(session, label, _timeProvider, _modelCatalog, _costCalculator, _fileLauncher);
                 _byId[session.Id] = card;
                 Sessions.Add(card);
                 inserted = true;
@@ -345,6 +365,64 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
         OnPropertyChanged(nameof(TotalCount));
         OnPropertyChanged(nameof(ActiveCount));
         StatusMessage = $"{ActiveCount} active / {TotalCount} total at {_timeProvider.GetLocalNow():t}.";
+
+        // Kick off PR lookups off the UI thread; results are pushed back to
+        // each card on the dispatcher. Lookups are best-effort — failures are
+        // swallowed and just leave the badge empty.
+        QueuePullRequestLookups(snapshot);
+    }
+
+    private void QueuePullRequestLookups(IReadOnlyList<Session> snapshot)
+    {
+        if (_githubClient is null)
+        {
+            return;
+        }
+
+        foreach (var session in snapshot)
+        {
+            var links = session.GitHubLinks;
+            var repoSlug = ExtractSlug(links?.RepositoryUrl);
+            if (repoSlug is null || string.IsNullOrWhiteSpace(session.Branch))
+            {
+                continue;
+            }
+
+            var sessionId = session.Id;
+            var branch = session.Branch!;
+
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    var pr = await _githubClient.FindPullRequestAsync(repoSlug, branch, CancellationToken.None)
+                        .ConfigureAwait(false);
+                    _dispatcher.Post(() =>
+                    {
+                        if (_byId.TryGetValue(sessionId, out var card))
+                        {
+                            card.SetPullRequest(pr);
+                        }
+                    });
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogDebug(ex, "PR lookup failed for {Slug}@{Branch}", repoSlug, branch);
+                }
+            });
+        }
+    }
+
+    private static string? ExtractSlug(string? repositoryUrl)
+    {
+        if (string.IsNullOrWhiteSpace(repositoryUrl))
+        {
+            return null;
+        }
+        const string prefix = "https://github.com/";
+        return repositoryUrl.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
+            ? repositoryUrl[prefix.Length..]
+            : null;
     }
 
     private void ResortInPlace()
