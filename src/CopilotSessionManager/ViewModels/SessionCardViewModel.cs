@@ -12,19 +12,26 @@ namespace CopilotSessionManager.ViewModels;
 public sealed partial class SessionCardViewModel : ObservableObject
 {
     private Session _model;
+    private SessionType _label;
     private readonly TimeProvider _timeProvider;
 
     public SessionCardViewModel(Session model)
-        : this(model, TimeProvider.System)
+        : this(model, SessionType.Exploratory, TimeProvider.System)
     {
     }
 
     public SessionCardViewModel(Session model, TimeProvider timeProvider)
+        : this(model, SessionType.Exploratory, timeProvider)
+    {
+    }
+
+    public SessionCardViewModel(Session model, SessionType label, TimeProvider timeProvider)
     {
         ArgumentNullException.ThrowIfNull(model);
         ArgumentNullException.ThrowIfNull(timeProvider);
 
         _model = model;
+        _label = label;
         _timeProvider = timeProvider;
     }
 
@@ -50,6 +57,35 @@ public sealed partial class SessionCardViewModel : ObservableObject
     public int TurnCount => _model.TurnCount;
 
     public SessionStatus Status => _model.Status;
+
+    public SessionType Label => _label;
+
+    public string LabelText => _label switch
+    {
+        SessionType.Exploratory => "Exploratory",
+        SessionType.Research => "Research",
+        SessionType.Feature => "Feature",
+        SessionType.Bug => "Bug",
+        SessionType.Refactor => "Refactor",
+        SessionType.Docs => "Docs",
+        SessionType.Infra => "Infra",
+        SessionType.Experiment => "Experiment",
+        _ => "Exploratory",
+    };
+
+    /// <summary>Color used for the label chip.</summary>
+    public Brush LabelBrush => _label switch
+    {
+        SessionType.Exploratory => Brushes.MediumPurple,
+        SessionType.Research => Brushes.MediumSlateBlue,
+        SessionType.Feature => Brushes.SteelBlue,
+        SessionType.Bug => Brushes.Crimson,
+        SessionType.Refactor => Brushes.DarkCyan,
+        SessionType.Docs => Brushes.DarkOliveGreen,
+        SessionType.Infra => Brushes.SaddleBrown,
+        SessionType.Experiment => Brushes.HotPink,
+        _ => Brushes.Gray,
+    };
 
     public string StatusLabel => _model.Status switch
     {
@@ -112,6 +148,23 @@ public sealed partial class SessionCardViewModel : ObservableObject
         OnPropertyChanged(nameof(UpdatedRelative));
         OnPropertyChanged(nameof(Age));
         OnPropertyChanged(nameof(LockSummary));
+    }
+
+    /// <summary>
+    /// Updates the user-assigned label and raises change notifications for
+    /// the label-related projections.
+    /// </summary>
+    public void UpdateLabel(SessionType label)
+    {
+        if (_label == label)
+        {
+            return;
+        }
+
+        _label = label;
+        OnPropertyChanged(nameof(Label));
+        OnPropertyChanged(nameof(LabelText));
+        OnPropertyChanged(nameof(LabelBrush));
     }
 
     private string FormatRelative(DateTimeOffset when)

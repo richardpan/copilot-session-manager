@@ -1,9 +1,10 @@
-﻿<Window x:Class="CopilotSessionManager.MainWindow"
+<Window x:Class="CopilotSessionManager.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:vm="clr-namespace:CopilotSessionManager.ViewModels"
+        xmlns:models="clr-namespace:CopilotSessionManager.Core.Models;assembly=CopilotSessionManager.Core"
         mc:Ignorable="d"
         d:DataContext="{d:DesignInstance Type=vm:MainWindowViewModel}"
         Title="{Binding Title}"
@@ -12,6 +13,14 @@
         WindowStartupLocation="CenterScreen"
         Background="#1E1E2E">
     <Window.Resources>
+        <DataTemplate x:Key="LabelFilterTemplate" DataType="{x:Type vm:LabelFilterChip}">
+            <CheckBox Content="{Binding Label}"
+                      IsChecked="{Binding IsVisible, Mode=TwoWay}"
+                      Foreground="#CDD6F4"
+                      Margin="0,0,12,0"
+                      VerticalAlignment="Center" />
+        </DataTemplate>
+
         <DataTemplate x:Key="SessionCardTemplate" DataType="{x:Type vm:SessionCardViewModel}">
             <Border Margin="0,0,0,10"
                     Padding="14,12"
@@ -38,13 +47,52 @@
                                        FontSize="14"
                                        FontWeight="SemiBold"
                                        TextTrimming="CharacterEllipsis"
-                                       MaxWidth="640" />
+                                       MaxWidth="540" />
                             <Border Background="{Binding StatusBrush}"
                                     CornerRadius="3"
                                     Padding="6,1"
                                     Margin="10,2,0,0">
                                 <TextBlock Text="{Binding StatusLabel}"
                                            Foreground="#11111B"
+                                           FontSize="10"
+                                           FontWeight="SemiBold" />
+                            </Border>
+                            <Border Background="{Binding LabelBrush}"
+                                    CornerRadius="3"
+                                    Padding="6,1"
+                                    Margin="6,2,0,0"
+                                    Cursor="Hand"
+                                    ToolTip="Right-click to change label">
+                                <Border.ContextMenu>
+                                    <ContextMenu>
+                                        <MenuItem Header="Exploratory"
+                                                  Click="OnLabelMenuItemClicked"
+                                                  Tag="{x:Static models:SessionType.Exploratory}" />
+                                        <MenuItem Header="Research"
+                                                  Click="OnLabelMenuItemClicked"
+                                                  Tag="{x:Static models:SessionType.Research}" />
+                                        <MenuItem Header="Feature"
+                                                  Click="OnLabelMenuItemClicked"
+                                                  Tag="{x:Static models:SessionType.Feature}" />
+                                        <MenuItem Header="Bug"
+                                                  Click="OnLabelMenuItemClicked"
+                                                  Tag="{x:Static models:SessionType.Bug}" />
+                                        <MenuItem Header="Refactor"
+                                                  Click="OnLabelMenuItemClicked"
+                                                  Tag="{x:Static models:SessionType.Refactor}" />
+                                        <MenuItem Header="Docs"
+                                                  Click="OnLabelMenuItemClicked"
+                                                  Tag="{x:Static models:SessionType.Docs}" />
+                                        <MenuItem Header="Infra"
+                                                  Click="OnLabelMenuItemClicked"
+                                                  Tag="{x:Static models:SessionType.Infra}" />
+                                        <MenuItem Header="Experiment"
+                                                  Click="OnLabelMenuItemClicked"
+                                                  Tag="{x:Static models:SessionType.Experiment}" />
+                                    </ContextMenu>
+                                </Border.ContextMenu>
+                                <TextBlock Text="{Binding LabelText}"
+                                           Foreground="White"
                                            FontSize="10"
                                            FontWeight="SemiBold" />
                             </Border>
@@ -103,6 +151,7 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
@@ -146,12 +195,29 @@
             </StackPanel>
         </Border>
 
-        <ScrollViewer Grid.Row="2" Padding="16" VerticalScrollBarVisibility="Auto">
+        <Border Grid.Row="2" Padding="16,6" Background="#11111B" BorderBrush="#181825" BorderThickness="0,1,0,0">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="Labels:"
+                           Foreground="#7F849C"
+                           VerticalAlignment="Center"
+                           Margin="0,0,8,0" />
+                <ItemsControl ItemsSource="{Binding Sessions.LabelFilters}"
+                              ItemTemplate="{StaticResource LabelFilterTemplate}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <StackPanel Orientation="Horizontal" />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                </ItemsControl>
+            </StackPanel>
+        </Border>
+
+        <ScrollViewer Grid.Row="3" Padding="16" VerticalScrollBarVisibility="Auto">
             <ItemsControl ItemsSource="{Binding Sessions.VisibleSessions}"
                           ItemTemplate="{StaticResource SessionCardTemplate}" />
         </ScrollViewer>
 
-        <Border Grid.Row="3" Padding="16,8" Background="#181825">
+        <Border Grid.Row="4" Padding="16,8" Background="#181825">
             <TextBlock Text="{Binding Sessions.StatusMessage}"
                        Foreground="#7F849C"
                        FontSize="11" />

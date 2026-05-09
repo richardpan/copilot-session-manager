@@ -1,8 +1,10 @@
 using CopilotSessionManager.Core.Cli;
 using CopilotSessionManager.Core.Cli.Adapters.V1;
+using CopilotSessionManager.Core.Configuration;
 using CopilotSessionManager.Core.Sessions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging;
 
 namespace CopilotSessionManager.Core.DependencyInjection;
 
@@ -28,8 +30,8 @@ public static class CoreServiceCollectionExtensions
 
     /// <summary>
     /// Registers the session discovery pipeline (paths, store, discovery
-    /// service). Implies <see cref="AddCopilotCliAdapters"/> and
-    /// <see cref="AddStatusDetection"/>.
+    /// service). Implies <see cref="AddCopilotCliAdapters"/>,
+    /// <see cref="AddStatusDetection"/>, and <see cref="AddSessionLabels"/>.
     /// </summary>
     public static IServiceCollection AddSessionDiscovery(this IServiceCollection services)
     {
@@ -37,9 +39,32 @@ public static class CoreServiceCollectionExtensions
 
         services.AddCopilotCliAdapters();
         services.AddStatusDetection();
+        services.AddSessionLabels();
         services.TryAddSingleton<ICopilotPaths, DefaultCopilotPaths>();
         services.TryAddSingleton<ISessionStore, SessionStore>();
         services.TryAddSingleton<ISessionDiscoveryService, SessionDiscoveryService>();
+
+        return services;
+    }
+
+    /// <summary>
+    /// Registers <see cref="ISessionLabelStore"/> backed by
+    /// <see cref="JsonSessionLabelStore"/> at
+    /// <c>%LOCALAPPDATA%\CopilotSessionManager\labels.json</c>. Safe to call
+    /// multiple times.
+    /// </summary>
+    public static IServiceCollection AddSessionLabels(this IServiceCollection services)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        services.TryAddSingleton<ISessionLabelStore>(sp =>
+        {
+            var path = System.IO.Path.Combine(
+                AppPaths.LocalAppDataDirectory,
+                JsonSessionLabelStore.DefaultFileName);
+            var logger = sp.GetRequiredService<ILogger<JsonSessionLabelStore>>();
+            return new JsonSessionLabelStore(path, logger);
+        });
 
         return services;
     }
