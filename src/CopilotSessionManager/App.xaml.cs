@@ -9,6 +9,7 @@ using CopilotSessionManager.Core.Onboarding;
 using CopilotSessionManager.Core.Settings;
 using CopilotSessionManager.Logging;
 using CopilotSessionManager.Services.SingleInstance;
+using CopilotSessionManager.Services.Tray;
 using CopilotSessionManager.ViewModels;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -28,6 +29,9 @@ public partial class App : Application
     private IHost? _host;
     private readonly LoggingLevelSwitch _levelSwitch = new(LogEventLevel.Information);
     private MutexSingleInstanceCoordinator? _singleInstance;
+    private ITrayIconService? _trayIcon;
+    private TrayCoordinator? _trayCoordinator;
+    private bool _userRequestedQuit;
 
     /// <summary>
     /// Gets the application's <see cref="IServiceProvider"/>. Available after
@@ -124,7 +128,29 @@ public partial class App : Application
 
             var mainWindow = _host.Services.GetRequiredService<MainWindow>();
             MainWindow = mainWindow;
+            mainWindow.Closing += OnMainWindowClosing;
             mainWindow.Show();
+
+            // Tray icon goes up only after the main window is on screen, so
+            // a tooltip update never beats the first session scan to the
+            // dispatcher.
+            try
+            {
+                _trayIcon = _host.Services.GetRequiredService<ITrayIconService>();
+                var sessions = _host.Services.GetRequiredService<SessionsViewModel>();
+                _trayCoordinator = new TrayCoordinator(
+                    _trayIcon,
+                    sessions.Sessions,
+                    onActivate: ActivateMainWindow,
+                    onQuit: RequestQuit);
+                _trayIcon.Show();
+            }
+            catch (Exception tex)
+            {
+                // Tray is non-essential — don't take down the app if it
+                // fails to materialise (e.g. headless / RDP edge cases).
+                Log.Warning(tex, "Tray icon failed to initialise; continuing without one.");
+            }
 
             Log.Information(
                 "{Product} {Version} started.",
@@ -146,6 +172,11 @@ public partial class App : Application
     protected override async void OnExit(ExitEventArgs e)
     {
         Log.Information("Shutting down.");
+
+        _trayCoordinator?.Dispose();
+        _trayCoordinator = null;
+        _trayIcon?.Dispose();
+        _trayIcon = null;
 
         if (_singleInstance is not null)
         {
@@ -171,28 +202,91 @@ public partial class App : Application
     /// </summary>
     private void OnActivationRequested(object? sender, EventArgs e)
     {
+        Dispatcher.BeginInvoke(new Action(ActivateMainWindow));
+    }
+
+    /// <summary>
+    /// Show + foreground the main window. Idempotent. Used by both the
+    /// single-instance pipeline and the tray coordinator.
+    /// </summary>
+    private void ActivateMainWindow()
+    {
+        Dispatcher.VerifyAccess();
+
+        var window = MainWindow;
+        if (window is null)
+        {
+            return;
+        }
+
+        if (window.WindowState == WindowState.Minimized)
+        {
+            window.WindowState = WindowState.Normal;
+        }
+        window.Show();
+        window.Activate();
+
+        // Topmost flicker is the standard WPF trick for forcing a window
+        // back to the foreground when SetForegroundWindow would otherwise
+        // be denied by Win32 focus rules.
+        var wasTopmost = window.Topmost;
+        window.Topmost = true;
+        window.Topmost = wasTopmost;
+    }
+
+    /// <summary>
+    /// User picked "Quit" from the tray context menu (or any future
+    /// affordance). Marks the intent to actually exit so the next close
+    /// of the main window doesn't bounce back into the tray, then closes
+    /// the window which triggers <see cref="OnMainWindowClosing"/> →
+    /// <see cref="Application.Shutdown()"/>.
+    /// </summary>
+    private void RequestQuit()
+    {
+        _userRequestedQuit = true;
         Dispatcher.BeginInvoke(new Action(() =>
         {
-            var window = MainWindow;
-            if (window is null)
+            if (MainWindow is not null)
             {
-                return;
+                MainWindow.Close();
             }
-
-            if (window.WindowState == WindowState.Minimized)
+            else
             {
-                window.WindowState = WindowState.Normal;
+                Shutdown(0);
             }
-            window.Show();
-            window.Activate();
-
-            // Topmost flicker is the standard WPF trick for forcing a window
-            // back to the foreground when SetForegroundWindow would otherwise
-            // be denied by Win32 focus rules.
-            var wasTopmost = window.Topmost;
-            window.Topmost = true;
-            window.Topmost = wasTopmost;
         }));
+    }
+
+    /// <summary>
+    /// Intercepts the main-window close button. By default we honour
+    /// <see cref="AppSettings.MinimizeToTrayOnClose"/> and just hide the
+    /// window — the process keeps running in the tray and can be brought
+    /// back via the icon. An explicit Quit (tray menu) bypasses this by
+    /// flipping <see cref="_userRequestedQuit"/> first.
+    /// </summary>
+    private async void OnMainWindowClosing(object? sender, System.ComponentModel.CancelEventArgs e)
+    {
+        if (_userRequestedQuit || _trayIcon is null || _host is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var store = _host.Services.GetRequiredService<IAppSettingsStore>();
+            var settings = await store.LoadAsync().ConfigureAwait(true);
+            if (settings.MinimizeToTrayOnClose && sender is Window window)
+            {
+                e.Cancel = true;
+                window.Hide();
+            }
+        }
+        catch (Exception ex)
+        {
+            // Failing to read the setting must not block the user from
+            // closing the window — fall through to the default close.
+            Log.Warning(ex, "Could not consult MinimizeToTrayOnClose setting; closing normally.");
+        }
     }
 
     private void ConfigureServices(HostBuilderContext context, IServiceCollection services)
@@ -207,6 +301,11 @@ public partial class App : Application
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton<Services.IFileLauncher, Services.ShellFileLauncher>();
         services.AddSingleton(new LogLevelSwitchAccessor(_levelSwitch));
+
+        // Tray icon is Windows-only and the WPF host is itself Windows-only
+        // (TFM net8.0-windows), so registering the concrete service here is
+        // safe. Register as singleton so the icon's lifetime tracks the host.
+        services.AddSingleton<ITrayIconService, NotifyIconTrayService>();
 
         // Views
         services.AddSingleton<MainWindow>();
