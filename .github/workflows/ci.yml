@@ -81,28 +81,23 @@ jobs:
             **/TestResults/**/coverage.cobertura.xml
           if-no-files-found: ignore
 
-      - name: Coverage summary
+      - name: Generate coverage report
         if: steps.detect.outputs.has_project == 'true'
-        uses: irongut/CodeCoverageSummary@v1.3.0
+        uses: danielpalme/ReportGenerator-GitHub-Action@5.4.1
         with:
-          filename: '**/coverage.cobertura.xml'
-          badge: true
-          fail_below_min: false
-          format: markdown
-          hide_branch_rate: false
-          hide_complexity: true
-          indicators: true
-          output: both
-          thresholds: '60 80'
+          reports: '**/coverage.cobertura.xml'
+          targetdir: 'coverage-report'
+          reporttypes: 'MarkdownSummary;Cobertura'
+          verbosity: 'Warning'
 
       - name: Add coverage to job summary
-        if: steps.detect.outputs.has_project == 'true' && hashFiles('code-coverage-results.md') != ''
+        if: steps.detect.outputs.has_project == 'true' && hashFiles('coverage-report/Summary.md') != ''
         shell: pwsh
-        run: Get-Content code-coverage-results.md | Out-File -Append -FilePath $env:GITHUB_STEP_SUMMARY
+        run: Get-Content coverage-report/Summary.md | Out-File -Append -FilePath $env:GITHUB_STEP_SUMMARY
 
       - name: Comment coverage on PR
-        if: github.event_name == 'pull_request' && steps.detect.outputs.has_project == 'true' && hashFiles('code-coverage-results.md') != ''
+        if: github.event_name == 'pull_request' && steps.detect.outputs.has_project == 'true' && hashFiles('coverage-report/Summary.md') != ''
         uses: marocchino/sticky-pull-request-comment@v2
         with:
-          path: code-coverage-results.md
+          path: coverage-report/Summary.md
           recreate: true
