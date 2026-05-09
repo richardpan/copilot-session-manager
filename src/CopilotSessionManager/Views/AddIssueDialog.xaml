@@ -11,7 +11,10 @@
         ResizeMode="NoResize"
         ShowInTaskbar="False"
         WindowStyle="SingleBorderWindow"
-        Background="#1E1E2E">
+        Background="#1E1E2E"
+        FocusManager.FocusedElement="{Binding ElementName=InputBox}"
+        AutomationProperties.Name="Link GitHub issue dialog"
+        AutomationProperties.HelpText="Enter a GitHub issue reference and press Add to link it to this session.">
     <Grid Margin="20">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
@@ -22,6 +25,7 @@
         </Grid.RowDefinitions>
 
         <TextBlock Grid.Row="0"
+                   x:Name="InputLabel"
                    Text="Issue reference"
                    Foreground="#CDD6F4"
                    FontWeight="SemiBold"
@@ -37,7 +41,10 @@
                  Padding="6,4"
                  FontSize="13"
                  Margin="0,0,0,6"
-                 TextChanged="InputBox_TextChanged" />
+                 TextChanged="InputBox_TextChanged"
+                 AutomationProperties.LabeledBy="{Binding ElementName=InputLabel}"
+                 AutomationProperties.Name="Issue reference"
+                 AutomationProperties.HelpText="Accepts owner/repo number, hash number, plain number, or a full GitHub issue URL." />
 
         <TextBlock x:Name="HintText"
                    Grid.Row="2"
@@ -53,7 +60,8 @@
                    Foreground="#F38BA8"
                    FontSize="12"
                    TextWrapping="Wrap"
-                   VerticalAlignment="Top" />
+                   VerticalAlignment="Top"
+                   AutomationProperties.LiveSetting="Polite" />
 
         <StackPanel Grid.Row="4"
                     Orientation="Horizontal"
@@ -68,7 +76,9 @@
                     Foreground="#CDD6F4"
                     BorderBrush="#45475A"
                     Click="CancelButton_Click"
-                    IsCancel="True" />
+                    IsCancel="True"
+                    AutomationProperties.Name="Cancel"
+                    AutomationProperties.HelpText="Closes the dialog without linking an issue." />
             <Button x:Name="AddButton"
                     Content="Add"
                     Width="90"
@@ -79,7 +89,9 @@
                     FontWeight="SemiBold"
                     IsEnabled="False"
                     IsDefault="True"
-                    Click="AddButton_Click" />
+                    Click="AddButton_Click"
+                    AutomationProperties.Name="Add issue link"
+                    AutomationProperties.HelpText="Links the parsed issue to the current session and closes the dialog." />
         </StackPanel>
     </Grid>
 </Window>

@@ -53,7 +53,9 @@
                                  IsChecked="{Binding IsSelected, Mode=TwoWay}"
                                  VerticalAlignment="Center"
                                  Margin="0,0,10,0"
-                                 Foreground="#CDD6F4" />
+                                 Foreground="#CDD6F4"
+                                 AutomationProperties.Name="{Binding Title}"
+                                 AutomationProperties.HelpText="Select this session as the merge target." />
                     <StackPanel Grid.Column="1" VerticalAlignment="Center">
                         <TextBlock Text="{Binding Title}"
                                    Foreground="#CDD6F4"
@@ -81,7 +83,7 @@
         </DataTemplate>
     </Window.Resources>
 
-    <Grid Margin="20">
+    <Grid Margin="20" FocusManager.FocusedElement="{Binding ElementName=SearchBox}">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
@@ -139,18 +141,23 @@
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
                     <TextBox Grid.Column="0"
+                             x:Name="SearchBox"
                              Text="{Binding SearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                              Background="#181825"
                              Foreground="#CDD6F4"
                              BorderBrush="#45475A"
                              Padding="6,4"
-                             ToolTip="Search by title, repo, branch, or session id." />
+                             ToolTip="Search by title, repo, branch, or session id."
+                             AutomationProperties.Name="Search target sessions"
+                             AutomationProperties.HelpText="Filters the candidate list by title, repository, branch, or session id." />
                     <CheckBox Grid.Column="1"
                               Content="Show inactive"
                               Foreground="#CDD6F4"
                               VerticalAlignment="Center"
                               Margin="10,0,0,0"
-                              IsChecked="{Binding ShowInactiveTargets, Mode=TwoWay}" />
+                              IsChecked="{Binding ShowInactiveTargets, Mode=TwoWay}"
+                              AutomationProperties.Name="Show inactive targets"
+                              AutomationProperties.HelpText="When checked, the candidate list also includes sessions whose process is no longer running." />
                 </Grid>
 
                 <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
@@ -313,7 +320,9 @@
                         Command="{Binding OpenMergedFileCommand}"
                         HorizontalAlignment="Center"
                         Margin="0,18,0,0"
-                        Visibility="{Binding IsSuccess, Converter={StaticResource BoolToVisibility}}" />
+                        Visibility="{Binding IsSuccess, Converter={StaticResource BoolToVisibility}}"
+                        AutomationProperties.Name="Open merged file"
+                        AutomationProperties.HelpText="Opens the imported merge file from the target session in the OS default viewer." />
             </StackPanel>
         </Grid>
 
@@ -328,7 +337,10 @@
             <Button Grid.Column="0"
                     HorizontalAlignment="Left"
                     Click="OnCancelClicked"
-                    Margin="0">
+                    Margin="0"
+                    IsCancel="True"
+                    AutomationProperties.Name="Cancel or close wizard"
+                    AutomationProperties.HelpText="Closes the merge wizard without performing further actions. Disabled while a merge is running.">
                 <Button.Style>
                     <Style TargetType="Button" BasedOn="{StaticResource WizardButton}">
                         <Setter Property="Content" Value="Cancel" />
@@ -347,7 +359,9 @@
             <!-- Step nav buttons -->
             <StackPanel Grid.Column="1" Orientation="Horizontal">
                 <Button Content="Back"
-                        Command="{Binding BackCommand}">
+                        Command="{Binding BackCommand}"
+                        AutomationProperties.Name="Back to target picker"
+                        AutomationProperties.HelpText="Returns to the previous step so you can pick a different target session.">
                     <Button.Style>
                         <Style TargetType="Button" BasedOn="{StaticResource WizardButton}">
                             <Setter Property="Visibility" Value="Collapsed" />
@@ -360,7 +374,10 @@
                     </Button.Style>
                 </Button>
                 <Button Content="Next"
-                        Command="{Binding NextCommand}">
+                        Command="{Binding NextCommand}"
+                        IsDefault="True"
+                        AutomationProperties.Name="Next: preview merge"
+                        AutomationProperties.HelpText="Builds a preview of the markdown that will be appended to the selected target session.">
                     <Button.Style>
                         <Style TargetType="Button" BasedOn="{StaticResource PrimaryButton}">
                             <Setter Property="Visibility" Value="Collapsed" />
@@ -373,7 +390,10 @@
                     </Button.Style>
                 </Button>
                 <Button Content="Confirm merge"
-                        Command="{Binding ConfirmMergeCommand}">
+                        Command="{Binding ConfirmMergeCommand}"
+                        IsDefault="True"
+                        AutomationProperties.Name="Confirm merge"
+                        AutomationProperties.HelpText="Exports the source session via copilot --share and appends the markdown into the selected target session.">
                     <Button.Style>
                         <Style TargetType="Button" BasedOn="{StaticResource PrimaryButton}">
                             <Setter Property="Visibility" Value="Collapsed" />

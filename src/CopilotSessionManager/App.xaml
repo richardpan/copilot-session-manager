@@ -4,7 +4,45 @@
              xmlns:local="clr-namespace:CopilotSessionManager">
     <Application.Resources>
         <ResourceDictionary>
-            <!-- App-wide resources will live here. -->
+            <!--
+                A11y focus visual: WPF's default dotted black rectangle is
+                invisible against the Catppuccin Mocha dark theme. This style
+                draws a 2px Catppuccin yellow dashed outline 2px outside the
+                control bounds so keyboard focus is always obvious.
+            -->
+            <Style x:Key="A11yFocusVisual" TargetType="Control">
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate>
+                            <Rectangle Stroke="#F9E2AF"
+                                       StrokeThickness="2"
+                                       StrokeDashArray="2,1"
+                                       SnapsToDevicePixels="True"
+                                       Margin="-2" />
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+
+            <!-- Apply the a11y focus visual app-wide for every focusable control type. -->
+            <Style TargetType="{x:Type Button}">
+                <Setter Property="FocusVisualStyle" Value="{StaticResource A11yFocusVisual}" />
+            </Style>
+            <Style TargetType="{x:Type CheckBox}">
+                <Setter Property="FocusVisualStyle" Value="{StaticResource A11yFocusVisual}" />
+            </Style>
+            <Style TargetType="{x:Type RadioButton}">
+                <Setter Property="FocusVisualStyle" Value="{StaticResource A11yFocusVisual}" />
+            </Style>
+            <Style TargetType="{x:Type MenuItem}">
+                <Setter Property="FocusVisualStyle" Value="{StaticResource A11yFocusVisual}" />
+            </Style>
+            <Style TargetType="{x:Type TextBox}">
+                <Setter Property="FocusVisualStyle" Value="{StaticResource A11yFocusVisual}" />
+            </Style>
+            <Style TargetType="{x:Type ListBoxItem}">
+                <Setter Property="FocusVisualStyle" Value="{StaticResource A11yFocusVisual}" />
+            </Style>
         </ResourceDictionary>
     </Application.Resources>
 </Application>

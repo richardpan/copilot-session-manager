@@ -259,6 +259,44 @@ public sealed partial class SessionCardViewModel : ObservableObject
         _ => "Unknown",
     };
 
+    /// <summary>
+    /// Glyph paired with <see cref="StatusBrush"/> so colour-blind users have
+    /// a non-colour signal for session status. Rendered in the status pill
+    /// alongside <see cref="StatusLabel"/>.
+    /// </summary>
+    public string StatusGlyph => _model.Status switch
+    {
+        SessionStatus.Working => "▶",
+        SessionStatus.AwaitingApproval => "⚠",
+        SessionStatus.AwaitingInput => "✎",
+        SessionStatus.Idle => "◌",
+        SessionStatus.Inactive => "·",
+        SessionStatus.Orphaned => "✗",
+        _ => "?",
+    };
+
+    /// <summary>
+    /// Composite text for the status pill: glyph + label so the colour
+    /// channel is not the only signal of state.
+    /// </summary>
+    public string StatusBadgeText => $"{StatusGlyph} {StatusLabel}";
+
+    /// <summary>
+    /// Single-sentence screen-reader label for the whole card. Bound to
+    /// <c>AutomationProperties.Name</c> on the card root so Narrator
+    /// announces something coherent when the user lands on a card.
+    /// </summary>
+    public string AutomationName
+    {
+        get
+        {
+            var repo = string.IsNullOrWhiteSpace(_model.Repository) ? "no repo" : _model.Repository!;
+            var branch = string.IsNullOrWhiteSpace(_model.Branch) ? "no branch" : _model.Branch!;
+            var updated = UpdatedRelative;
+            return $"{LabelText} session: {Title}. Status {StatusLabel}. Repository {repo}, branch {branch}. Updated {updated}.";
+        }
+    }
+
     /// <summary>True when the session is a crashed (orphaned) session that
     /// has stale lock files left behind by a dead process.</summary>
     public bool IsCrashed => _model.Status == SessionStatus.Orphaned;
@@ -663,6 +701,9 @@ public sealed partial class SessionCardViewModel : ObservableObject
         OnPropertyChanged(nameof(Status));
         OnPropertyChanged(nameof(StatusLabel));
         OnPropertyChanged(nameof(StatusBrush));
+        OnPropertyChanged(nameof(StatusGlyph));
+        OnPropertyChanged(nameof(StatusBadgeText));
+        OnPropertyChanged(nameof(AutomationName));
         OnPropertyChanged(nameof(IsCrashed));
         CleanupStaleLocksCommand.NotifyCanExecuteChanged();
         ResumeCommand.NotifyCanExecuteChanged();
@@ -697,6 +738,7 @@ public sealed partial class SessionCardViewModel : ObservableObject
         OnPropertyChanged(nameof(Label));
         OnPropertyChanged(nameof(LabelText));
         OnPropertyChanged(nameof(LabelBrush));
+        OnPropertyChanged(nameof(AutomationName));
     }
 
     private string FormatRelative(DateTimeOffset when)

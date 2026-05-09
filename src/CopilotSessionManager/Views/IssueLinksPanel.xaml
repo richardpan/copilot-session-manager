@@ -53,19 +53,37 @@
                             Background="{Binding BadgeBrush}"
                             Command="{Binding OpenCommand}"
                             ToolTip="{Binding Tooltip}"
-                            Margin="0,2,4,2">
+                            Margin="0,2,4,2"
+                            AutomationProperties.Name="{Binding AutomationName}"
+                            AutomationProperties.HelpText="Press Enter to open this issue in your browser. Right-click for more options.">
                         <Button.ContextMenu>
                             <ContextMenu>
-                                <MenuItem Header="Open in browser" Command="{Binding OpenCommand}" />
+                                <MenuItem Header="Open in browser"
+                                          Command="{Binding OpenCommand}"
+                                          AutomationProperties.Name="Open issue in browser" />
                                 <Separator />
-                                <MenuItem Header="Remove link" Command="{Binding RemoveCommand}" />
+                                <MenuItem Header="Remove link"
+                                          Command="{Binding RemoveCommand}"
+                                          AutomationProperties.Name="Remove this issue link"
+                                          AutomationProperties.HelpText="Detaches this issue from the session. The issue itself is unaffected." />
                             </ContextMenu>
                         </Button.ContextMenu>
-                        <TextBlock Text="{Binding Display}"
-                                   Foreground="#11111B"
-                                   FontWeight="SemiBold"
-                                   FontSize="11"
-                                   Padding="8,2" />
+                        <StackPanel Orientation="Horizontal">
+                            <!--
+                                BadgeGlyph pairs the colour signal (open=green/closed=purple)
+                                with a non-colour glyph (●/○) for colour-blind safety.
+                            -->
+                            <TextBlock Text="{Binding BadgeGlyph}"
+                                       Foreground="#11111B"
+                                       FontWeight="SemiBold"
+                                       FontSize="11"
+                                       Padding="8,2,2,2" />
+                            <TextBlock Text="{Binding Display}"
+                                       Foreground="#11111B"
+                                       FontWeight="SemiBold"
+                                       FontSize="11"
+                                       Padding="0,2,8,2" />
+                        </StackPanel>
                     </Button>
                 </DataTemplate>
             </ItemsControl.ItemTemplate>
@@ -74,6 +92,8 @@
         <Button Style="{StaticResource AddIssueButton}"
                 Content="+ Issue"
                 Command="{Binding AddIssueCommand}"
-                ToolTip="Link a GitHub issue to this session" />
+                ToolTip="Link a GitHub issue to this session"
+                AutomationProperties.Name="Add issue link"
+                AutomationProperties.HelpText="Opens a dialog to link a new GitHub issue to this session." />
     </WrapPanel>
 </UserControl>
