@@ -339,7 +339,7 @@ public class SessionsViewModelTests
         await vm.DisposeAsync();
     }
 
-    private sealed class FakeReadmeService : ISessionReadmeService
+    public sealed class FakeReadmeService : ISessionReadmeService
     {
         public int EnsureCalls { get; private set; }
         public Session? LastSession { get; private set; }
@@ -361,7 +361,7 @@ public class SessionsViewModelTests
         }
     }
 
-    private sealed class FakeFileLauncher : IFileLauncher
+    public sealed class FakeFileLauncher : IFileLauncher
     {
         public List<string> Calls { get; } = new();
         public Task OpenAsync(string path, CancellationToken cancellationToken = default)
@@ -371,7 +371,7 @@ public class SessionsViewModelTests
         }
     }
 
-    private sealed class FakeDiscoveryService : ISessionDiscoveryService
+    public sealed class FakeDiscoveryService : ISessionDiscoveryService
     {
         private List<Session> _current;
 
@@ -413,7 +413,7 @@ public class SessionsViewModelTests
         }
     }
 
-    private sealed class FakeLabelStore : ISessionLabelStore
+    public sealed class FakeLabelStore : ISessionLabelStore
     {
         private readonly Dictionary<string, SessionType> _labels = new(StringComparer.OrdinalIgnoreCase);
 
@@ -456,12 +456,12 @@ public class SessionsViewModelTests
             LabelChanged?.Invoke(this, new SessionLabelChangedEventArgs(sessionId, type));
     }
 
-    private sealed class SyncDispatcher : IUiDispatcher
+    public sealed class SyncDispatcher : IUiDispatcher
     {
         public void Post(Action action) => action();
     }
 
-    private sealed class FixedTimeProvider : TimeProvider
+    public sealed class FixedTimeProvider : TimeProvider
     {
         private readonly DateTimeOffset _now;
         public FixedTimeProvider(DateTimeOffset now) => _now = now;

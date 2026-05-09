@@ -207,6 +207,28 @@
                                 HorizontalAlignment="Right"
                                 Command="{Binding DataContext.Sessions.OpenReadmeCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                                 CommandParameter="{Binding}" />
+                        <StackPanel Orientation="Horizontal"
+                                    HorizontalAlignment="Right"
+                                    Margin="0,6,0,0"
+                                    Visibility="{Binding IsCrashed, Converter={StaticResource BoolToVisibility}}">
+                            <Button Content="▶ Resume"
+                                    Padding="8,3"
+                                    FontSize="11"
+                                    Margin="0,0,6,0"
+                                    Background="#A6E3A1"
+                                    Foreground="#11111B"
+                                    BorderBrush="#94D396"
+                                    ToolTip="Launch a new PowerShell window and resume this Copilot session (cleans up stale lock files first)"
+                                    Command="{Binding ResumeCommand}" />
+                            <Button Content="🧹 Clean up"
+                                    Padding="8,3"
+                                    FontSize="11"
+                                    Background="#313244"
+                                    Foreground="#CDD6F4"
+                                    BorderBrush="#45475A"
+                                    ToolTip="Delete stale inuse.*.lock files for this crashed session"
+                                    Command="{Binding CleanupStaleLocksCommand}" />
+                        </StackPanel>
                     </StackPanel>
                 </Grid>
             </Border>
@@ -234,13 +256,22 @@
                            FontSize="18"
                            FontWeight="SemiBold"
                            VerticalAlignment="Center" />
-                <Button Grid.Column="1"
-                        Content="Refresh"
-                        Padding="14,6"
-                        Background="#313244"
-                        Foreground="#CDD6F4"
-                        BorderBrush="#45475A"
-                        Command="{Binding Sessions.RefreshCommand}" />
+                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                    <Button Content="🧹 Clean stale locks"
+                            Padding="14,6"
+                            Margin="0,0,8,0"
+                            Background="#313244"
+                            Foreground="#CDD6F4"
+                            BorderBrush="#45475A"
+                            ToolTip="Sweep ~/.copilot/session-state and delete inuse.*.lock files whose owning process is no longer running"
+                            Command="{Binding Sessions.CleanAllStaleLocksCommand}" />
+                    <Button Content="Refresh"
+                            Padding="14,6"
+                            Background="#313244"
+                            Foreground="#CDD6F4"
+                            BorderBrush="#45475A"
+                            Command="{Binding Sessions.RefreshCommand}" />
+                </StackPanel>
             </Grid>
         </Border>
 

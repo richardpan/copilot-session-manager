@@ -63,7 +63,7 @@ public class SessionCardViewModelTests
     [InlineData(SessionStatus.AwaitingInput, "Awaiting input")]
     [InlineData(SessionStatus.Idle, "Idle")]
     [InlineData(SessionStatus.Inactive, "Inactive")]
-    [InlineData(SessionStatus.Orphaned, "Orphaned")]
+    [InlineData(SessionStatus.Orphaned, "Crashed")]
     public void StatusLabel_MatchesStatus(SessionStatus status, string expected)
     {
         new SessionCardViewModel(BuildSession(status: status), TimeAt(Now))

@@ -32,6 +32,9 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
     private readonly IModelCatalog? _modelCatalog;
     private readonly IModelCostCalculator? _costCalculator;
     private readonly IGitHubClient? _githubClient;
+    private readonly ISessionLockCleanup? _lockCleanup;
+    private readonly ISessionLauncher? _sessionLauncher;
+    private readonly ILoggerFactory? _loggerFactory;
     private readonly ILogger<SessionsViewModel> _logger;
 
     private readonly Dictionary<string, SessionCardViewModel> _byId =
@@ -90,6 +93,26 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
         IModelCostCalculator? costCalculator,
         IGitHubClient? githubClient,
         ILogger<SessionsViewModel> logger)
+        : this(discovery, labelStore, readmeService, fileLauncher, dispatcher,
+            timeProvider, modelCatalog, costCalculator, githubClient,
+            lockCleanup: null, sessionLauncher: null, loggerFactory: null, logger)
+    {
+    }
+
+    public SessionsViewModel(
+        ISessionDiscoveryService discovery,
+        ISessionLabelStore labelStore,
+        ISessionReadmeService readmeService,
+        IFileLauncher fileLauncher,
+        IUiDispatcher dispatcher,
+        TimeProvider timeProvider,
+        IModelCatalog? modelCatalog,
+        IModelCostCalculator? costCalculator,
+        IGitHubClient? githubClient,
+        ISessionLockCleanup? lockCleanup,
+        ISessionLauncher? sessionLauncher,
+        ILoggerFactory? loggerFactory,
+        ILogger<SessionsViewModel> logger)
     {
         ArgumentNullException.ThrowIfNull(discovery);
         ArgumentNullException.ThrowIfNull(labelStore);
@@ -108,6 +131,9 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
         _modelCatalog = modelCatalog;
         _costCalculator = costCalculator;
         _githubClient = githubClient;
+        _lockCleanup = lockCleanup;
+        _sessionLauncher = sessionLauncher;
+        _loggerFactory = loggerFactory;
         _logger = logger;
 
         Sessions = new ObservableCollection<SessionCardViewModel>();
@@ -211,6 +237,46 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
             IsLoading = false;
         }
     }
+
+    /// <summary>
+    /// Sweeps every session directory under <c>~/.copilot/session-state</c>
+    /// and removes <c>inuse.*.lock</c> files whose owning PID is no longer
+    /// running. Posts a status message summarising what changed and refreshes
+    /// the dashboard so any newly-recovered sessions surface as Inactive.
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(CanCleanAllStaleLocks))]
+    public async Task CleanAllStaleLocksAsync(CancellationToken cancellationToken = default)
+    {
+        if (_lockCleanup is null)
+        {
+            return;
+        }
+        try
+        {
+            IsLoading = true;
+            StatusMessage = "Cleaning stale lock files…";
+            var result = await _lockCleanup.CleanupAllAsync(cancellationToken).ConfigureAwait(false);
+            // Re-scan so the freshly-unlocked sessions report as Inactive.
+            var sessions = await _discovery.ScanAsync(cancellationToken).ConfigureAwait(false);
+            await ApplySnapshotAsync(sessions, cancellationToken).ConfigureAwait(false);
+            // ApplySnapshotAsync overwrites StatusMessage with the post-scan
+            // summary; replace it now so the user sees the cleanup outcome.
+            StatusMessage = result.LocksRemoved == 0
+                ? "No stale lock files found."
+                : $"Removed {result.LocksRemoved} stale lock(s) across {result.SessionsAffected} session(s).";
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Bulk lock cleanup failed.");
+            StatusMessage = $"Cleanup failed: {ex.Message}";
+        }
+        finally
+        {
+            IsLoading = false;
+        }
+    }
+
+    private bool CanCleanAllStaleLocks() => _lockCleanup is not null;
 
     /// <summary>
     /// Persists <paramref name="type"/> as the user-assigned label for
@@ -336,7 +402,10 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
             else
             {
                 var label = newLabels.TryGetValue(session.Id, out var t) ? t : SessionType.Exploratory;
-                var card = new SessionCardViewModel(session, label, _timeProvider, _modelCatalog, _costCalculator, _fileLauncher);
+                var cardLogger = _loggerFactory?.CreateLogger<SessionCardViewModel>();
+                var card = new SessionCardViewModel(
+                    session, label, _timeProvider, _modelCatalog, _costCalculator,
+                    _fileLauncher, _lockCleanup, _sessionLauncher, cardLogger);
                 _byId[session.Id] = card;
                 Sessions.Add(card);
                 inserted = true;
