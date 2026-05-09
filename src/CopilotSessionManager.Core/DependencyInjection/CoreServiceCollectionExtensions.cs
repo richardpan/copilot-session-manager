@@ -3,7 +3,9 @@ using CopilotSessionManager.Core.Cli.Adapters.V1;
 using CopilotSessionManager.Core.Configuration;
 using CopilotSessionManager.Core.Cost;
 using CopilotSessionManager.Core.GitHub;
+using CopilotSessionManager.Core.Onboarding;
 using CopilotSessionManager.Core.Sessions;
+using CopilotSessionManager.Core.Settings;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
@@ -71,6 +73,32 @@ public static class CoreServiceCollectionExtensions
         services.TryAddSingleton<IProcessLauncher, ProcessLauncher>();
         services.TryAddSingleton<IPowerShellHostResolver, PathPowerShellHostResolver>();
         services.TryAddSingleton<ISessionLauncher, PowerShellSessionLauncher>();
+
+        return services;
+    }
+
+    /// <summary>
+    /// Registers first-run onboarding services: <see cref="IProcessRunner"/>,
+    /// <see cref="IPrerequisiteChecker"/>, and <see cref="IAppSettingsStore"/>
+    /// at <c>%LOCALAPPDATA%\CopilotSessionManager\settings.json</c>. Safe to
+    /// call multiple times.
+    /// </summary>
+    public static IServiceCollection AddOnboarding(this IServiceCollection services)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        services.TryAddSingleton<ICopilotPaths, DefaultCopilotPaths>();
+        services.TryAddSingleton<IPowerShellHostResolver, PathPowerShellHostResolver>();
+        services.TryAddSingleton<IProcessRunner, ProcessRunner>();
+        services.TryAddSingleton<IPrerequisiteChecker, PrerequisiteChecker>();
+        services.TryAddSingleton<IAppSettingsStore>(sp =>
+        {
+            var path = System.IO.Path.Combine(
+                AppPaths.LocalAppDataDirectory,
+                JsonAppSettingsStore.DefaultFileName);
+            var logger = sp.GetRequiredService<ILogger<JsonAppSettingsStore>>();
+            return new JsonAppSettingsStore(path, logger);
+        });
 
         return services;
     }
