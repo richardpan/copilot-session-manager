@@ -2,6 +2,7 @@ using CopilotSessionManager.Core.Cli;
 using CopilotSessionManager.Core.Cli.Adapters.V1;
 using CopilotSessionManager.Core.Cli.Share;
 using CopilotSessionManager.Core.DependencyInjection;
+using CopilotSessionManager.Core.GitHub.Storage;
 using CopilotSessionManager.Core.Merge;
 using CopilotSessionManager.Core.Security;
 using CopilotSessionManager.Core.Sessions;
@@ -113,5 +114,39 @@ public class CoreServiceCollectionExtensionsTests
         // Implied dependencies should also be resolvable.
         provider.GetRequiredService<ISessionReadmeService>().Should().NotBeNull();
         provider.GetRequiredService<CopilotSessionManager.Core.Onboarding.IProcessRunner>().Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task AddGitHubLinkStorage_registers_singleton_json_store()
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton<ILoggerFactory>(NullLoggerFactory.Instance);
+        services.AddSingleton(typeof(ILogger<>), typeof(NullLogger<>));
+
+        services.AddGitHubLinkStorage();
+        services.AddGitHubLinkStorage(); // idempotent — TryAddSingleton
+
+        await using var provider = services.BuildServiceProvider();
+
+        var first = provider.GetRequiredService<ISessionGitHubLinksStore>();
+        var second = provider.GetRequiredService<ISessionGitHubLinksStore>();
+
+        first.Should().BeOfType<JsonSessionGitHubLinksStore>();
+        second.Should().BeSameAs(first);
+    }
+
+    [Fact]
+    public async Task AddSessionDiscovery_also_registers_github_link_storage()
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton<ILoggerFactory>(NullLoggerFactory.Instance);
+        services.AddSingleton(typeof(ILogger<>), typeof(NullLogger<>));
+
+        services.AddSessionDiscovery();
+
+        await using var provider = services.BuildServiceProvider();
+
+        provider.GetRequiredService<ISessionGitHubLinksStore>()
+            .Should().BeOfType<JsonSessionGitHubLinksStore>();
     }
 }

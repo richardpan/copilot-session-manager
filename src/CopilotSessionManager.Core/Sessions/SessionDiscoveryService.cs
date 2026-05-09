@@ -1,5 +1,6 @@
 using CopilotSessionManager.Core.Cli;
 using CopilotSessionManager.Core.GitHub;
+using CopilotSessionManager.Core.GitHub.Storage;
 using CopilotSessionManager.Core.Models;
 using Microsoft.Extensions.Logging;
 
@@ -20,6 +21,7 @@ public sealed class SessionDiscoveryService : ISessionDiscoveryService
     private readonly ISessionLockMonitor _lockMonitor;
     private readonly ISessionStatusEvaluator _statusEvaluator;
     private readonly IGitHubLinkResolver _githubLinkResolver;
+    private readonly ISessionGitHubLinksStore? _githubLinksOverrideStore;
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<SessionDiscoveryService> _logger;
 
@@ -41,7 +43,8 @@ public sealed class SessionDiscoveryService : ISessionDiscoveryService
         ISessionStatusEvaluator statusEvaluator,
         ILogger<SessionDiscoveryService> logger)
         : this(store, adapterRegistry, paths, lockMonitor, statusEvaluator,
-            githubLinkResolver: new GitHubLinkResolver(), TimeProvider.System, logger)
+            githubLinkResolver: new GitHubLinkResolver(), githubLinksOverrideStore: null,
+            TimeProvider.System, logger)
     {
     }
 
@@ -54,7 +57,7 @@ public sealed class SessionDiscoveryService : ISessionDiscoveryService
         IGitHubLinkResolver githubLinkResolver,
         ILogger<SessionDiscoveryService> logger)
         : this(store, adapterRegistry, paths, lockMonitor, statusEvaluator,
-            githubLinkResolver, TimeProvider.System, logger)
+            githubLinkResolver, githubLinksOverrideStore: null, TimeProvider.System, logger)
     {
     }
 
@@ -67,7 +70,8 @@ public sealed class SessionDiscoveryService : ISessionDiscoveryService
         TimeProvider timeProvider,
         ILogger<SessionDiscoveryService> logger)
         : this(store, adapterRegistry, paths, lockMonitor, statusEvaluator,
-            githubLinkResolver: new GitHubLinkResolver(), timeProvider, logger)
+            githubLinkResolver: new GitHubLinkResolver(), githubLinksOverrideStore: null,
+            timeProvider, logger)
     {
     }
 
@@ -78,6 +82,27 @@ public sealed class SessionDiscoveryService : ISessionDiscoveryService
         ISessionLockMonitor lockMonitor,
         ISessionStatusEvaluator statusEvaluator,
         IGitHubLinkResolver githubLinkResolver,
+        TimeProvider timeProvider,
+        ILogger<SessionDiscoveryService> logger)
+        : this(store, adapterRegistry, paths, lockMonitor, statusEvaluator,
+            githubLinkResolver, githubLinksOverrideStore: null, timeProvider, logger)
+    {
+    }
+
+    /// <summary>
+    /// Primary constructor used by DI. Wires the optional
+    /// <see cref="ISessionGitHubLinksStore"/> so user-supplied repository /
+    /// branch / pull-request overrides are overlaid onto the auto-detected
+    /// links during <see cref="ScanAsync"/>.
+    /// </summary>
+    public SessionDiscoveryService(
+        ISessionStore store,
+        ICopilotCliAdapterRegistry adapterRegistry,
+        ICopilotPaths paths,
+        ISessionLockMonitor lockMonitor,
+        ISessionStatusEvaluator statusEvaluator,
+        IGitHubLinkResolver githubLinkResolver,
+        ISessionGitHubLinksStore? githubLinksOverrideStore,
         TimeProvider timeProvider,
         ILogger<SessionDiscoveryService> logger)
     {
@@ -96,6 +121,7 @@ public sealed class SessionDiscoveryService : ISessionDiscoveryService
         _lockMonitor = lockMonitor;
         _statusEvaluator = statusEvaluator;
         _githubLinkResolver = githubLinkResolver;
+        _githubLinksOverrideStore = githubLinksOverrideStore;
         _timeProvider = timeProvider;
         _logger = logger;
     }
@@ -384,6 +410,12 @@ public sealed class SessionDiscoveryService : ISessionDiscoveryService
             .EvaluateAsync(id, locks, version, _timeProvider.GetUtcNow(), cancellationToken)
             .ConfigureAwait(false);
 
+        var baseLinks = ResolveGitHubLinksFor(
+            record?.Repository ?? workspace?.Repository,
+            record?.Branch ?? workspace?.Branch);
+        var links = await ApplyGitHubLinkOverridesAsync(id, baseLinks, cancellationToken)
+            .ConfigureAwait(false);
+
         return new Session(
             Id: id,
             Cwd: record?.Cwd ?? workspace?.Cwd,
@@ -398,9 +430,90 @@ public sealed class SessionDiscoveryService : ISessionDiscoveryService
             CopilotVersion: version,
             Locks: locks,
             ModelInfo: modelInfo,
-            GitHubLinks: ResolveGitHubLinksFor(
-                record?.Repository ?? workspace?.Repository,
-                record?.Branch ?? workspace?.Branch));
+            GitHubLinks: links);
+    }
+
+    private async Task<SessionGitHubLinks> ApplyGitHubLinkOverridesAsync(
+        string sessionId,
+        SessionGitHubLinks baseLinks,
+        CancellationToken cancellationToken)
+    {
+        if (_githubLinksOverrideStore is null)
+        {
+            return baseLinks;
+        }
+
+        SessionGitHubLinkOverrides? overrides;
+        try
+        {
+            overrides = await _githubLinksOverrideStore
+                .GetAsync(sessionId, cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Defensive: the store contracts to never throw out of GetAsync,
+            // but if a buggy implementation does we keep discovery working
+            // with the un-overridden links rather than failing the scan.
+            _logger.LogWarning(
+                ex,
+                "Failed to read GitHub link overrides for {SessionId}; using auto-detected links.",
+                sessionId);
+            return baseLinks;
+        }
+
+        if (overrides is null || !overrides.HasAnyOverride)
+        {
+            return baseLinks;
+        }
+
+        var repoUrl = baseLinks.RepositoryUrl;
+        var branchUrl = baseLinks.BranchUrl;
+        var pr = baseLinks.PullRequest;
+
+        if (overrides.RepositoryOverride is { } repoOverride)
+        {
+            repoUrl = NormalizeRepositoryOverrideToUrl(repoOverride);
+        }
+
+        if (overrides.BranchOverride is { } branchOverride)
+        {
+            branchUrl = branchOverride;
+        }
+
+        if (overrides.PullRequestNumberOverride is { } prNumber && repoUrl is not null)
+        {
+            // The user told us a PR number but we don't necessarily know its
+            // title or state yet — surface a placeholder PullRequestInfo so
+            // the link is clickable, and let the live PR enrichment pipeline
+            // (#69) refine it later.
+            pr = new PullRequestInfo(
+                Number: prNumber,
+                Title: pr?.Title ?? string.Empty,
+                State: pr?.State ?? PullRequestState.Open,
+                Url: $"{repoUrl}/pull/{prNumber}");
+        }
+
+        return new SessionGitHubLinks(repoUrl, branchUrl, pr);
+    }
+
+    private static string? NormalizeRepositoryOverrideToUrl(string raw)
+    {
+        var trimmed = raw.Trim();
+        if (trimmed.Length == 0)
+        {
+            return null;
+        }
+
+        // Already an absolute http(s) URL — accept as-is.
+        if (trimmed.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
+            || trimmed.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+        {
+            return trimmed.TrimEnd('/');
+        }
+
+        // Otherwise treat as an owner/name slug.
+        return $"https://github.com/{trimmed.TrimEnd('/')}";
     }
 
     private SessionGitHubLinks ResolveGitHubLinksFor(string? repository, string? branch)
