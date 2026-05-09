@@ -7,6 +7,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CopilotSessionManager.Core.Cli;
 using CopilotSessionManager.Core.Cost;
+using CopilotSessionManager.Core.GitHub.Checks;
 using CopilotSessionManager.Core.Models;
 using CopilotSessionManager.Core.Sessions;
 using CopilotSessionManager.Services;
@@ -25,6 +26,8 @@ public sealed partial class SessionCardViewModel : ObservableObject
     private SessionType _label;
     private PullRequestInfo? _liveOverridePullRequest;
     private bool _hasLiveOverride;
+    private PullRequestCheckSummary? _liveOverrideChecks;
+    private bool _hasChecksOverride;
     private readonly TimeProvider _timeProvider;
     private readonly IModelCatalog? _modelCatalog;
     private readonly IModelCostCalculator? _costCalculator;
@@ -428,7 +431,81 @@ public sealed partial class SessionCardViewModel : ObservableObject
     {
         _hasLiveOverride = true;
         _liveOverridePullRequest = info;
+        // A new PR resolution invalidates any previously-cached check
+        // rollup — the next checks lookup will repopulate it.
+        _hasChecksOverride = false;
+        _liveOverrideChecks = null;
         RaisePullRequestChanged();
+        RaiseChecksChanged();
+    }
+
+    /// <summary>
+    /// Replaces the cached CI check rollup for this card. Pass <c>null</c>
+    /// to clear (e.g. when no PR exists or the lookup failed). Raises
+    /// change notifications for every check-derived property.
+    /// </summary>
+    public void SetChecks(PullRequestCheckSummary? summary)
+    {
+        _hasChecksOverride = true;
+        _liveOverrideChecks = summary;
+        RaiseChecksChanged();
+    }
+
+    /// <summary>
+    /// Resolved CI rollup for this card's PR. <see cref="PullRequestCheckRollup.None"/>
+    /// when there is no PR, no override has been pushed yet, or the
+    /// lookup returned no checks.
+    /// </summary>
+    public PullRequestCheckRollup CheckRollup =>
+        _hasChecksOverride ? (_liveOverrideChecks?.Rollup ?? PullRequestCheckRollup.None)
+        : PullRequestCheckRollup.None;
+
+    /// <summary>True when there's a meaningful CI status to render.</summary>
+    public bool HasChecks => HasPullRequest && CheckRollup != PullRequestCheckRollup.None;
+
+    /// <summary>Glyph rendered inside the CI badge.</summary>
+    public string CheckBadgeText => CheckRollup switch
+    {
+        PullRequestCheckRollup.Success => "\u2713", // ✓
+        PullRequestCheckRollup.Failure => "\u2717", // ✗
+        PullRequestCheckRollup.Pending => "\u25CF", // ●
+        _ => string.Empty,
+    };
+
+    /// <summary>Background brush for the CI badge — colour-coded by rollup.</summary>
+    public Brush CheckBadgeBrush => CheckRollup switch
+    {
+        PullRequestCheckRollup.Success => new SolidColorBrush(Color.FromRgb(0xA6, 0xE3, 0xA1)), // green
+        PullRequestCheckRollup.Failure => new SolidColorBrush(Color.FromRgb(0xF3, 0x8B, 0xA8)), // red/pink
+        PullRequestCheckRollup.Pending => new SolidColorBrush(Color.FromRgb(0xF9, 0xE2, 0xAF)), // yellow
+        _ => Brushes.Transparent,
+    };
+
+    /// <summary>Tooltip for the CI badge — lists failing/pending check names.</summary>
+    public string CheckTooltip
+    {
+        get
+        {
+            var summary = _hasChecksOverride ? _liveOverrideChecks : null;
+            if (summary is null || summary.Rollup == PullRequestCheckRollup.None)
+            {
+                return string.Empty;
+            }
+
+            var header = summary.Rollup switch
+            {
+                PullRequestCheckRollup.Success => "All checks passing",
+                PullRequestCheckRollup.Failure => "Checks failing",
+                PullRequestCheckRollup.Pending => "Checks running",
+                _ => string.Empty,
+            };
+
+            if (summary.AttentionCheckNames.Count == 0)
+            {
+                return header;
+            }
+            return $"{header}\n  - {string.Join("\n  - ", summary.AttentionCheckNames)}";
+        }
     }
 
     private bool CanOpenUrl(string? url) => !string.IsNullOrWhiteSpace(url) && _fileLauncher is not null;
@@ -454,6 +531,15 @@ public sealed partial class SessionCardViewModel : ObservableObject
         OnPropertyChanged(nameof(PullRequestStateBrush));
     }
 
+    private void RaiseChecksChanged()
+    {
+        OnPropertyChanged(nameof(CheckRollup));
+        OnPropertyChanged(nameof(HasChecks));
+        OnPropertyChanged(nameof(CheckBadgeText));
+        OnPropertyChanged(nameof(CheckBadgeBrush));
+        OnPropertyChanged(nameof(CheckTooltip));
+    }
+
     /// <summary>
     /// Replaces this card's underlying model and raises change notifications
     /// for every projected property. Used by <see cref="SessionsViewModel"/>
@@ -472,6 +558,8 @@ public sealed partial class SessionCardViewModel : ObservableObject
         // any live-PR override so we re-fetch on next snapshot/refresh.
         _hasLiveOverride = false;
         _liveOverridePullRequest = null;
+        _hasChecksOverride = false;
+        _liveOverrideChecks = null;
         OnPropertyChanged(nameof(Title));
         OnPropertyChanged(nameof(Repository));
         OnPropertyChanged(nameof(Branch));
@@ -497,6 +585,7 @@ public sealed partial class SessionCardViewModel : ObservableObject
         OnPropertyChanged(nameof(HasRepositoryUrl));
         OnPropertyChanged(nameof(HasBranchUrl));
         RaisePullRequestChanged();
+        RaiseChecksChanged();
     }
 
     /// <summary>

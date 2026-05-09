@@ -3,6 +3,7 @@ using CopilotSessionManager.Core.Cli.Adapters.V1;
 using CopilotSessionManager.Core.Configuration;
 using CopilotSessionManager.Core.Cost;
 using CopilotSessionManager.Core.GitHub;
+using CopilotSessionManager.Core.GitHub.Checks;
 using CopilotSessionManager.Core.Logging;
 using CopilotSessionManager.Core.Onboarding;
 using CopilotSessionManager.Core.Security;
@@ -165,6 +166,7 @@ public static class CoreServiceCollectionExtensions
         services.TryAddSingleton<IGitHubAvailabilityProvider, GitHubAvailabilityProvider>();
         services.TryAddSingleton<IGitHubLinkResolver, GitHubLinkResolver>();
         services.TryAddSingleton<IGitHubClient, GhCliGitHubClient>();
+        services.TryAddSingleton<IGitHubChecksClient, GhCliGitHubChecksClient>();
 
         return services;
     }
