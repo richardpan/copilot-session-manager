@@ -1,0 +1,8 @@
+{"data":{"copilotVersion":"1.0.43","producer":"agency","sessionId":"00000000-0000-0000-0000-000000000001","startTime":"2026-05-08T12:00:00.000Z","version":1},"id":"e1","parentId":null,"timestamp":"2026-05-08T12:00:00.000Z","type":"session.start"}
+{"type":"session.resume","data":{"resumeTime":"2026-05-08T12:00:01.000Z","eventCount":1,"context":{"cwd":"C:\\ws\\demo"},"alreadyInUse":false,"remoteSteerable":false},"id":"e2","timestamp":"2026-05-08T12:00:01.000Z","parentId":"e1"}
+{"type":"assistant.turn_start","data":{"turnId":"1","interactionId":"i1"},"id":"e3","timestamp":"2026-05-08T12:00:02.000Z","parentId":"e2"}
+{"type":"assistant.turn_end","data":{"turnId":"1"},"id":"e4","timestamp":"2026-05-08T12:00:05.000Z","parentId":"e3"}
+{"type":"permission.requested","data":{"permissionId":"p1","kind":"shell"},"id":"e5","timestamp":"2026-05-08T12:00:06.000Z","parentId":"e4"}
+
+{ this is not valid json — should be skipped }
+{"type":"permission.completed","data":{"permissionId":"p1","granted":true},"id":"e6","timestamp":"2026-05-08T12:00:07.000Z","parentId":"e5"}
