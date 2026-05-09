@@ -294,6 +294,7 @@ public partial class App : Application
         // Core
         services.AddSessionDiscovery();
         services.AddOnboarding();
+        services.AddSessionMerge();
         CoreServiceCollectionExtensions.AddLogging(services);
 
         // UI infrastructure — the dispatcher must wrap the WPF UI thread.

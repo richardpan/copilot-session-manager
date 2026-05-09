@@ -1,9 +1,11 @@
 using CopilotSessionManager.Core.Cli;
 using CopilotSessionManager.Core.Cli.Adapters.V1;
+using CopilotSessionManager.Core.Cli.Share;
 using CopilotSessionManager.Core.Configuration;
 using CopilotSessionManager.Core.Cost;
 using CopilotSessionManager.Core.GitHub;
 using CopilotSessionManager.Core.Logging;
+using CopilotSessionManager.Core.Merge;
 using CopilotSessionManager.Core.Onboarding;
 using CopilotSessionManager.Core.Security;
 using CopilotSessionManager.Core.Sessions;
@@ -205,6 +207,28 @@ public static class CoreServiceCollectionExtensions
         services.TryAddSingleton<ISessionReadmeRenderer>(_ => new TemplatedSessionReadmeRenderer());
         services.TryAddSingleton<ISessionReadmeStore, FileSessionReadmeStore>();
         services.TryAddSingleton<ISessionReadmeService, SessionReadmeService>();
+
+        return services;
+    }
+
+    /// <summary>
+    /// Registers the session merge pipeline: <see cref="ICopilotShareInvoker"/>
+    /// (wraps <c>copilot --share</c>), <see cref="IMergeImportWriter"/>, and
+    /// <see cref="ISessionMerger"/>. Implies <see cref="AddOnboarding"/>
+    /// (for <see cref="IProcessRunner"/>) and <see cref="AddSessionReadme"/>.
+    /// Safe to call multiple times.
+    /// </summary>
+    public static IServiceCollection AddSessionMerge(this IServiceCollection services)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        // Both dependencies are needed; calling them is idempotent.
+        services.AddOnboarding();
+        services.AddSessionReadme();
+        services.TryAddSingleton(TimeProvider.System);
+        services.TryAddSingleton<ICopilotShareInvoker, CopilotShareInvoker>();
+        services.TryAddSingleton<IMergeImportWriter, FileMergeImportWriter>();
+        services.TryAddSingleton<ISessionMerger, SessionMerger>();
 
         return services;
     }

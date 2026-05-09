@@ -274,6 +274,8 @@ public class MainWindowViewModelTests
         public string GetReadmePath(string sessionId) => $"/sessions/{sessionId}/SESSION-README.md";
         public Task<string> EnsureAsync(Session session, SessionType label, CancellationToken cancellationToken = default) =>
             Task.FromResult(string.Empty);
+        public Task AppendAsync(string sessionId, string markdown, CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
     }
 
     private sealed class FakeFileLauncher : IFileLauncher
