@@ -1,4 +1,5 @@
 using CopilotSessionManager.Core.Cli;
+using CopilotSessionManager.Core.GitHub;
 using CopilotSessionManager.Core.Models;
 using Microsoft.Extensions.Logging;
 
@@ -18,6 +19,7 @@ public sealed class SessionDiscoveryService : ISessionDiscoveryService
     private readonly ICopilotPaths _paths;
     private readonly ISessionLockMonitor _lockMonitor;
     private readonly ISessionStatusEvaluator _statusEvaluator;
+    private readonly IGitHubLinkResolver _githubLinkResolver;
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<SessionDiscoveryService> _logger;
 
@@ -38,7 +40,21 @@ public sealed class SessionDiscoveryService : ISessionDiscoveryService
         ISessionLockMonitor lockMonitor,
         ISessionStatusEvaluator statusEvaluator,
         ILogger<SessionDiscoveryService> logger)
-        : this(store, adapterRegistry, paths, lockMonitor, statusEvaluator, TimeProvider.System, logger)
+        : this(store, adapterRegistry, paths, lockMonitor, statusEvaluator,
+            githubLinkResolver: new GitHubLinkResolver(), TimeProvider.System, logger)
+    {
+    }
+
+    public SessionDiscoveryService(
+        ISessionStore store,
+        ICopilotCliAdapterRegistry adapterRegistry,
+        ICopilotPaths paths,
+        ISessionLockMonitor lockMonitor,
+        ISessionStatusEvaluator statusEvaluator,
+        IGitHubLinkResolver githubLinkResolver,
+        ILogger<SessionDiscoveryService> logger)
+        : this(store, adapterRegistry, paths, lockMonitor, statusEvaluator,
+            githubLinkResolver, TimeProvider.System, logger)
     {
     }
 
@@ -50,12 +66,27 @@ public sealed class SessionDiscoveryService : ISessionDiscoveryService
         ISessionStatusEvaluator statusEvaluator,
         TimeProvider timeProvider,
         ILogger<SessionDiscoveryService> logger)
+        : this(store, adapterRegistry, paths, lockMonitor, statusEvaluator,
+            githubLinkResolver: new GitHubLinkResolver(), timeProvider, logger)
+    {
+    }
+
+    public SessionDiscoveryService(
+        ISessionStore store,
+        ICopilotCliAdapterRegistry adapterRegistry,
+        ICopilotPaths paths,
+        ISessionLockMonitor lockMonitor,
+        ISessionStatusEvaluator statusEvaluator,
+        IGitHubLinkResolver githubLinkResolver,
+        TimeProvider timeProvider,
+        ILogger<SessionDiscoveryService> logger)
     {
         ArgumentNullException.ThrowIfNull(store);
         ArgumentNullException.ThrowIfNull(adapterRegistry);
         ArgumentNullException.ThrowIfNull(paths);
         ArgumentNullException.ThrowIfNull(lockMonitor);
         ArgumentNullException.ThrowIfNull(statusEvaluator);
+        ArgumentNullException.ThrowIfNull(githubLinkResolver);
         ArgumentNullException.ThrowIfNull(timeProvider);
         ArgumentNullException.ThrowIfNull(logger);
 
@@ -64,6 +95,7 @@ public sealed class SessionDiscoveryService : ISessionDiscoveryService
         _paths = paths;
         _lockMonitor = lockMonitor;
         _statusEvaluator = statusEvaluator;
+        _githubLinkResolver = githubLinkResolver;
         _timeProvider = timeProvider;
         _logger = logger;
     }
@@ -365,7 +397,30 @@ public sealed class SessionDiscoveryService : ISessionDiscoveryService
             Status: status,
             CopilotVersion: version,
             Locks: locks,
-            ModelInfo: modelInfo);
+            ModelInfo: modelInfo,
+            GitHubLinks: ResolveGitHubLinksFor(
+                record?.Repository ?? workspace?.Repository,
+                record?.Branch ?? workspace?.Branch));
+    }
+
+    private SessionGitHubLinks ResolveGitHubLinksFor(string? repository, string? branch)
+    {
+        // Build a lightweight Session shell so the resolver can stay pure
+        // (it only reads Repository + Branch).
+        var shell = new Session(
+            Id: string.Empty,
+            Cwd: null,
+            Repository: repository,
+            Branch: branch,
+            Summary: null,
+            HostType: null,
+            CreatedAt: DateTimeOffset.MinValue,
+            UpdatedAt: DateTimeOffset.MinValue,
+            TurnCount: 0,
+            Status: SessionStatus.Unknown,
+            CopilotVersion: CopilotVersion.Zero,
+            Locks: Array.Empty<SessionLockInfo>());
+        return _githubLinkResolver.Resolve(shell);
     }
 
     private async Task<CopilotVersion> TryReadCopilotVersionAsync(

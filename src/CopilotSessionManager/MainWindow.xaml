@@ -13,6 +13,8 @@
         WindowStartupLocation="CenterScreen"
         Background="#1E1E2E">
     <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
+
         <DataTemplate x:Key="LabelFilterTemplate" DataType="{x:Type vm:LabelFilterChip}">
             <CheckBox Content="{Binding Label}"
                       IsChecked="{Binding IsVisible, Mode=TwoWay}"
@@ -114,6 +116,23 @@
                                            FontSize="10"
                                            FontWeight="SemiBold" />
                             </Border>
+                            <Border Background="{Binding PullRequestStateBrush}"
+                                    CornerRadius="3"
+                                    Padding="6,1"
+                                    Margin="6,2,0,0"
+                                    ToolTip="{Binding PullRequestTooltip}"
+                                    Visibility="{Binding HasPullRequest, Converter={StaticResource BoolToVisibility}}"
+                                    Cursor="Hand">
+                                <Border.InputBindings>
+                                    <MouseBinding MouseAction="LeftClick"
+                                                  Command="{Binding OpenUrlCommand}"
+                                                  CommandParameter="{Binding PullRequestUrl}" />
+                                </Border.InputBindings>
+                                <TextBlock Text="{Binding PullRequestBadgeText}"
+                                           Foreground="#11111B"
+                                           FontSize="10"
+                                           FontWeight="SemiBold" />
+                            </Border>
                         </StackPanel>
 
                         <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
@@ -124,15 +143,27 @@
                             <TextBlock Text=" • "
                                        Foreground="#585B70"
                                        FontSize="11" />
-                            <TextBlock Text="{Binding Repository, FallbackValue='no repo'}"
-                                       Foreground="#A6ADC8"
-                                       FontSize="11" />
+                            <TextBlock Foreground="#A6ADC8" FontSize="11">
+                                <Hyperlink Foreground="#89B4FA"
+                                           TextDecorations="None"
+                                           ToolTip="Open repository on GitHub"
+                                           Command="{Binding OpenUrlCommand}"
+                                           CommandParameter="{Binding RepositoryUrl}">
+                                    <Run Text="{Binding Repository, FallbackValue='no repo', Mode=OneWay}" />
+                                </Hyperlink>
+                            </TextBlock>
                             <TextBlock Text=" @ "
                                        Foreground="#585B70"
                                        FontSize="11" />
-                            <TextBlock Text="{Binding Branch, FallbackValue='—'}"
-                                       Foreground="#A6ADC8"
-                                       FontSize="11" />
+                            <TextBlock Foreground="#A6ADC8" FontSize="11">
+                                <Hyperlink Foreground="#89B4FA"
+                                           TextDecorations="None"
+                                           ToolTip="Open branch on GitHub"
+                                           Command="{Binding OpenUrlCommand}"
+                                           CommandParameter="{Binding BranchUrl}">
+                                    <Run Text="{Binding Branch, FallbackValue='—', Mode=OneWay}" />
+                                </Hyperlink>
+                            </TextBlock>
                         </StackPanel>
 
                         <TextBlock Text="{Binding Cwd}"
