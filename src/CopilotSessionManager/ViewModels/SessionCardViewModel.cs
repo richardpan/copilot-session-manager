@@ -38,6 +38,20 @@ public sealed partial class SessionCardViewModel : ObservableObject
     private string? _lastActionMessage;
     private readonly Action<SessionCardViewModel>? _openMergeWizard;
 
+    #region IssueLinks
+    private readonly IssueLinksViewModel? _issueLinks;
+
+    /// <summary>
+    /// Optional per-card panel for manually linked GitHub issues (#70).
+    /// Null when issues plumbing is not wired (e.g. unit-test ctors). Bound
+    /// XAML hides the panel when this is null.
+    /// </summary>
+    public IssueLinksViewModel? IssueLinks => _issueLinks;
+
+    /// <summary>True when the card has an issue-links view-model attached.</summary>
+    public bool HasIssueLinks => _issueLinks is not null;
+    #endregion
+
     public SessionCardViewModel(Session model)
         : this(model, SessionType.Exploratory, TimeProvider.System, modelCatalog: null, costCalculator: null, fileLauncher: null, lockCleanup: null, sessionLauncher: null, logger: null)
     {
@@ -85,7 +99,8 @@ public sealed partial class SessionCardViewModel : ObservableObject
         ISessionLauncher? sessionLauncher,
         ILogger? logger)
         : this(model, label, timeProvider, modelCatalog, costCalculator,
-            fileLauncher, lockCleanup, sessionLauncher, logger, openMergeWizard: null)
+            fileLauncher, lockCleanup, sessionLauncher, logger,
+            openMergeWizard: null, issueLinks: null)
     {
     }
 
@@ -109,6 +124,30 @@ public sealed partial class SessionCardViewModel : ObservableObject
         ISessionLauncher? sessionLauncher,
         ILogger? logger,
         Action<SessionCardViewModel>? openMergeWizard)
+        : this(model, label, timeProvider, modelCatalog, costCalculator,
+            fileLauncher, lockCleanup, sessionLauncher, logger,
+            openMergeWizard, issueLinks: null)
+    {
+    }
+
+    /// <summary>
+    /// Canonical (DI-preferred) constructor. Adds the optional
+    /// <paramref name="issueLinks"/> per-session panel (#70) on top of the
+    /// merge-wizard plumbing. Both callbacks are independent — either may
+    /// be null without affecting the other.
+    /// </summary>
+    public SessionCardViewModel(
+        Session model,
+        SessionType label,
+        TimeProvider timeProvider,
+        IModelCatalog? modelCatalog,
+        IModelCostCalculator? costCalculator,
+        IFileLauncher? fileLauncher,
+        ISessionLockCleanup? lockCleanup,
+        ISessionLauncher? sessionLauncher,
+        ILogger? logger,
+        Action<SessionCardViewModel>? openMergeWizard,
+        IssueLinksViewModel? issueLinks)
     {
         ArgumentNullException.ThrowIfNull(model);
         ArgumentNullException.ThrowIfNull(timeProvider);
@@ -123,6 +162,7 @@ public sealed partial class SessionCardViewModel : ObservableObject
         _sessionLauncher = sessionLauncher;
         _logger = logger ?? NullLogger.Instance;
         _openMergeWizard = openMergeWizard;
+        _issueLinks = issueLinks;
 
         OpenUrlCommand = new AsyncRelayCommand<string?>(OpenUrlAsync, CanOpenUrl);
         CleanupStaleLocksCommand = new AsyncRelayCommand(CleanupStaleLocksAsync, CanCleanupStaleLocks);
