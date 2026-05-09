@@ -84,11 +84,30 @@ docs(adr): add ADR-001 ConPTY decision
 
 ## Tests
 
-- Unit tests live next to the project they test: `tests/CopilotSessionManager.Core.Tests/`
+Copilot Session Manager has four testing layers:
+
+1. **Unit tests** (xUnit + FluentAssertions + Moq) — pure logic in
+   `src/CopilotSessionManager.Core`. These live in
+   `tests/CopilotSessionManager.Core.Tests/`.
+2. **Integration tests** — file-system / SQLite / fixture-driven tests, also
+   under `tests/CopilotSessionManager.Core.Tests/`. They load sanitised
+   captured data from `tests/fixtures/` (see
+   [`tests/fixtures/README.md`](tests/fixtures/README.md)).
+3. **WPF / Native tests** — `tests/CopilotSessionManager.Tests/` and
+   `tests/CopilotSessionManager.Native.Tests/`. These exercise the bits we
+   can drive without a real desktop session; the rest is covered manually.
+4. **Manual smoke tests** — see
+   [`docs/manual-tests.md`](docs/manual-tests.md). Walk through it before
+   tagging a release and whenever a PR touches one of the listed subsystems.
+
+Conventions:
+
+- Unit tests live next to the project they test
 - Use **xUnit + FluentAssertions + Moq**
 - Pure logic = required tests
-- File/SQLite touching code = integration tests (slower lane, separate test class)
-- Aim for ≥80% coverage on `Core`, ≥60% on Native
+- File / SQLite touching code = integration tests (slower lane, separate
+  test class)
+- Aim for ≥80% line coverage on `Core`, ≥60% on `Native`
 
 Run tests:
 
@@ -96,11 +115,19 @@ Run tests:
 dotnet test
 ```
 
-Code coverage:
+Code coverage (uses [`coverlet.runsettings`](coverlet.runsettings) for
+exclusions):
 
 ```powershell
-dotnet test --collect:"XPlat Code Coverage"
+dotnet test --collect:"XPlat Code Coverage" --settings coverlet.runsettings
 ```
+
+CI enforces a minimum **line coverage on the Core project** (currently
+**83%**, raised over time). The threshold lives in
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml) under the
+`MIN_CORE_LINE_COVERAGE` env var. WPF and Native projects are intentionally
+**not** gated because they are dominated by UI / Win32 surface that has to
+be exercised manually — see [`docs/manual-tests.md`](docs/manual-tests.md).
 
 ## Pull request checklist
 

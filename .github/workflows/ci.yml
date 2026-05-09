@@ -70,7 +70,47 @@ jobs:
             --no-build `
             --logger "trx;LogFileName=test-results.trx" `
             --collect:"XPlat Code Coverage" `
+            --settings coverlet.runsettings `
             --results-directory ./TestResults
+
+      - name: Enforce minimum Core coverage
+        if: steps.detect.outputs.has_project == 'true'
+        shell: pwsh
+        env:
+          MIN_CORE_LINE_COVERAGE: '0.83'
+        run: |
+          $threshold = [double]$env:MIN_CORE_LINE_COVERAGE
+          $reports = Get-ChildItem -Recurse -Path ./TestResults -Filter coverage.cobertura.xml -ErrorAction SilentlyContinue
+          if (-not $reports -or $reports.Count -eq 0) {
+            Write-Error "No coverage.cobertura.xml found under ./TestResults; coverage gate cannot run."
+            exit 1
+          }
+          # The same package can appear in multiple cobertura reports because every
+          # test assembly emits its own report. Take the highest observed line-rate
+          # for CopilotSessionManager.Core (i.e. the Core.Tests project's view) and
+          # gate on that.
+          $bestRate = -1.0
+          foreach ($file in $reports) {
+            [xml]$xml = Get-Content $file.FullName
+            foreach ($pkg in $xml.coverage.packages.package) {
+              if ($pkg.name -eq 'CopilotSessionManager.Core') {
+                $rate = [double]$pkg.'line-rate'
+                Write-Host "  $($file.FullName) -> $([math]::Round($rate * 100, 2))%"
+                if ($rate -gt $bestRate) { $bestRate = $rate }
+              }
+            }
+          }
+          if ($bestRate -lt 0) {
+            Write-Error "Did not find a 'CopilotSessionManager.Core' package in any cobertura report; cannot enforce Core coverage."
+            exit 1
+          }
+          $pct = [math]::Round($bestRate * 100, 2)
+          $minPct = [math]::Round($threshold * 100, 2)
+          Write-Host "CopilotSessionManager.Core line coverage: $pct% (threshold: $minPct%)"
+          if ($bestRate -lt $threshold) {
+            Write-Error "Core line coverage $pct% is below the required $minPct% floor. See coverlet.runsettings and docs/manual-tests.md for what is intentionally excluded."
+            exit 1
+          }
 
       - name: Upload test results
         if: always() && steps.detect.outputs.has_project == 'true'
