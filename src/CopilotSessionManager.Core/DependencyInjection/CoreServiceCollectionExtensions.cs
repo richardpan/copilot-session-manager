@@ -122,12 +122,18 @@ public static class CoreServiceCollectionExtensions
 
     /// <summary>
     /// Registers the GitHub link resolver + <c>gh</c>-CLI–backed pull request
-    /// lookup. Safe to call multiple times.
+    /// lookup, plus the <see cref="IGitHubAvailabilityProvider"/> used to
+    /// surface offline / unauthenticated state to view models. Safe to call
+    /// multiple times.
     /// </summary>
     public static IServiceCollection AddGitHubLinks(this IServiceCollection services)
     {
         ArgumentNullException.ThrowIfNull(services);
 
+        // GhCliGitHubClient now delegates to IProcessRunner; register a
+        // default so callers don't have to also call AddOnboarding.
+        services.TryAddSingleton<IProcessRunner, ProcessRunner>();
+        services.TryAddSingleton<IGitHubAvailabilityProvider, GitHubAvailabilityProvider>();
         services.TryAddSingleton<IGitHubLinkResolver, GitHubLinkResolver>();
         services.TryAddSingleton<IGitHubClient, GhCliGitHubClient>();
 

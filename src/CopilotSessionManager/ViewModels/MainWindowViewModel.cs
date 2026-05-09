@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CopilotSessionManager.Core.Configuration;
+using CopilotSessionManager.Core.GitHub;
 using CopilotSessionManager.Core.Logging;
 using CopilotSessionManager.Core.Settings;
 using CopilotSessionManager.Logging;
@@ -25,6 +26,8 @@ public sealed partial class MainWindowViewModel : ObservableObject
     private readonly ILogBundler _logBundler;
     private readonly LogLevelSwitchAccessor _levelSwitch;
     private readonly IFileLauncher _fileLauncher;
+    private readonly IGitHubAvailabilityProvider? _availability;
+    private readonly IUiDispatcher? _dispatcher;
 
     [ObservableProperty]
     private string _title = $"{AppMetadata.ProductName} {AppMetadata.Version}";
@@ -38,6 +41,15 @@ public sealed partial class MainWindowViewModel : ObservableObject
     [ObservableProperty]
     private bool _isVerboseLogging;
 
+    [ObservableProperty]
+    private bool _isGitHubOffline;
+
+    [ObservableProperty]
+    private bool _isGitHubUnauthenticated;
+
+    [ObservableProperty]
+    private string _gitHubStatusMessage = string.Empty;
+
     public MainWindowViewModel(
         SessionsViewModel sessions,
         IServiceProvider serviceProvider,
@@ -45,6 +57,36 @@ public sealed partial class MainWindowViewModel : ObservableObject
         ILogBundler logBundler,
         LogLevelSwitchAccessor levelSwitch,
         IFileLauncher fileLauncher,
+        ILogger<MainWindowViewModel> logger)
+        : this(
+            sessions,
+            serviceProvider,
+            settingsStore,
+            logBundler,
+            levelSwitch,
+            fileLauncher,
+            availability: null,
+            dispatcher: null,
+            logger)
+    {
+    }
+
+    /// <summary>
+    /// DI-preferred constructor. Subscribes to
+    /// <see cref="IGitHubAvailabilityProvider.AvailabilityChanged"/> so the
+    /// shell can show an offline / unauth banner. The dispatcher is used to
+    /// marshal property updates back to the UI thread (the provider may
+    /// raise events from any worker thread).
+    /// </summary>
+    public MainWindowViewModel(
+        SessionsViewModel sessions,
+        IServiceProvider serviceProvider,
+        IAppSettingsStore settingsStore,
+        ILogBundler logBundler,
+        LogLevelSwitchAccessor levelSwitch,
+        IFileLauncher fileLauncher,
+        IGitHubAvailabilityProvider? availability,
+        IUiDispatcher? dispatcher,
         ILogger<MainWindowViewModel> logger)
     {
         ArgumentNullException.ThrowIfNull(sessions);
@@ -61,9 +103,18 @@ public sealed partial class MainWindowViewModel : ObservableObject
         _logBundler = logBundler;
         _levelSwitch = levelSwitch;
         _fileLauncher = fileLauncher;
+        _availability = availability;
+        _dispatcher = dispatcher;
         _logger = logger;
 
         _isVerboseLogging = _levelSwitch.IsVerbose;
+
+        if (_availability is not null)
+        {
+            ApplyAvailability(_availability.Current);
+            _availability.AvailabilityChanged += OnAvailabilityChanged;
+        }
+
         _logger.LogInformation("MainWindowViewModel constructed.");
     }
 
@@ -157,5 +208,24 @@ public sealed partial class MainWindowViewModel : ObservableObject
         {
             _logger.LogError(ex, "Failed to persist verbose logging setting.");
         }
+    }
+
+    private void OnAvailabilityChanged(object? sender, GitHubAvailabilityState state)
+    {
+        if (_dispatcher is null)
+        {
+            ApplyAvailability(state);
+        }
+        else
+        {
+            _dispatcher.Post(() => ApplyAvailability(state));
+        }
+    }
+
+    private void ApplyAvailability(GitHubAvailabilityState state)
+    {
+        IsGitHubOffline = state.State == GitHubAvailability.Offline;
+        IsGitHubUnauthenticated = state.State == GitHubAvailability.Unauthenticated;
+        GitHubStatusMessage = state.UserMessage ?? string.Empty;
     }
 }

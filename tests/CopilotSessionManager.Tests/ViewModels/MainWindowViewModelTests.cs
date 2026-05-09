@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using CopilotSessionManager.Core.GitHub;
 using CopilotSessionManager.Core.Logging;
 using CopilotSessionManager.Core.Models;
 using CopilotSessionManager.Core.Sessions;
@@ -24,7 +25,9 @@ public class MainWindowViewModelTests
         FakeAppSettingsStore? settingsStore = null,
         FakeLogBundler? logBundler = null,
         LogLevelSwitchAccessor? levelSwitch = null,
-        FakeFileLauncher? fileLauncher = null)
+        FakeFileLauncher? fileLauncher = null,
+        IGitHubAvailabilityProvider? availability = null,
+        IUiDispatcher? dispatcher = null)
     {
         var sessions = new SessionsViewModel(
             new FakeDiscoveryService(),
@@ -41,6 +44,8 @@ public class MainWindowViewModelTests
             logBundler ?? new FakeLogBundler(),
             levelSwitch ?? new LogLevelSwitchAccessor(new LoggingLevelSwitch(LogEventLevel.Information)),
             fileLauncher ?? new FakeFileLauncher(),
+            availability,
+            dispatcher,
             NullLogger<MainWindowViewModel>.Instance);
     }
 
@@ -127,6 +132,112 @@ public class MainWindowViewModelTests
         await sut.OpenLogFolderCommand.ExecuteAsync(null);
 
         launcher.OpenedPaths.Should().ContainSingle();
+    }
+
+    [Fact]
+    public void NoAvailabilityProvider_DefaultsAreNotOfflineAndNotUnauth()
+    {
+        var sut = CreateSut(availability: null);
+
+        sut.IsGitHubOffline.Should().BeFalse();
+        sut.IsGitHubUnauthenticated.Should().BeFalse();
+        sut.GitHubStatusMessage.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void AvailabilityProviderInitialState_AppliedAtConstruction()
+    {
+        var availability = new GitHubAvailabilityProvider();
+        availability.Report(GitHubAvailability.Offline, "no network");
+        var sut = CreateSut(availability: availability);
+
+        sut.IsGitHubOffline.Should().BeTrue();
+        sut.IsGitHubUnauthenticated.Should().BeFalse();
+        sut.GitHubStatusMessage.Should().Be("no network");
+    }
+
+    [Fact]
+    public void OfflineTransition_FlipsIsGitHubOffline_AndPopulatesMessage()
+    {
+        var availability = new GitHubAvailabilityProvider();
+        var sut = CreateSut(availability: availability);
+
+        availability.Report(GitHubAvailability.Offline, "GitHub appears to be offline.");
+
+        sut.IsGitHubOffline.Should().BeTrue();
+        sut.IsGitHubUnauthenticated.Should().BeFalse();
+        sut.GitHubStatusMessage.Should().Contain("offline");
+    }
+
+    [Fact]
+    public void UnauthenticatedTransition_FlipsIsGitHubUnauthenticated_AndPopulatesMessage()
+    {
+        var availability = new GitHubAvailabilityProvider();
+        var sut = CreateSut(availability: availability);
+
+        availability.Report(GitHubAvailability.Unauthenticated, "Run gh auth login.");
+
+        sut.IsGitHubUnauthenticated.Should().BeTrue();
+        sut.IsGitHubOffline.Should().BeFalse();
+        sut.GitHubStatusMessage.Should().Contain("gh auth login");
+    }
+
+    [Fact]
+    public void RecoveryTransition_ClearsBothFlagsAndMessage()
+    {
+        var availability = new GitHubAvailabilityProvider();
+        var sut = CreateSut(availability: availability);
+
+        availability.Report(GitHubAvailability.Offline, "no network");
+        sut.IsGitHubOffline.Should().BeTrue();
+
+        availability.Report(GitHubAvailability.Available);
+
+        sut.IsGitHubOffline.Should().BeFalse();
+        sut.IsGitHubUnauthenticated.Should().BeFalse();
+        sut.GitHubStatusMessage.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void DispatcherIsUsed_ForCrossThreadAvailabilityUpdates()
+    {
+        var availability = new GitHubAvailabilityProvider();
+        var dispatcher = new RecordingDispatcher();
+        var sut = CreateSut(availability: availability, dispatcher: dispatcher);
+
+        availability.Report(GitHubAvailability.Offline, "msg");
+
+        dispatcher.PostCount.Should().BeGreaterThan(0);
+        sut.IsGitHubOffline.Should().BeTrue();
+    }
+
+    [Fact]
+    public void GitHubStatusMessage_RaisesPropertyChanged()
+    {
+        var availability = new GitHubAvailabilityProvider();
+        var sut = CreateSut(availability: availability);
+        var raised = false;
+        sut.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(MainWindowViewModel.GitHubStatusMessage))
+            {
+                raised = true;
+            }
+        };
+
+        availability.Report(GitHubAvailability.Offline, "msg");
+
+        raised.Should().BeTrue();
+    }
+
+    private sealed class RecordingDispatcher : IUiDispatcher
+    {
+        public int PostCount { get; private set; }
+        public void Post(Action action)
+        {
+            PostCount++;
+            action();
+        }
     }
 
     private sealed class FakeDiscoveryService : ISessionDiscoveryService
