@@ -1,6 +1,7 @@
 using CopilotSessionManager.Core.Cli;
 using CopilotSessionManager.Core.Cli.Adapters.V1;
 using CopilotSessionManager.Core.DependencyInjection;
+using CopilotSessionManager.Core.Security;
 using CopilotSessionManager.Core.Sessions;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
@@ -63,5 +64,22 @@ public class CoreServiceCollectionExtensionsTests
 
         provider.GetRequiredService<StatusDetectionOptions>().IdleThreshold
             .Should().Be(TimeSpan.FromMinutes(42));
+    }
+
+    [Fact]
+    public async Task AddSecurity_registers_singleton_dpapi_data_protector()
+    {
+        var services = new ServiceCollection();
+
+        services.AddSecurity();
+        services.AddSecurity(); // idempotent — TryAddSingleton
+
+        await using var provider = services.BuildServiceProvider();
+
+        var first = provider.GetRequiredService<IDataProtector>();
+        var second = provider.GetRequiredService<IDataProtector>();
+
+        first.Should().BeOfType<DpapiDataProtector>();
+        second.Should().BeSameAs(first);
     }
 }

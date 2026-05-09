@@ -5,6 +5,7 @@ using CopilotSessionManager.Core.Cost;
 using CopilotSessionManager.Core.GitHub;
 using CopilotSessionManager.Core.Logging;
 using CopilotSessionManager.Core.Onboarding;
+using CopilotSessionManager.Core.Security;
 using CopilotSessionManager.Core.Sessions;
 using CopilotSessionManager.Core.Settings;
 using Microsoft.Extensions.DependencyInjection;
@@ -101,6 +102,34 @@ public static class CoreServiceCollectionExtensions
             var migrations = sp.GetServices<IAppSettingsMigration>();
             return new JsonAppSettingsStore(path, logger, migrations);
         });
+
+        return services;
+    }
+
+    /// <summary>
+    /// App-wide DPAPI purpose string used by <see cref="AddSecurity"/> when
+    /// it constructs the singleton <see cref="IDataProtector"/>. Bumping this
+    /// effectively rotates every key protected through the registered
+    /// protector — only do that when you intend to invalidate existing
+    /// payloads.
+    /// </summary>
+    internal const string AppDbProtectorPurpose = "CopilotSessionManager.AppDb.v1";
+
+    /// <summary>
+    /// Registers <see cref="IDataProtector"/> as a singleton
+    /// <see cref="DpapiDataProtector"/> bound to the app-wide purpose
+    /// <c>"CopilotSessionManager.AppDb.v1"</c> and
+    /// <see cref="DataProtectionScope.CurrentUser"/>. Infrastructure for
+    /// ADR-0004 (DPAPI-protected app DB key); the actual SQLite consumer
+    /// will be wired up when the V1 schema lands. Safe to call multiple
+    /// times.
+    /// </summary>
+    public static IServiceCollection AddSecurity(this IServiceCollection services)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        services.TryAddSingleton<IDataProtector>(
+            _ => new DpapiDataProtector(AppDbProtectorPurpose));
 
         return services;
     }
