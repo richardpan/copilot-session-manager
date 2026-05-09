@@ -31,7 +31,8 @@ public static class CoreServiceCollectionExtensions
     /// <summary>
     /// Registers the session discovery pipeline (paths, store, discovery
     /// service). Implies <see cref="AddCopilotCliAdapters"/>,
-    /// <see cref="AddStatusDetection"/>, and <see cref="AddSessionLabels"/>.
+    /// <see cref="AddStatusDetection"/>, <see cref="AddSessionLabels"/>, and
+    /// <see cref="AddSessionReadme"/>.
     /// </summary>
     public static IServiceCollection AddSessionDiscovery(this IServiceCollection services)
     {
@@ -40,6 +41,7 @@ public static class CoreServiceCollectionExtensions
         services.AddCopilotCliAdapters();
         services.AddStatusDetection();
         services.AddSessionLabels();
+        services.AddSessionReadme();
         services.TryAddSingleton<ICopilotPaths, DefaultCopilotPaths>();
         services.TryAddSingleton<ISessionStore, SessionStore>();
         services.TryAddSingleton<ISessionDiscoveryService, SessionDiscoveryService>();
@@ -65,6 +67,24 @@ public static class CoreServiceCollectionExtensions
             var logger = sp.GetRequiredService<ILogger<JsonSessionLabelStore>>();
             return new JsonSessionLabelStore(path, logger);
         });
+
+        return services;
+    }
+
+    /// <summary>
+    /// Registers the session README pipeline: folder reader, renderer,
+    /// file-backed store, and orchestration service. Safe to call multiple
+    /// times.
+    /// </summary>
+    public static IServiceCollection AddSessionReadme(this IServiceCollection services)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        services.TryAddSingleton<ICopilotPaths, DefaultCopilotPaths>();
+        services.TryAddSingleton<ISessionFolderReader, SessionFolderReader>();
+        services.TryAddSingleton<ISessionReadmeRenderer>(_ => new TemplatedSessionReadmeRenderer());
+        services.TryAddSingleton<ISessionReadmeStore, FileSessionReadmeStore>();
+        services.TryAddSingleton<ISessionReadmeService, SessionReadmeService>();
 
         return services;
     }

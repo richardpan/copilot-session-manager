@@ -97,6 +97,7 @@ public partial class App : Application
         // UI infrastructure — the dispatcher must wrap the WPF UI thread.
         services.AddSingleton<IUiDispatcher>(_ => new WpfDispatcher(Current.Dispatcher));
         services.AddSingleton(TimeProvider.System);
+        services.AddSingleton<Services.IFileLauncher, Services.ShellFileLauncher>();
 
         // Views
         services.AddSingleton<MainWindow>();

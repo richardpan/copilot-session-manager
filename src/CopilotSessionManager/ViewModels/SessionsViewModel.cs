@@ -7,6 +7,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CopilotSessionManager.Core.Models;
 using CopilotSessionManager.Core.Sessions;
+using CopilotSessionManager.Services;
 using Microsoft.Extensions.Logging;
 
 namespace CopilotSessionManager.ViewModels;
@@ -21,6 +22,8 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
 {
     private readonly ISessionDiscoveryService _discovery;
     private readonly ISessionLabelStore _labelStore;
+    private readonly ISessionReadmeService _readmeService;
+    private readonly IFileLauncher _fileLauncher;
     private readonly IUiDispatcher _dispatcher;
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<SessionsViewModel> _logger;
@@ -43,18 +46,24 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
     public SessionsViewModel(
         ISessionDiscoveryService discovery,
         ISessionLabelStore labelStore,
+        ISessionReadmeService readmeService,
+        IFileLauncher fileLauncher,
         IUiDispatcher dispatcher,
         TimeProvider timeProvider,
         ILogger<SessionsViewModel> logger)
     {
         ArgumentNullException.ThrowIfNull(discovery);
         ArgumentNullException.ThrowIfNull(labelStore);
+        ArgumentNullException.ThrowIfNull(readmeService);
+        ArgumentNullException.ThrowIfNull(fileLauncher);
         ArgumentNullException.ThrowIfNull(dispatcher);
         ArgumentNullException.ThrowIfNull(timeProvider);
         ArgumentNullException.ThrowIfNull(logger);
 
         _discovery = discovery;
         _labelStore = labelStore;
+        _readmeService = readmeService;
+        _fileLauncher = fileLauncher;
         _dispatcher = dispatcher;
         _timeProvider = timeProvider;
         _logger = logger;
@@ -172,6 +181,33 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
         {
             _logger.LogError(ex, "Failed to set label for session {Id}.", card.Id);
             StatusMessage = $"Could not set label: {ex.Message}";
+        }
+    }
+
+    /// <summary>
+    /// Ensures <c>SESSION-README.md</c> exists for <paramref name="card"/>'s
+    /// session — generating or refreshing it via <see cref="ISessionReadmeService"/> —
+    /// and then opens it with the OS default handler.
+    /// </summary>
+    [RelayCommand]
+    public async Task OpenReadmeAsync(SessionCardViewModel? card, CancellationToken cancellationToken = default)
+    {
+        if (card is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await _readmeService.EnsureAsync(card.Model, card.Label, cancellationToken).ConfigureAwait(false);
+            var path = _readmeService.GetReadmePath(card.Id);
+            await _fileLauncher.OpenAsync(path, cancellationToken).ConfigureAwait(false);
+            StatusMessage = $"Opened README for {card.ShortId}.";
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to open README for session {Id}.", card.Id);
+            StatusMessage = $"Could not open README: {ex.Message}";
         }
     }
 

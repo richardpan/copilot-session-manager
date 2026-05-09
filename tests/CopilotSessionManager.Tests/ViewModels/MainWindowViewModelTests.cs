@@ -4,6 +4,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using CopilotSessionManager.Core.Models;
 using CopilotSessionManager.Core.Sessions;
+using CopilotSessionManager.Services;
 using CopilotSessionManager.ViewModels;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -18,6 +19,8 @@ public class MainWindowViewModelTests
         var sessions = new SessionsViewModel(
             new FakeDiscoveryService(),
             new FakeLabelStore(),
+            new FakeReadmeService(),
+            new FakeFileLauncher(),
             new SyncDispatcher(),
             TimeProvider.System,
             NullLogger<SessionsViewModel>.Instance);
@@ -97,6 +100,18 @@ public class MainWindowViewModelTests
             Task.CompletedTask;
         public Task RemoveAsync(string sessionId, CancellationToken cancellationToken = default) =>
             Task.CompletedTask;
+    }
+
+    private sealed class FakeReadmeService : ISessionReadmeService
+    {
+        public string GetReadmePath(string sessionId) => $"/sessions/{sessionId}/SESSION-README.md";
+        public Task<string> EnsureAsync(Session session, SessionType label, CancellationToken cancellationToken = default) =>
+            Task.FromResult(string.Empty);
+    }
+
+    private sealed class FakeFileLauncher : IFileLauncher
+    {
+        public Task OpenAsync(string path, CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 
     private sealed class SyncDispatcher : IUiDispatcher

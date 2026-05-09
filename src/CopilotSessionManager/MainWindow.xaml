@@ -141,6 +141,17 @@
                                    Foreground="#7F849C"
                                    FontSize="10"
                                    HorizontalAlignment="Right" />
+                        <Button Content="📄 README"
+                                Margin="0,6,0,0"
+                                Padding="8,3"
+                                FontSize="11"
+                                Background="#313244"
+                                Foreground="#CDD6F4"
+                                BorderBrush="#45475A"
+                                ToolTip="Open the auto-generated SESSION-README.md for this session"
+                                HorizontalAlignment="Right"
+                                Command="{Binding DataContext.Sessions.OpenReadmeCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                CommandParameter="{Binding}" />
                     </StackPanel>
                 </Grid>
             </Border>

@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using CopilotSessionManager.Core.Models;
 using CopilotSessionManager.Core.Sessions;
+using CopilotSessionManager.Services;
 using CopilotSessionManager.ViewModels;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -34,7 +35,8 @@ public class SessionsViewModelTests
             CopilotVersion: CopilotVersion.Zero,
             Locks: Array.Empty<SessionLockInfo>());
 
-    private static (SessionsViewModel vm, FakeDiscoveryService disc, FakeLabelStore labels) CreateSut(
+    private static (SessionsViewModel vm, FakeDiscoveryService disc, FakeLabelStore labels,
+        FakeReadmeService readme, FakeFileLauncher launcher) CreateSut(
         IEnumerable<Session>? initial = null,
         bool startWatcher = true,
         IEnumerable<KeyValuePair<string, SessionType>>? seedLabels = null)
@@ -49,18 +51,22 @@ public class SessionsViewModelTests
                 labels.Seed(kv.Key, kv.Value);
             }
         }
-        var vm = new SessionsViewModel(disc, labels, new SyncDispatcher(), tp, NullLogger<SessionsViewModel>.Instance);
+        var readme = new FakeReadmeService();
+        var launcher = new FakeFileLauncher();
+        var vm = new SessionsViewModel(
+            disc, labels, readme, launcher, new SyncDispatcher(), tp,
+            NullLogger<SessionsViewModel>.Instance);
         if (startWatcher)
         {
             vm.InitializeAsync().GetAwaiter().GetResult();
         }
-        return (vm, disc, labels);
+        return (vm, disc, labels, readme, launcher);
     }
 
     [Fact]
     public void Defaults_AreEmpty_AndShowInactiveTrue()
     {
-        var (vm, _, _) = CreateSut(startWatcher: false);
+        var (vm, _, _, _, _) = CreateSut(startWatcher: false);
         vm.ShowInactive.Should().BeTrue();
         vm.Sessions.Should().BeEmpty();
         vm.VisibleSessions.Should().BeEmpty();
@@ -72,7 +78,7 @@ public class SessionsViewModelTests
     [Fact]
     public async Task InitializeAsync_PopulatesSessionsFromInitialScan()
     {
-        var (vm, _, _) = CreateSut(new[]
+        var (vm, _, _, _, _) = CreateSut(new[]
         {
             Build("a", SessionStatus.Working),
             Build("b", SessionStatus.Idle),
@@ -87,7 +93,7 @@ public class SessionsViewModelTests
     [Fact]
     public async Task InitializeAsync_AppliesStoredLabels()
     {
-        var (vm, _, _) = CreateSut(
+        var (vm, _, _, _, _) = CreateSut(
             new[] { Build("a", SessionStatus.Idle), Build("b", SessionStatus.Idle) },
             seedLabels: new Dictionary<string, SessionType> { ["a"] = SessionType.Bug });
 
@@ -99,7 +105,7 @@ public class SessionsViewModelTests
     [Fact]
     public async Task InitializeAsync_IsIdempotent()
     {
-        var (vm, disc, _) = CreateSut(new[] { Build("a", SessionStatus.Working) });
+        var (vm, disc, _, _, _) = CreateSut(new[] { Build("a", SessionStatus.Working) });
         var before = disc.StartCalls;
         await vm.InitializeAsync();
         disc.StartCalls.Should().Be(before);
@@ -109,7 +115,7 @@ public class SessionsViewModelTests
     [Fact]
     public async Task SessionsChangedEvent_TriggersInPlaceUpdate()
     {
-        var (vm, disc, _) = CreateSut(new[] { Build("a", SessionStatus.Idle) });
+        var (vm, disc, _, _, _) = CreateSut(new[] { Build("a", SessionStatus.Idle) });
         var card = vm.Sessions[0];
 
         disc.RaiseChanged(new[] { Build("a", SessionStatus.Working) });
@@ -123,7 +129,7 @@ public class SessionsViewModelTests
     [Fact]
     public async Task SessionsChangedEvent_AddsAndRemovesByDiff()
     {
-        var (vm, disc, _) = CreateSut(new[]
+        var (vm, disc, _, _, _) = CreateSut(new[]
         {
             Build("a", SessionStatus.Idle),
             Build("b", SessionStatus.Working),
@@ -142,7 +148,7 @@ public class SessionsViewModelTests
     [Fact]
     public async Task ShowInactive_False_HidesInactiveAndOrphaned()
     {
-        var (vm, _, _) = CreateSut(new[]
+        var (vm, _, _, _, _) = CreateSut(new[]
         {
             Build("w", SessionStatus.Working),
             Build("i", SessionStatus.Idle),
@@ -161,7 +167,7 @@ public class SessionsViewModelTests
     [Fact]
     public async Task ResortInPlace_PutsAwaitingApprovalFirst()
     {
-        var (vm, disc, _) = CreateSut(new[]
+        var (vm, disc, _, _, _) = CreateSut(new[]
         {
             Build("idle", SessionStatus.Idle),
             Build("inactive", SessionStatus.Inactive),
@@ -181,7 +187,7 @@ public class SessionsViewModelTests
     [Fact]
     public async Task ActiveCount_ExcludesInactiveAndOrphaned()
     {
-        var (vm, _, _) = CreateSut(new[]
+        var (vm, _, _, _, _) = CreateSut(new[]
         {
             Build("w", SessionStatus.Working),
             Build("i", SessionStatus.Idle),
@@ -197,7 +203,7 @@ public class SessionsViewModelTests
     [Fact]
     public async Task SetLabelAsync_PersistsAndUpdatesCard()
     {
-        var (vm, _, labels) = CreateSut(new[] { Build("a", SessionStatus.Idle) });
+        var (vm, _, labels, _, _) = CreateSut(new[] { Build("a", SessionStatus.Idle) });
         var card = vm.Sessions[0];
 
         await vm.SetLabelAsync(card, SessionType.Bug);
@@ -210,7 +216,7 @@ public class SessionsViewModelTests
     [Fact]
     public async Task LabelChangedFromStore_UpdatesMatchingCard()
     {
-        var (vm, _, labels) = CreateSut(new[] { Build("a", SessionStatus.Idle) });
+        var (vm, _, labels, _, _) = CreateSut(new[] { Build("a", SessionStatus.Idle) });
         var card = vm.Sessions[0];
 
         labels.RaiseLabelChanged("a", SessionType.Refactor);
@@ -222,7 +228,7 @@ public class SessionsViewModelTests
     [Fact]
     public async Task LabelFilter_HidesUncheckedLabels()
     {
-        var (vm, _, _) = CreateSut(
+        var (vm, _, _, _, _) = CreateSut(
             new[]
             {
                 Build("a", SessionStatus.Idle),
@@ -250,7 +256,7 @@ public class SessionsViewModelTests
     [Fact]
     public async Task DisposeAsync_UnsubscribesFromBothEvents()
     {
-        var (vm, disc, labels) = CreateSut(new[] { Build("a", SessionStatus.Idle) });
+        var (vm, disc, labels, _, _) = CreateSut(new[] { Build("a", SessionStatus.Idle) });
         await vm.DisposeAsync();
         disc.StopCalls.Should().Be(1);
 
@@ -260,6 +266,79 @@ public class SessionsViewModelTests
 
         vm.Sessions.Select(s => s.Id).Should().BeEquivalentTo(new[] { "a" });
         vm.Sessions[0].Label.Should().Be(SessionType.Exploratory);
+    }
+
+    [Fact]
+    public async Task OpenReadmeAsync_NullCard_DoesNothing()
+    {
+        var (vm, _, _, readme, launcher) = CreateSut();
+        await vm.OpenReadmeAsync(null);
+        readme.EnsureCalls.Should().Be(0);
+        launcher.Calls.Should().BeEmpty();
+        await vm.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task OpenReadmeAsync_EnsuresThenLaunches_WithCardLabel()
+    {
+        var (vm, _, _, readme, launcher) = CreateSut(
+            new[] { Build("a", SessionStatus.Idle) },
+            seedLabels: new Dictionary<string, SessionType> { ["a"] = SessionType.Bug });
+        var card = vm.Sessions[0];
+
+        await vm.OpenReadmeAsync(card);
+
+        readme.EnsureCalls.Should().Be(1);
+        readme.LastLabel.Should().Be(SessionType.Bug);
+        readme.LastSession?.Id.Should().Be("a");
+        launcher.Calls.Should().ContainSingle().Which.Should().EndWith("SESSION-README.md");
+        await vm.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task OpenReadmeAsync_StoreFailure_SurfacesViaStatusMessage_AndDoesNotLaunch()
+    {
+        var (vm, _, _, readme, launcher) = CreateSut(new[] { Build("a", SessionStatus.Idle) });
+        readme.ThrowOnEnsure = true;
+        var card = vm.Sessions[0];
+
+        await vm.OpenReadmeAsync(card);
+
+        launcher.Calls.Should().BeEmpty();
+        vm.StatusMessage.Should().Contain("Could not open README");
+        await vm.DisposeAsync();
+    }
+
+    private sealed class FakeReadmeService : ISessionReadmeService
+    {
+        public int EnsureCalls { get; private set; }
+        public Session? LastSession { get; private set; }
+        public SessionType? LastLabel { get; private set; }
+        public bool ThrowOnEnsure { get; set; }
+
+        public string GetReadmePath(string sessionId) => $"/sessions/{sessionId}/SESSION-README.md";
+
+        public Task<string> EnsureAsync(Session session, SessionType label, CancellationToken cancellationToken = default)
+        {
+            EnsureCalls++;
+            LastSession = session;
+            LastLabel = label;
+            if (ThrowOnEnsure)
+            {
+                throw new InvalidOperationException("disk full");
+            }
+            return Task.FromResult(string.Empty);
+        }
+    }
+
+    private sealed class FakeFileLauncher : IFileLauncher
+    {
+        public List<string> Calls { get; } = new();
+        public Task OpenAsync(string path, CancellationToken cancellationToken = default)
+        {
+            Calls.Add(path);
+            return Task.CompletedTask;
+        }
     }
 
     private sealed class FakeDiscoveryService : ISessionDiscoveryService
