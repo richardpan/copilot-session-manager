@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Coverlet runsettings for dotnet test with XPlat Code Coverage.
+
+  Excludes:
+    * Test assemblies themselves.
+    * The WPF entry-point / app shell types (App.xaml.cs, MainWindow.xaml.cs,
+      OnboardingWindow.xaml.cs and other *Window.xaml.cs files), which are mostly
+      framework boilerplate and are exercised through manual / smoke testing.
+    * Source-generated code (regex generators, XAML, etc.).
+    * Native interop / P/Invoke surface (CopilotSessionManager.Native), which
+      requires a real Windows console to exercise and is covered by manual tests.
+
+  See docs/manual-tests.md for what is verified outside of automated coverage,
+  and tests/fixtures/README.md for fixture conventions.
+-->
+<RunSettings>
+  <DataCollectionRunSettings>
+    <DataCollectors>
+      <DataCollector friendlyName="XPlat code coverage">
+        <Configuration>
+          <Format>cobertura</Format>
+          <ExcludeByAttribute>Obsolete,GeneratedCodeAttribute,CompilerGeneratedAttribute,GeneratedRegexAttribute</ExcludeByAttribute>
+          <Exclude>[*.Tests]*,[*.Tests.*]*,[CopilotSessionManager]CopilotSessionManager.App,[CopilotSessionManager]CopilotSessionManager.MainWindow,[CopilotSessionManager]CopilotSessionManager.OnboardingWindow,[CopilotSessionManager]CopilotSessionManager.Views.*,[CopilotSessionManager.Native]*</Exclude>
+          <ExcludeByFile>**/obj/**,**/*.g.cs,**/*.g.i.cs,**/*.Designer.cs,**/App.xaml.cs,**/MainWindow.xaml.cs,**/OnboardingWindow.xaml.cs,**/*Window.xaml.cs</ExcludeByFile>
+          <SkipAutoProps>true</SkipAutoProps>
+          <UseSourceLink>true</UseSourceLink>
+          <DeterministicReport>true</DeterministicReport>
+        </Configuration>
+      </DataCollector>
+    </DataCollectors>
+  </DataCollectionRunSettings>
+</RunSettings>
