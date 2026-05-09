@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using System.Windows;
 using CopilotSessionManager.Core.Configuration;
 using CopilotSessionManager.Core.DependencyInjection;
+using CopilotSessionManager.Core.Settings;
 using CopilotSessionManager.ViewModels;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -54,6 +55,26 @@ public partial class App : Application
 
             await _host.StartAsync();
 
+            // First-run onboarding gate: show modally before MainWindow if the
+            // user hasn't completed the welcome flow yet. Re-runnable any time
+            // from the Help menu.
+            var settingsStore = _host.Services.GetRequiredService<IAppSettingsStore>();
+            var settings = await settingsStore.LoadAsync();
+            if (!settings.OnboardingCompleted)
+            {
+                try
+                {
+                    var onboarding = _host.Services.GetRequiredService<OnboardingWindow>();
+                    onboarding.Owner = null;
+                    onboarding.WindowStartupLocation = WindowStartupLocation.CenterScreen;
+                    onboarding.ShowDialog();
+                }
+                catch (Exception oex)
+                {
+                    Log.Warning(oex, "Onboarding window failed to display; continuing to main window.");
+                }
+            }
+
             var mainWindow = _host.Services.GetRequiredService<MainWindow>();
             MainWindow = mainWindow;
             mainWindow.Show();
@@ -93,6 +114,7 @@ public partial class App : Application
     {
         // Core
         services.AddSessionDiscovery();
+        services.AddOnboarding();
 
         // UI infrastructure — the dispatcher must wrap the WPF UI thread.
         services.AddSingleton<IUiDispatcher>(_ => new WpfDispatcher(Current.Dispatcher));
@@ -101,9 +123,11 @@ public partial class App : Application
 
         // Views
         services.AddSingleton<MainWindow>();
+        services.AddTransient<OnboardingWindow>();
 
         // ViewModels
         services.AddSingleton<SessionsViewModel>();
         services.AddSingleton<MainWindowViewModel>();
+        services.AddTransient<OnboardingViewModel>();
     }
 }

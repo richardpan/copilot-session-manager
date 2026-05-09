@@ -7,6 +7,7 @@ using CopilotSessionManager.Core.Sessions;
 using CopilotSessionManager.Services;
 using CopilotSessionManager.ViewModels;
 using FluentAssertions;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 
@@ -24,7 +25,10 @@ public class MainWindowViewModelTests
             new SyncDispatcher(),
             TimeProvider.System,
             NullLogger<SessionsViewModel>.Instance);
-        return new MainWindowViewModel(sessions, NullLogger<MainWindowViewModel>.Instance);
+        return new MainWindowViewModel(
+            sessions,
+            new ServiceCollection().BuildServiceProvider(),
+            NullLogger<MainWindowViewModel>.Instance);
     }
 
     [Fact]

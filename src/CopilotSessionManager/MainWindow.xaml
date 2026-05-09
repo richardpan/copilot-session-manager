@@ -240,11 +240,21 @@
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <Border Grid.Row="0" Padding="16,12" Background="#181825">
+        <!-- Top menu bar (Help → Onboarding…) -->
+        <Menu Grid.Row="0" Background="#11111B" Foreground="#CDD6F4" Padding="4,2">
+            <MenuItem Header="_Help" Foreground="#CDD6F4">
+                <MenuItem Header="_Onboarding…"
+                          Command="{Binding OpenOnboardingCommand}"
+                          ToolTip="Re-run the welcome flow and prerequisite checks." />
+            </MenuItem>
+        </Menu>
+
+        <Border Grid.Row="1" Padding="16,12" Background="#181825">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
@@ -275,7 +285,7 @@
             </Grid>
         </Border>
 
-        <Border Grid.Row="1" Padding="16,8" Background="#11111B">
+        <Border Grid.Row="2" Padding="16,8" Background="#11111B">
             <StackPanel Orientation="Horizontal">
                 <CheckBox Content="Show inactive"
                           IsChecked="{Binding Sessions.ShowInactive}"
@@ -292,7 +302,7 @@
             </StackPanel>
         </Border>
 
-        <Border Grid.Row="2" Padding="16,6" Background="#11111B" BorderBrush="#181825" BorderThickness="0,1,0,0">
+        <Border Grid.Row="3" Padding="16,6" Background="#11111B" BorderBrush="#181825" BorderThickness="0,1,0,0">
             <StackPanel Orientation="Vertical">
                 <StackPanel Orientation="Horizontal">
                     <TextBlock Text="Labels:"
@@ -325,12 +335,12 @@
             </StackPanel>
         </Border>
 
-        <ScrollViewer Grid.Row="3" Padding="16" VerticalScrollBarVisibility="Auto">
+        <ScrollViewer Grid.Row="4" Padding="16" VerticalScrollBarVisibility="Auto">
             <ItemsControl ItemsSource="{Binding Sessions.VisibleSessions}"
                           ItemTemplate="{StaticResource SessionCardTemplate}" />
         </ScrollViewer>
 
-        <Border Grid.Row="4" Padding="16,8" Background="#181825">
+        <Border Grid.Row="5" Padding="16,8" Background="#181825">
             <TextBlock Text="{Binding Sessions.StatusMessage}"
                        Foreground="#7F849C"
                        FontSize="11" />
