@@ -42,13 +42,23 @@ public sealed partial class MainWindowViewModel : ObservableObject
     private bool _isVerboseLogging;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowGitHubBanner))]
     private bool _isGitHubOffline;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowGitHubBanner))]
     private bool _isGitHubUnauthenticated;
 
     [ObservableProperty]
     private string _gitHubStatusMessage = string.Empty;
+
+    /// <summary>
+    /// True when either the offline or unauthenticated GitHub banner should
+    /// be visible. Exposed as a single derived flag so the XAML banner
+    /// container can collapse cleanly without a multi-converter, and so the
+    /// state-machine is trivially testable from a unit test.
+    /// </summary>
+    public bool ShowGitHubBanner => IsGitHubOffline || IsGitHubUnauthenticated;
 
     public MainWindowViewModel(
         SessionsViewModel sessions,
