@@ -28,16 +28,52 @@ public static class CoreServiceCollectionExtensions
 
     /// <summary>
     /// Registers the session discovery pipeline (paths, store, discovery
-    /// service). Implies <see cref="AddCopilotCliAdapters"/>.
+    /// service). Implies <see cref="AddCopilotCliAdapters"/> and
+    /// <see cref="AddStatusDetection"/>.
     /// </summary>
     public static IServiceCollection AddSessionDiscovery(this IServiceCollection services)
     {
         ArgumentNullException.ThrowIfNull(services);
 
         services.AddCopilotCliAdapters();
+        services.AddStatusDetection();
         services.TryAddSingleton<ICopilotPaths, DefaultCopilotPaths>();
         services.TryAddSingleton<ISessionStore, SessionStore>();
         services.TryAddSingleton<ISessionDiscoveryService, SessionDiscoveryService>();
+
+        return services;
+    }
+
+    /// <summary>
+    /// Registers the lock + events status detection pipeline used by
+    /// <see cref="AddSessionDiscovery"/>. Safe to call multiple times. Pass
+    /// <paramref name="configure"/> to tune <see cref="StatusDetectionOptions"/>.
+    /// </summary>
+    public static IServiceCollection AddStatusDetection(
+        this IServiceCollection services,
+        Action<StatusDetectionOptions>? configure = null)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        services.AddCopilotCliAdapters();
+        services.TryAddSingleton<ICopilotPaths, DefaultCopilotPaths>();
+        services.TryAddSingleton<IProcessChecker, ProcessChecker>();
+        services.TryAddSingleton<ISessionLockMonitor, SessionLockMonitor>();
+        services.TryAddSingleton<ISessionStatusEvaluator, SessionStatusEvaluator>();
+
+        if (configure is null)
+        {
+            services.TryAddSingleton(_ => new StatusDetectionOptions());
+        }
+        else
+        {
+            services.AddSingleton(_ =>
+            {
+                var options = new StatusDetectionOptions();
+                configure(options);
+                return options;
+            });
+        }
 
         return services;
     }

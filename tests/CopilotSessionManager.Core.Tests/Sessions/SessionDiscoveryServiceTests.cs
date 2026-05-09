@@ -101,6 +101,46 @@ public class SessionDiscoveryServiceTests : IAsyncDisposable, IDisposable
     }
 
     [Fact]
+    public async Task ScanAsync_marks_session_with_dead_lock_as_Orphaned()
+    {
+        var id = "00000000-0000-0000-0000-000000000050";
+        WriteSessionFiles(id, copilotVersion: "1.0.43", repository: "github/orphan", branch: "main");
+        File.WriteAllText(Path.Combine(_stateDir, id, "inuse.99999.lock"), "99999\n");
+
+        var service = CreateService(records: Array.Empty<SessionStoreRecord>());
+
+        var sessions = await service.ScanAsync();
+
+        sessions.Should().ContainSingle();
+        sessions[0].Status.Should().Be(SessionStatus.Orphaned);
+        sessions[0].Locks.Should().ContainSingle();
+        sessions[0].Locks[0].ProcessId.Should().Be(99999);
+        sessions[0].Locks[0].IsAlive.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task ScanAsync_marks_session_with_live_lock_as_Working()
+    {
+        var id = "00000000-0000-0000-0000-000000000051";
+        WriteSessionFiles(id, copilotVersion: "1.0.43", repository: "github/live", branch: "main");
+        File.WriteAllText(Path.Combine(_stateDir, id, "inuse.4242.lock"), "4242\n");
+
+        // Pin "now" close to the synthetic event timestamps so we don't trip
+        // the idle threshold.
+        var fakeTime = new FakeTimeProvider(new DateTimeOffset(2026, 5, 8, 12, 0, 30, TimeSpan.Zero));
+        var service = CreateService(
+            records: Array.Empty<SessionStoreRecord>(),
+            isAlive: pid => pid == 4242,
+            timeProvider: fakeTime);
+
+        var sessions = await service.ScanAsync();
+
+        sessions.Should().ContainSingle();
+        sessions[0].Status.Should().Be(SessionStatus.Working);
+        sessions[0].Locks.Should().ContainSingle(l => l.IsAlive);
+    }
+
+    [Fact]
     public async Task StartWatchingAsync_raises_SessionsChanged_when_a_new_state_directory_appears()
     {
         var service = CreateService(records: Array.Empty<SessionStoreRecord>());
@@ -119,17 +159,30 @@ public class SessionDiscoveryServiceTests : IAsyncDisposable, IDisposable
         sessions.Should().Contain(s => s.Id == newId);
     }
 
-    private SessionDiscoveryService CreateService(IReadOnlyList<SessionStoreRecord> records)
+    private SessionDiscoveryService CreateService(
+        IReadOnlyList<SessionStoreRecord> records,
+        Func<int, bool>? isAlive = null,
+        TimeProvider? timeProvider = null)
     {
         var paths = new TestPaths(_dbPath, _stateDir);
         var store = new FakeStore(records);
         var registry = new CopilotCliAdapterRegistry(
             new ICopilotCliAdapter[] { new CopilotCliV1Adapter(NullLogger<CopilotCliV1Adapter>.Instance) },
             NullLogger<CopilotCliAdapterRegistry>.Instance);
+        var processChecker = new FakeProcessChecker(isAlive ?? (_ => false));
+        var lockMonitor = new SessionLockMonitor(paths, processChecker, NullLogger<SessionLockMonitor>.Instance);
+        var statusEvaluator = new SessionStatusEvaluator(
+            paths,
+            registry,
+            new StatusDetectionOptions(),
+            NullLogger<SessionStatusEvaluator>.Instance);
         _service = new SessionDiscoveryService(
             store,
             registry,
             paths,
+            lockMonitor,
+            statusEvaluator,
+            timeProvider ?? TimeProvider.System,
             NullLogger<SessionDiscoveryService>.Instance);
         return _service;
     }
@@ -211,5 +264,19 @@ public class SessionDiscoveryServiceTests : IAsyncDisposable, IDisposable
 
         public Task<IReadOnlyList<SessionStoreRecord>> ListAsync(CancellationToken cancellationToken = default) =>
             Task.FromResult(_records);
+    }
+
+    private sealed class FakeProcessChecker : IProcessChecker
+    {
+        private readonly Func<int, bool> _isAlive;
+        public FakeProcessChecker(Func<int, bool> isAlive) => _isAlive = isAlive;
+        public bool IsAlive(int pid) => _isAlive(pid);
+    }
+
+    private sealed class FakeTimeProvider : TimeProvider
+    {
+        private readonly DateTimeOffset _now;
+        public FakeTimeProvider(DateTimeOffset now) => _now = now;
+        public override DateTimeOffset GetUtcNow() => _now;
     }
 }
