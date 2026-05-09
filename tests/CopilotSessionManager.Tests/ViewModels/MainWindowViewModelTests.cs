@@ -189,6 +189,12 @@ public class MainWindowViewModelTests
             LastSaved = settings;
             return Task.CompletedTask;
         }
+
+        public Task ResetAsync(CancellationToken cancellationToken = default)
+        {
+            Current = AppSettings.Defaults();
+            return Task.CompletedTask;
+        }
     }
 
     private sealed class FakeLogBundler : ILogBundler
