@@ -211,6 +211,13 @@ public static class CoreServiceCollectionExtensions
         services.TryAddSingleton<IGitHubAvailabilityProvider, GitHubAvailabilityProvider>();
         services.TryAddSingleton<IGitHubIssuesClient, GhCliGitHubIssuesClient>();
 
+        // README scanning (#71). Depends on the README store registered by
+        // AddSessionReadme(); pull that in so this extension is self-contained
+        // and can be called on its own without callers having to remember the
+        // ordering.
+        services.AddSessionReadme();
+        services.TryAddSingleton<IReadmeIssueRefProvider, ReadmeIssueRefProvider>();
+
         return services;
     }
 
