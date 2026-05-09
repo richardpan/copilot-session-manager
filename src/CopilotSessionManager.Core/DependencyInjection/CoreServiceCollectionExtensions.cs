@@ -5,6 +5,7 @@ using CopilotSessionManager.Core.Configuration;
 using CopilotSessionManager.Core.Cost;
 using CopilotSessionManager.Core.GitHub;
 using CopilotSessionManager.Core.GitHub.Checks;
+using CopilotSessionManager.Core.GitHub.Storage;
 using CopilotSessionManager.Core.Logging;
 using CopilotSessionManager.Core.Merge;
 using CopilotSessionManager.Core.Onboarding;
@@ -54,6 +55,7 @@ public static class CoreServiceCollectionExtensions
         services.AddSessionLabels();
         services.AddSessionReadme();
         services.AddGitHubLinks();
+        services.AddGitHubLinkStorage();
         services.AddSessionLifecycle();
         services.TryAddSingleton<ICopilotPaths, DefaultCopilotPaths>();
         services.TryAddSingleton<ISessionStore, SessionStore>();
@@ -169,6 +171,24 @@ public static class CoreServiceCollectionExtensions
         services.TryAddSingleton<IGitHubLinkResolver, GitHubLinkResolver>();
         services.TryAddSingleton<IGitHubClient, GhCliGitHubClient>();
         services.TryAddSingleton<IGitHubChecksClient, GhCliGitHubChecksClient>();
+
+        return services;
+    }
+
+    /// <summary>
+    /// Registers <see cref="ISessionGitHubLinksStore"/> backed by
+    /// <see cref="JsonSessionGitHubLinksStore"/>. Persists user-supplied
+    /// repository / branch / pull-request overrides per session at
+    /// <c>&lt;sessionFolder&gt;/github-overrides.json</c> so they survive an
+    /// app restart. Always-on; no settings. Safe to call multiple times.
+    /// </summary>
+    public static IServiceCollection AddGitHubLinkStorage(this IServiceCollection services)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        services.TryAddSingleton<ICopilotPaths, DefaultCopilotPaths>();
+        services.TryAddSingleton<ISessionFolderReader, SessionFolderReader>();
+        services.TryAddSingleton<ISessionGitHubLinksStore, JsonSessionGitHubLinksStore>();
 
         return services;
     }

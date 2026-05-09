@@ -1,5 +1,6 @@
 using CopilotSessionManager.Core.Cli;
 using CopilotSessionManager.Core.Cli.Adapters.V1;
+using CopilotSessionManager.Core.GitHub.Storage;
 using CopilotSessionManager.Core.Models;
 using CopilotSessionManager.Core.Sessions;
 using FluentAssertions;
@@ -159,10 +160,119 @@ public class SessionDiscoveryServiceTests : IAsyncDisposable, IDisposable
         sessions.Should().Contain(s => s.Id == newId);
     }
 
+    [Fact]
+    public async Task ScanAsync_overrides_repository_branch_and_pr_from_store()
+    {
+        var id = "00000000-0000-0000-0000-000000000201";
+        WriteSessionFiles(id, copilotVersion: "1.0.43", repository: "github/auto", branch: "auto-branch");
+
+        var overrides = new InMemoryGitHubLinksStore();
+        await overrides.SetAsync(id, new SessionGitHubLinkOverrides(
+            RepositoryOverride: "user/manual",
+            BranchOverride: "https://github.com/user/manual/tree/manual-branch",
+            PullRequestNumberOverride: 99));
+
+        var service = CreateService(records: Array.Empty<SessionStoreRecord>(), overridesStore: overrides);
+
+        var sessions = await service.ScanAsync();
+
+        sessions.Should().ContainSingle();
+        var links = sessions[0].GitHubLinks;
+        links.Should().NotBeNull();
+        links!.RepositoryUrl.Should().Be("https://github.com/user/manual");
+        links.BranchUrl.Should().Be("https://github.com/user/manual/tree/manual-branch");
+        links.PullRequest.Should().NotBeNull();
+        links.PullRequest!.Number.Should().Be(99);
+        links.PullRequest.Url.Should().Be("https://github.com/user/manual/pull/99");
+    }
+
+    [Fact]
+    public async Task ScanAsync_partial_override_only_replaces_non_null_fields()
+    {
+        var id = "00000000-0000-0000-0000-000000000202";
+        WriteSessionFiles(id, copilotVersion: "1.0.43", repository: "github/auto", branch: "auto-branch");
+
+        var overrides = new InMemoryGitHubLinksStore();
+        await overrides.SetAsync(id, new SessionGitHubLinkOverrides(
+            RepositoryOverride: null,
+            BranchOverride: null,
+            PullRequestNumberOverride: 17));
+
+        var service = CreateService(records: Array.Empty<SessionStoreRecord>(), overridesStore: overrides);
+
+        var sessions = await service.ScanAsync();
+
+        var links = sessions[0].GitHubLinks!;
+        // Repo + branch fall through to the auto-detected resolver output …
+        links.RepositoryUrl.Should().Be("https://github.com/github/auto");
+        links.BranchUrl.Should().Be("https://github.com/github/auto/tree/auto-branch");
+        // … but PR number is overlaid.
+        links.PullRequest.Should().NotBeNull();
+        links.PullRequest!.Number.Should().Be(17);
+        links.PullRequest.Url.Should().Be("https://github.com/github/auto/pull/17");
+    }
+
+    [Fact]
+    public async Task ScanAsync_when_override_store_throws_returns_unoverridden_links()
+    {
+        var id = "00000000-0000-0000-0000-000000000203";
+        WriteSessionFiles(id, copilotVersion: "1.0.43", repository: "github/auto", branch: "main");
+
+        var service = CreateService(
+            records: Array.Empty<SessionStoreRecord>(),
+            overridesStore: new ThrowingGitHubLinksStore());
+
+        var sessions = await service.ScanAsync();
+
+        sessions.Should().ContainSingle();
+        var links = sessions[0].GitHubLinks!;
+        links.RepositoryUrl.Should().Be("https://github.com/github/auto");
+        links.BranchUrl.Should().Be("https://github.com/github/auto/tree/main");
+        links.PullRequest.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task ScanAsync_no_override_returns_unmodified_links()
+    {
+        var id = "00000000-0000-0000-0000-000000000204";
+        WriteSessionFiles(id, copilotVersion: "1.0.43", repository: "github/auto", branch: "main");
+
+        var service = CreateService(
+            records: Array.Empty<SessionStoreRecord>(),
+            overridesStore: new InMemoryGitHubLinksStore());
+
+        var sessions = await service.ScanAsync();
+
+        var links = sessions[0].GitHubLinks!;
+        links.RepositoryUrl.Should().Be("https://github.com/github/auto");
+        links.BranchUrl.Should().Be("https://github.com/github/auto/tree/main");
+        links.PullRequest.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task ScanAsync_repository_override_as_full_url_passes_through()
+    {
+        var id = "00000000-0000-0000-0000-000000000205";
+        WriteSessionFiles(id, copilotVersion: "1.0.43", repository: "github/auto", branch: "main");
+
+        var overrides = new InMemoryGitHubLinksStore();
+        await overrides.SetAsync(id, new SessionGitHubLinkOverrides(
+            RepositoryOverride: "https://github.com/user/repo/",
+            BranchOverride: null,
+            PullRequestNumberOverride: null));
+
+        var service = CreateService(records: Array.Empty<SessionStoreRecord>(), overridesStore: overrides);
+
+        var sessions = await service.ScanAsync();
+
+        sessions[0].GitHubLinks!.RepositoryUrl.Should().Be("https://github.com/user/repo");
+    }
+
     private SessionDiscoveryService CreateService(
         IReadOnlyList<SessionStoreRecord> records,
         Func<int, bool>? isAlive = null,
-        TimeProvider? timeProvider = null)
+        TimeProvider? timeProvider = null,
+        ISessionGitHubLinksStore? overridesStore = null)
     {
         var paths = new TestPaths(_dbPath, _stateDir);
         var store = new FakeStore(records);
@@ -182,6 +292,8 @@ public class SessionDiscoveryServiceTests : IAsyncDisposable, IDisposable
             paths,
             lockMonitor,
             statusEvaluator,
+            githubLinkResolver: new CopilotSessionManager.Core.GitHub.GitHubLinkResolver(),
+            githubLinksOverrideStore: overridesStore,
             timeProvider ?? TimeProvider.System,
             NullLogger<SessionDiscoveryService>.Instance);
         return _service;
@@ -278,5 +390,44 @@ public class SessionDiscoveryServiceTests : IAsyncDisposable, IDisposable
         private readonly DateTimeOffset _now;
         public FakeTimeProvider(DateTimeOffset now) => _now = now;
         public override DateTimeOffset GetUtcNow() => _now;
+    }
+
+    private sealed class InMemoryGitHubLinksStore : ISessionGitHubLinksStore
+    {
+        private readonly Dictionary<string, SessionGitHubLinkOverrides> _store = new(StringComparer.OrdinalIgnoreCase);
+
+        public Task<SessionGitHubLinkOverrides?> GetAsync(string sessionId, CancellationToken cancellationToken = default) =>
+            Task.FromResult(_store.TryGetValue(sessionId, out var v) ? v : null);
+
+        public Task SetAsync(string sessionId, SessionGitHubLinkOverrides overrides, CancellationToken cancellationToken = default)
+        {
+            if (overrides.HasAnyOverride)
+            {
+                _store[sessionId] = overrides;
+            }
+            else
+            {
+                _store.Remove(sessionId);
+            }
+            return Task.CompletedTask;
+        }
+
+        public Task ClearAsync(string sessionId, CancellationToken cancellationToken = default)
+        {
+            _store.Remove(sessionId);
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed class ThrowingGitHubLinksStore : ISessionGitHubLinksStore
+    {
+        public Task<SessionGitHubLinkOverrides?> GetAsync(string sessionId, CancellationToken cancellationToken = default) =>
+            throw new InvalidOperationException("simulated store failure");
+
+        public Task SetAsync(string sessionId, SessionGitHubLinkOverrides overrides, CancellationToken cancellationToken = default) =>
+            throw new InvalidOperationException("simulated store failure");
+
+        public Task ClearAsync(string sessionId, CancellationToken cancellationToken = default) =>
+            throw new InvalidOperationException("simulated store failure");
     }
 }
