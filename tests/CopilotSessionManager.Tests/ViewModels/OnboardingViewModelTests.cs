@@ -276,5 +276,11 @@ public class OnboardingViewModelTests
             Current = settings;
             return Task.CompletedTask;
         }
+
+        public Task ResetAsync(CancellationToken ct = default)
+        {
+            Current = AppSettings.Defaults();
+            return Task.CompletedTask;
+        }
     }
 }

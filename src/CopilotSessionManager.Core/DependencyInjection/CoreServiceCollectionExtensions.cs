@@ -98,7 +98,8 @@ public static class CoreServiceCollectionExtensions
                 AppPaths.LocalAppDataDirectory,
                 JsonAppSettingsStore.DefaultFileName);
             var logger = sp.GetRequiredService<ILogger<JsonAppSettingsStore>>();
-            return new JsonAppSettingsStore(path, logger);
+            var migrations = sp.GetServices<IAppSettingsMigration>();
+            return new JsonAppSettingsStore(path, logger, migrations);
         });
 
         return services;

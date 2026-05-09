@@ -8,6 +8,23 @@ namespace CopilotSessionManager.Core.Settings;
 public sealed class AppSettings
 {
     /// <summary>
+    /// Latest schema version this code base understands. Bump this whenever
+    /// you add a setting that requires a non-trivial migration from the
+    /// previous shape (e.g. renamed property, changed enum representation,
+    /// extracted nested object). Adding a new optional property with a sane
+    /// default is NOT a breaking change and does not require a bump.
+    /// </summary>
+    public const int CurrentSchemaVersion = 1;
+
+    /// <summary>
+    /// Schema version of this in-memory instance. New objects start at the
+    /// current version. Files written before versioning was introduced (or
+    /// hand-edited to drop the field) deserialise as <c>0</c>, which the
+    /// migration pipeline upgrades on next load.
+    /// </summary>
+    public int SchemaVersion { get; set; } = CurrentSchemaVersion;
+
+    /// <summary>
     /// True once the user has finished (or skipped) the first-run onboarding
     /// flow. Drives whether <c>OnboardingWindow</c> is shown on startup.
     /// </summary>
