@@ -38,4 +38,11 @@ public interface ITrayIconService : IDisposable
     /// overlays land in a follow-up.
     /// </summary>
     void UpdateAwaitingInputCount(int count);
+
+    /// <summary>
+    /// Surfaces a transient balloon notification next to the tray icon.
+    /// <paramref name="isError"/> picks the warning/info glyph. Best-effort:
+    /// implementations swallow display failures so callers can fire-and-forget.
+    /// </summary>
+    void ShowNotification(string title, string body, bool isError = false);
 }

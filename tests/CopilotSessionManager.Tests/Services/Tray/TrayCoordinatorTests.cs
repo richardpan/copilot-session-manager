@@ -203,6 +203,10 @@ public class TrayCoordinatorTests
         public void Show() => IsVisible = true;
         public void Hide() => IsVisible = false;
         public void UpdateAwaitingInputCount(int count) => LastAwaitingInputCount = count;
+        public void ShowNotification(string title, string body, bool isError = false) =>
+            LastNotification = (title, body, isError);
+
+        public (string Title, string Body, bool IsError)? LastNotification { get; private set; }
 
         public void RaiseActivateRequested() => ActivateRequested?.Invoke(this, EventArgs.Empty);
         public void RaiseOpenRequested() => OpenRequested?.Invoke(this, EventArgs.Empty);

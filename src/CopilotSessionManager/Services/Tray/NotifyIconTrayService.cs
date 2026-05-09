@@ -78,6 +78,37 @@ public sealed class NotifyIconTrayService : ITrayIconService
             : ProductName;
     }
 
+    public void ShowNotification(string title, string body, bool isError = false)
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(title) && string.IsNullOrWhiteSpace(body))
+        {
+            return;
+        }
+
+        try
+        {
+            // NotifyIcon.ShowBalloonTip silently no-ops when the icon is
+            // hidden, so guard so a stray notification doesn't surface a
+            // ghost icon. The 4s timeout matches the OS default — newer
+            // Windows builds clamp it but the value is still required.
+            if (!_notifyIcon.Visible)
+            {
+                return;
+            }
+            var icon = isError ? ToolTipIcon.Warning : ToolTipIcon.Info;
+            _notifyIcon.ShowBalloonTip(4_000, title ?? string.Empty, body ?? string.Empty, icon);
+        }
+        catch
+        {
+            // Best-effort; never let a UI notification take down the host.
+        }
+    }
+
     private void OnMouseClick(object? sender, MouseEventArgs e)
     {
         if (e.Button == MouseButtons.Left)

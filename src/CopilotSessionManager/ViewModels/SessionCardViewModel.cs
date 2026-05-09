@@ -36,6 +36,7 @@ public sealed partial class SessionCardViewModel : ObservableObject
     private readonly ISessionLauncher? _sessionLauncher;
     private readonly ILogger _logger;
     private string? _lastActionMessage;
+    private readonly Action<SessionCardViewModel>? _openMergeWizard;
 
     public SessionCardViewModel(Session model)
         : this(model, SessionType.Exploratory, TimeProvider.System, modelCatalog: null, costCalculator: null, fileLauncher: null, lockCleanup: null, sessionLauncher: null, logger: null)
@@ -83,6 +84,31 @@ public sealed partial class SessionCardViewModel : ObservableObject
         ISessionLockCleanup? lockCleanup,
         ISessionLauncher? sessionLauncher,
         ILogger? logger)
+        : this(model, label, timeProvider, modelCatalog, costCalculator,
+            fileLauncher, lockCleanup, sessionLauncher, logger, openMergeWizard: null)
+    {
+    }
+
+    #region MergeWizard
+    /// <summary>
+    /// Constructor used by <see cref="SessionsViewModel"/> when a merge
+    /// wizard callback is available. Mirrors the existing optional-callback
+    /// pattern (#69 / #72): older call sites keep working via the chain
+    /// above, while DI-aware call sites hand in
+    /// <paramref name="openMergeWizard"/> so the card's
+    /// <see cref="MergeIntoCommand"/> can pop the wizard for itself.
+    /// </summary>
+    public SessionCardViewModel(
+        Session model,
+        SessionType label,
+        TimeProvider timeProvider,
+        IModelCatalog? modelCatalog,
+        IModelCostCalculator? costCalculator,
+        IFileLauncher? fileLauncher,
+        ISessionLockCleanup? lockCleanup,
+        ISessionLauncher? sessionLauncher,
+        ILogger? logger,
+        Action<SessionCardViewModel>? openMergeWizard)
     {
         ArgumentNullException.ThrowIfNull(model);
         ArgumentNullException.ThrowIfNull(timeProvider);
@@ -96,11 +122,39 @@ public sealed partial class SessionCardViewModel : ObservableObject
         _lockCleanup = lockCleanup;
         _sessionLauncher = sessionLauncher;
         _logger = logger ?? NullLogger.Instance;
+        _openMergeWizard = openMergeWizard;
 
         OpenUrlCommand = new AsyncRelayCommand<string?>(OpenUrlAsync, CanOpenUrl);
         CleanupStaleLocksCommand = new AsyncRelayCommand(CleanupStaleLocksAsync, CanCleanupStaleLocks);
         ResumeCommand = new AsyncRelayCommand(ResumeAsync, CanResume);
+        MergeIntoCommand = new RelayCommand(InvokeMergeWizard, () => _openMergeWizard is not null);
     }
+
+    /// <summary>
+    /// Bound to the "Merge into…" right-click / toolbar action on a session
+    /// card. Delegates to the host-supplied callback that owns wizard
+    /// construction; <c>CanExecute</c> is false when no callback was wired
+    /// (e.g. in tests that build the card directly).
+    /// </summary>
+    public IRelayCommand MergeIntoCommand { get; private set; } = new RelayCommand(static () => { }, static () => false);
+
+    private void InvokeMergeWizard()
+    {
+        if (_openMergeWizard is null)
+        {
+            return;
+        }
+        try
+        {
+            _openMergeWizard(this);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to open merge wizard for session {SessionId}.", _model.Id);
+            LastActionMessage = $"Could not open merge wizard: {ex.Message}";
+        }
+    }
+    #endregion
 
     public Session Model => _model;
 

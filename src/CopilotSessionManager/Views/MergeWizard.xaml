@@ -1,0 +1,391 @@
+<Window x:Class="CopilotSessionManager.Views.MergeWizard"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:vm="clr-namespace:CopilotSessionManager.ViewModels.Merge"
+        mc:Ignorable="d"
+        d:DataContext="{d:DesignInstance Type=vm:MergeWizardViewModel}"
+        Title="Merge session…"
+        Height="540"
+        Width="720"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        Background="#1E1E2E">
+    <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
+
+        <Style x:Key="WizardButton" TargetType="Button">
+            <Setter Property="Padding" Value="16,8" />
+            <Setter Property="Margin" Value="6,0,0,0" />
+            <Setter Property="MinWidth" Value="92" />
+            <Setter Property="Background" Value="#313244" />
+            <Setter Property="Foreground" Value="#CDD6F4" />
+            <Setter Property="BorderBrush" Value="#45475A" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
+
+        <Style x:Key="PrimaryButton" TargetType="Button" BasedOn="{StaticResource WizardButton}">
+            <Setter Property="Background" Value="#89B4FA" />
+            <Setter Property="Foreground" Value="#11111B" />
+        </Style>
+
+        <Style x:Key="DangerButton" TargetType="Button" BasedOn="{StaticResource WizardButton}">
+            <Setter Property="Background" Value="#F38BA8" />
+            <Setter Property="Foreground" Value="#11111B" />
+        </Style>
+
+        <DataTemplate x:Key="CandidateTemplate" DataType="{x:Type vm:MergeTargetCandidateViewModel}">
+            <Border Margin="0,0,0,4"
+                    Padding="10,8"
+                    Background="#181825"
+                    BorderBrush="#313244"
+                    BorderThickness="1"
+                    CornerRadius="4">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <RadioButton Grid.Column="0"
+                                 GroupName="MergeTargets"
+                                 IsChecked="{Binding IsSelected, Mode=TwoWay}"
+                                 VerticalAlignment="Center"
+                                 Margin="0,0,10,0"
+                                 Foreground="#CDD6F4" />
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                        <TextBlock Text="{Binding Title}"
+                                   Foreground="#CDD6F4"
+                                   FontWeight="SemiBold"
+                                   TextTrimming="CharacterEllipsis" />
+                        <TextBlock Text="{Binding Subtitle}"
+                                   Foreground="#A6ADC8"
+                                   FontSize="11"
+                                   Margin="0,2,0,0"
+                                   TextTrimming="CharacterEllipsis" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="2" HorizontalAlignment="Right" VerticalAlignment="Center">
+                        <TextBlock Text="{Binding StatusLabel}"
+                                   Foreground="#A6ADC8"
+                                   FontSize="11"
+                                   HorizontalAlignment="Right" />
+                        <TextBlock Text="{Binding RecencyDescription}"
+                                   Foreground="#7F849C"
+                                   FontSize="10"
+                                   FontStyle="Italic"
+                                   HorizontalAlignment="Right" />
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </DataTemplate>
+    </Window.Resources>
+
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <StackPanel Grid.Row="0" Margin="0,0,0,12">
+            <TextBlock Text="Merge session"
+                       Foreground="#CDD6F4"
+                       FontSize="20"
+                       FontWeight="SemiBold" />
+            <TextBlock Foreground="#A6ADC8"
+                       FontSize="12"
+                       Margin="0,4,0,0"
+                       TextWrapping="Wrap">
+                <Run Text="From " />
+                <Run Text="{Binding SourceTitle, Mode=OneWay}" FontWeight="SemiBold" Foreground="#CDD6F4" />
+                <Run Text=" (" />
+                <Run Text="{Binding SourceShortId, Mode=OneWay}" FontFamily="Consolas" />
+                <Run Text=")" />
+            </TextBlock>
+        </StackPanel>
+
+        <!-- Step content -->
+        <Grid Grid.Row="1">
+
+            <!-- Step 1: PickTarget -->
+            <Grid>
+                <Grid.Style>
+                    <Style TargetType="Grid">
+                        <Setter Property="Visibility" Value="Collapsed" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding CurrentStep}" Value="{x:Static vm:MergeWizardStep.PickTarget}">
+                                <Setter Property="Visibility" Value="Visible" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Grid.Style>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <TextBlock Grid.Row="0"
+                           Text="Pick a target session to merge into:"
+                           Foreground="#CDD6F4"
+                           Margin="0,0,0,8" />
+
+                <Grid Grid.Row="1" Margin="0,0,0,8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBox Grid.Column="0"
+                             Text="{Binding SearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                             Background="#181825"
+                             Foreground="#CDD6F4"
+                             BorderBrush="#45475A"
+                             Padding="6,4"
+                             ToolTip="Search by title, repo, branch, or session id." />
+                    <CheckBox Grid.Column="1"
+                              Content="Show inactive"
+                              Foreground="#CDD6F4"
+                              VerticalAlignment="Center"
+                              Margin="10,0,0,0"
+                              IsChecked="{Binding ShowInactiveTargets, Mode=TwoWay}" />
+                </Grid>
+
+                <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
+                    <StackPanel>
+                        <ItemsControl ItemsSource="{Binding TargetCandidates}"
+                                      ItemTemplate="{StaticResource CandidateTemplate}" />
+                        <TextBlock Text="No matching sessions. Try clearing the search or showing inactive sessions."
+                                   Foreground="#A6ADC8"
+                                   FontStyle="Italic"
+                                   Margin="0,12,0,0"
+                                   TextWrapping="Wrap">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding TargetCandidates.Count}" Value="0">
+                                            <Setter Property="Visibility" Value="Visible" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                    </StackPanel>
+                </ScrollViewer>
+
+                <TextBlock Grid.Row="3"
+                           Text="The export step calls 'copilot --share' on the source session. This may take a few seconds."
+                           Foreground="#7F849C"
+                           FontSize="11"
+                           FontStyle="Italic"
+                           Margin="0,8,0,0"
+                           TextWrapping="Wrap" />
+            </Grid>
+
+            <!-- Step 2: PreviewAndConfirm -->
+            <Grid>
+                <Grid.Style>
+                    <Style TargetType="Grid">
+                        <Setter Property="Visibility" Value="Collapsed" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding CurrentStep}" Value="{x:Static vm:MergeWizardStep.PreviewAndConfirm}">
+                                <Setter Property="Visibility" Value="Visible" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Grid.Style>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+
+                <Border Grid.Row="0"
+                        Background="#181825"
+                        BorderBrush="#313244"
+                        BorderThickness="1"
+                        CornerRadius="4"
+                        Padding="10,8"
+                        Margin="0,0,0,10">
+                    <StackPanel>
+                        <TextBlock Foreground="#A6ADC8" FontSize="11">
+                            <Run Text="Source: " />
+                            <Run Text="{Binding SourceTitle, Mode=OneWay}" Foreground="#CDD6F4" FontWeight="SemiBold" />
+                            <Run Text=" (" />
+                            <Run Text="{Binding SourceShortId, Mode=OneWay}" FontFamily="Consolas" />
+                            <Run Text=")" />
+                        </TextBlock>
+                        <TextBlock Foreground="#A6ADC8" FontSize="11" Margin="0,2,0,0">
+                            <Run Text="Target: " />
+                            <Run Text="{Binding TargetTitle, Mode=OneWay}" Foreground="#CDD6F4" FontWeight="SemiBold" />
+                            <Run Text=" (" />
+                            <Run Text="{Binding TargetShortId, Mode=OneWay}" FontFamily="Consolas" />
+                            <Run Text=")" />
+                        </TextBlock>
+                    </StackPanel>
+                </Border>
+
+                <TextBlock Grid.Row="1"
+                           Text="Markdown preview (this will be appended to the target session):"
+                           Foreground="#CDD6F4"
+                           Margin="0,0,0,4" />
+
+                <TextBox Grid.Row="2"
+                         Text="{Binding MarkdownPreview, Mode=OneWay}"
+                         IsReadOnly="True"
+                         FontFamily="Consolas"
+                         FontSize="12"
+                         Background="#11111B"
+                         Foreground="#CDD6F4"
+                         BorderBrush="#313244"
+                         VerticalScrollBarVisibility="Auto"
+                         HorizontalScrollBarVisibility="Auto"
+                         AcceptsReturn="True"
+                         TextWrapping="NoWrap" />
+            </Grid>
+
+            <!-- Step 3: Running -->
+            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                <StackPanel.Style>
+                    <Style TargetType="StackPanel">
+                        <Setter Property="Visibility" Value="Collapsed" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding CurrentStep}" Value="{x:Static vm:MergeWizardStep.Running}">
+                                <Setter Property="Visibility" Value="Visible" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </StackPanel.Style>
+                <ProgressBar IsIndeterminate="True"
+                             Height="6"
+                             Width="320"
+                             Foreground="#89B4FA"
+                             Background="#313244"
+                             BorderThickness="0" />
+                <TextBlock Text="{Binding ProgressMessage}"
+                           Foreground="#CDD6F4"
+                           FontSize="13"
+                           HorizontalAlignment="Center"
+                           Margin="0,16,0,0" />
+            </StackPanel>
+
+            <!-- Step 4: Done -->
+            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                <StackPanel.Style>
+                    <Style TargetType="StackPanel">
+                        <Setter Property="Visibility" Value="Collapsed" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding CurrentStep}" Value="{x:Static vm:MergeWizardStep.Done}">
+                                <Setter Property="Visibility" Value="Visible" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </StackPanel.Style>
+
+                <TextBlock HorizontalAlignment="Center"
+                           FontSize="42"
+                           FontWeight="Bold">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="Text" Value="✗" />
+                            <Setter Property="Foreground" Value="#F38BA8" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsSuccess}" Value="True">
+                                    <Setter Property="Text" Value="✓" />
+                                    <Setter Property="Foreground" Value="#A6E3A1" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
+                <TextBlock Text="{Binding DoneSummary}"
+                           Foreground="#CDD6F4"
+                           FontSize="14"
+                           TextAlignment="Center"
+                           TextWrapping="Wrap"
+                           MaxWidth="540"
+                           Margin="0,16,0,0" />
+                <Button Content="Open merged file"
+                        Style="{StaticResource WizardButton}"
+                        Command="{Binding OpenMergedFileCommand}"
+                        HorizontalAlignment="Center"
+                        Margin="0,18,0,0"
+                        Visibility="{Binding IsSuccess, Converter={StaticResource BoolToVisibility}}" />
+            </StackPanel>
+        </Grid>
+
+        <!-- Footer -->
+        <Grid Grid.Row="2" Margin="0,16,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <!-- Cancel / Close -->
+            <Button Grid.Column="0"
+                    HorizontalAlignment="Left"
+                    Click="OnCancelClicked"
+                    Margin="0">
+                <Button.Style>
+                    <Style TargetType="Button" BasedOn="{StaticResource WizardButton}">
+                        <Setter Property="Content" Value="Cancel" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding CurrentStep}" Value="{x:Static vm:MergeWizardStep.Done}">
+                                <Setter Property="Content" Value="Close" />
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding IsRunning}" Value="True">
+                                <Setter Property="IsEnabled" Value="False" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Button.Style>
+            </Button>
+
+            <!-- Step nav buttons -->
+            <StackPanel Grid.Column="1" Orientation="Horizontal">
+                <Button Content="Back"
+                        Command="{Binding BackCommand}">
+                    <Button.Style>
+                        <Style TargetType="Button" BasedOn="{StaticResource WizardButton}">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding CurrentStep}" Value="{x:Static vm:MergeWizardStep.PreviewAndConfirm}">
+                                    <Setter Property="Visibility" Value="Visible" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Button.Style>
+                </Button>
+                <Button Content="Next"
+                        Command="{Binding NextCommand}">
+                    <Button.Style>
+                        <Style TargetType="Button" BasedOn="{StaticResource PrimaryButton}">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding CurrentStep}" Value="{x:Static vm:MergeWizardStep.PickTarget}">
+                                    <Setter Property="Visibility" Value="Visible" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Button.Style>
+                </Button>
+                <Button Content="Confirm merge"
+                        Command="{Binding ConfirmMergeCommand}">
+                    <Button.Style>
+                        <Style TargetType="Button" BasedOn="{StaticResource PrimaryButton}">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding CurrentStep}" Value="{x:Static vm:MergeWizardStep.PreviewAndConfirm}">
+                                    <Setter Property="Visibility" Value="Visible" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Button.Style>
+                </Button>
+            </StackPanel>
+        </Grid>
+    </Grid>
+</Window>
