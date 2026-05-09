@@ -1,15 +1,20 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
 using CopilotSessionManager.Core.Configuration;
 using CopilotSessionManager.Core.DependencyInjection;
+using CopilotSessionManager.Core.Onboarding;
 using CopilotSessionManager.Core.Settings;
+using CopilotSessionManager.Logging;
 using CopilotSessionManager.ViewModels;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Serilog;
+using Serilog.Core;
+using Serilog.Events;
 
 namespace CopilotSessionManager;
 
@@ -19,6 +24,7 @@ namespace CopilotSessionManager;
 public partial class App : Application
 {
     private IHost? _host;
+    private readonly LoggingLevelSwitch _levelSwitch = new(LogEventLevel.Information);
 
     /// <summary>
     /// Gets the application's <see cref="IServiceProvider"/>. Available after
@@ -35,15 +41,39 @@ public partial class App : Application
         var logDirectory = AppPaths.LogsDirectory;
         Directory.CreateDirectory(logDirectory);
 
+        // Probe the Copilot CLI version once at startup so every log line gets
+        // it via the BuildInfoEnricher. Best-effort: if the probe fails we
+        // record "unknown" and continue.
+        var copilotCliVersion = await ProbeCopilotCliVersionAsync().ConfigureAwait(true);
+
+        // Pre-load persisted log level (default Information).
+        try
+        {
+            var settingsPath = Path.Combine(AppPaths.LocalAppDataDirectory, JsonAppSettingsStore.DefaultFileName);
+            if (File.Exists(settingsPath))
+            {
+                var bootstrapLogger = Microsoft.Extensions.Logging.Abstractions.NullLogger<JsonAppSettingsStore>.Instance;
+                var bootstrapStore = new JsonAppSettingsStore(settingsPath, bootstrapLogger);
+                var settings = await bootstrapStore.LoadAsync().ConfigureAwait(true);
+                _levelSwitch.MinimumLevel = LogLevelSwitchAccessor.ParseLevel(settings.LogLevel);
+            }
+        }
+        catch
+        {
+            // Settings are best-effort; default to Information.
+        }
+
         Log.Logger = new LoggerConfiguration()
-            .MinimumLevel.Information()
+            .MinimumLevel.ControlledBy(_levelSwitch)
             .Enrich.FromLogContext()
+            .Enrich.With(new BuildInfoEnricher(copilotCliVersion))
+            .Enrich.With(new LogRedactionEnricher())
             .WriteTo.Debug()
             .WriteTo.File(
                 path: Path.Combine(logDirectory, "app-.log"),
                 rollingInterval: RollingInterval.Day,
                 retainedFileCountLimit: 7,
-                outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] {SourceContext} {Message:lj}{NewLine}{Exception}")
+                outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] v{AppVersion} cli={CopilotCliVersion} {SourceContext} {Message:lj}{NewLine}{Exception}")
             .CreateLogger();
 
         try
@@ -110,16 +140,18 @@ public partial class App : Application
         base.OnExit(e);
     }
 
-    private static void ConfigureServices(HostBuilderContext context, IServiceCollection services)
+    private void ConfigureServices(HostBuilderContext context, IServiceCollection services)
     {
         // Core
         services.AddSessionDiscovery();
         services.AddOnboarding();
+        CoreServiceCollectionExtensions.AddLogging(services);
 
         // UI infrastructure — the dispatcher must wrap the WPF UI thread.
         services.AddSingleton<IUiDispatcher>(_ => new WpfDispatcher(Current.Dispatcher));
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton<Services.IFileLauncher, Services.ShellFileLauncher>();
+        services.AddSingleton(new LogLevelSwitchAccessor(_levelSwitch));
 
         // Views
         services.AddSingleton<MainWindow>();
@@ -129,5 +161,30 @@ public partial class App : Application
         services.AddSingleton<SessionsViewModel>();
         services.AddSingleton<MainWindowViewModel>();
         services.AddTransient<OnboardingViewModel>();
+    }
+
+    /// <summary>
+    /// Run <c>copilot --version</c> with a short timeout so we can stamp the
+    /// Copilot CLI version onto every log line. Returns "unknown" if anything
+    /// goes wrong so startup never blocks on this probe.
+    /// </summary>
+    private static async Task<string> ProbeCopilotCliVersionAsync()
+    {
+        try
+        {
+            var runner = new ProcessRunner(Microsoft.Extensions.Logging.Abstractions.NullLogger<ProcessRunner>.Instance);
+            var result = await runner
+                .RunAsync(new ProcessRunRequest("copilot", new[] { "--version" }, TimeoutSeconds: 5))
+                .ConfigureAwait(false);
+            if (result.ExitCode != 0 || string.IsNullOrWhiteSpace(result.StdOut))
+            {
+                return "unknown";
+            }
+            return result.StdOut.Trim().Split('\n').FirstOrDefault()?.Trim() ?? "unknown";
+        }
+        catch
+        {
+            return "unknown";
+        }
     }
 }

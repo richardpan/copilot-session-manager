@@ -251,6 +251,19 @@
                 <MenuItem Header="_Onboarding…"
                           Command="{Binding OpenOnboardingCommand}"
                           ToolTip="Re-run the welcome flow and prerequisite checks." />
+                <Separator />
+                <MenuItem Header="Open _log folder"
+                          Command="{Binding OpenLogFolderCommand}"
+                          ToolTip="Open the per-user log folder in Explorer." />
+                <MenuItem Header="_Bundle logs for bug report…"
+                          Command="{Binding BundleLogsCommand}"
+                          ToolTip="Zip current log files for sharing in a bug report." />
+                <Separator />
+                <MenuItem Header="_Verbose logging"
+                          IsCheckable="True"
+                          IsChecked="{Binding IsVerboseLogging, Mode=TwoWay}"
+                          Command="{Binding ToggleVerboseLoggingCommand}"
+                          ToolTip="Switch between Information and Debug log level. Persisted." />
             </MenuItem>
         </Menu>
 

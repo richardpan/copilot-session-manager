@@ -3,6 +3,7 @@ using CopilotSessionManager.Core.Cli.Adapters.V1;
 using CopilotSessionManager.Core.Configuration;
 using CopilotSessionManager.Core.Cost;
 using CopilotSessionManager.Core.GitHub;
+using CopilotSessionManager.Core.Logging;
 using CopilotSessionManager.Core.Onboarding;
 using CopilotSessionManager.Core.Sessions;
 using CopilotSessionManager.Core.Settings;
@@ -99,6 +100,21 @@ public static class CoreServiceCollectionExtensions
             var logger = sp.GetRequiredService<ILogger<JsonAppSettingsStore>>();
             return new JsonAppSettingsStore(path, logger);
         });
+
+        return services;
+    }
+
+    /// <summary>
+    /// Registers logging-support services that don't depend on Serilog itself
+    /// (the WPF host owns Serilog wiring). Currently registers
+    /// <see cref="ILogBundler"/> for the "Bundle logs for bug report"
+    /// action. Safe to call multiple times.
+    /// </summary>
+    public static IServiceCollection AddLogging(this IServiceCollection services)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        services.TryAddSingleton<ILogBundler, ZipLogBundler>();
 
         return services;
     }
