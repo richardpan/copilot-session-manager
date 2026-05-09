@@ -34,6 +34,22 @@ public sealed partial class IssueLinkViewModel : ObservableObject
         string sessionOwnerRepo,
         IFileLauncher? fileLauncher,
         Func<IssueRef, System.Threading.Tasks.Task> removeCallback)
+        : this(issueRef, sessionOwnerRepo, fileLauncher, removeCallback, IssueLinkOrigin.Manual)
+    {
+    }
+
+    /// <summary>
+    /// Canonical constructor. <paramref name="origin"/> drives whether the
+    /// badge advertises itself as parsed-from-README and disables the manual
+    /// Remove command (parsed refs can't be removed — they come back on the
+    /// next README scan).
+    /// </summary>
+    public IssueLinkViewModel(
+        IssueRef issueRef,
+        string sessionOwnerRepo,
+        IFileLauncher? fileLauncher,
+        Func<IssueRef, System.Threading.Tasks.Task> removeCallback,
+        IssueLinkOrigin origin)
     {
         ArgumentNullException.ThrowIfNull(issueRef);
         ArgumentNullException.ThrowIfNull(removeCallback);
@@ -43,10 +59,18 @@ public sealed partial class IssueLinkViewModel : ObservableObject
         Url = issueRef.ToCanonicalUrl();
         _fileLauncher = fileLauncher;
         _removeCallback = removeCallback;
+        Origin = origin;
 
         OpenCommand = new AsyncRelayCommand(OpenAsync, CanOpen);
-        RemoveCommand = new AsyncRelayCommand(RemoveAsync);
+        RemoveCommand = new AsyncRelayCommand(RemoveAsync, CanRemove);
     }
+
+    /// <summary>
+    /// Where this link came from. <see cref="IssueLinkOrigin.Manual"/> for
+    /// user-added refs, <see cref="IssueLinkOrigin.ParsedFromReadme"/> for
+    /// refs discovered in <c>SESSION-README.md</c>.
+    /// </summary>
+    public IssueLinkOrigin Origin { get; }
 
     /// <summary>The canonical issue ref this badge represents.</summary>
     public IssueRef Ref { get; }
@@ -161,9 +185,12 @@ public sealed partial class IssueLinkViewModel : ObservableObject
                 _ => "State unknown",
             };
             var firstLine = $"{Ref.OwnerRepo}#{Ref.Number} — {stateText}";
-            return string.IsNullOrWhiteSpace(_title)
+            var body = string.IsNullOrWhiteSpace(_title)
                 ? $"{firstLine}\n{Url}"
                 : $"{firstLine}\n{_title}";
+            return Origin == IssueLinkOrigin.ParsedFromReadme
+                ? body + "\n(parsed from README)"
+                : body;
         }
     }
 
@@ -185,6 +212,12 @@ public sealed partial class IssueLinkViewModel : ObservableObject
     }
 
     private bool CanOpen() => _fileLauncher is not null;
+
+    /// <summary>
+    /// True when the user is allowed to manually remove this badge. Parsed
+    /// refs can't be removed because they re-appear on the next README scan.
+    /// </summary>
+    public bool CanRemove() => Origin == IssueLinkOrigin.Manual;
 
     private async System.Threading.Tasks.Task OpenAsync()
     {

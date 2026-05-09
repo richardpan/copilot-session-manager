@@ -46,6 +46,7 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
     private readonly IGitHubIssuesClient? _issuesClient;
     private readonly ISessionGitHubLinksStore? _linksStore;
     private readonly Func<string?, IssueRef?>? _showAddIssueDialog;
+    private readonly IReadmeIssueRefProvider? _readmeIssueRefs;
     #endregion
 
     private readonly Dictionary<string, SessionCardViewModel> _byId =
@@ -184,6 +185,37 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
         IGitHubIssuesClient? issuesClient,
         ISessionGitHubLinksStore? linksStore,
         Func<string?, IssueRef?>? showAddIssueDialog)
+        : this(discovery, labelStore, readmeService, fileLauncher, dispatcher,
+            timeProvider, modelCatalog, costCalculator, githubClient, checksClient,
+            lockCleanup, sessionLauncher, loggerFactory, logger,
+            issuesClient, linksStore, showAddIssueDialog, readmeIssueRefs: null)
+    {
+    }
+
+    /// <summary>
+    /// DI-preferred constructor. Adds <see cref="IReadmeIssueRefProvider"/>
+    /// (#71) on top of the manual issue-linking plumbing so refs mentioned in
+    /// the auto-generated <c>SESSION-README.md</c> appear as parsed badges.
+    /// </summary>
+    public SessionsViewModel(
+        ISessionDiscoveryService discovery,
+        ISessionLabelStore labelStore,
+        ISessionReadmeService readmeService,
+        IFileLauncher fileLauncher,
+        IUiDispatcher dispatcher,
+        TimeProvider timeProvider,
+        IModelCatalog? modelCatalog,
+        IModelCostCalculator? costCalculator,
+        IGitHubClient? githubClient,
+        IGitHubChecksClient? checksClient,
+        ISessionLockCleanup? lockCleanup,
+        ISessionLauncher? sessionLauncher,
+        ILoggerFactory? loggerFactory,
+        ILogger<SessionsViewModel> logger,
+        IGitHubIssuesClient? issuesClient,
+        ISessionGitHubLinksStore? linksStore,
+        Func<string?, IssueRef?>? showAddIssueDialog,
+        IReadmeIssueRefProvider? readmeIssueRefs)
     {
         ArgumentNullException.ThrowIfNull(discovery);
         ArgumentNullException.ThrowIfNull(labelStore);
@@ -210,6 +242,7 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
         _issuesClient = issuesClient;
         _linksStore = linksStore;
         _showAddIssueDialog = showAddIssueDialog;
+        _readmeIssueRefs = readmeIssueRefs;
 
         Sessions = new ObservableCollection<SessionCardViewModel>();
         VisibleSessions = new ObservableCollection<SessionCardViewModel>();
@@ -653,7 +686,7 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
         // we degrade gracefully — still show the panel if we have a store
         // and a dialog (so previously linked issues hydrate), otherwise
         // skip entirely so the panel doesn't render.
-        if (_linksStore is null && _issuesClient is null)
+        if (_linksStore is null && _issuesClient is null && _readmeIssueRefs is null)
         {
             return null;
         }
@@ -669,7 +702,8 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
             _fileLauncher,
             _dispatcher,
             dialog,
-            logger);
+            logger,
+            _readmeIssueRefs);
     }
     #endregion
 
