@@ -1,5 +1,6 @@
 using CopilotSessionManager.Core.Cli;
 using CopilotSessionManager.Core.Cli.Adapters.V1;
+using CopilotSessionManager.Core.Sessions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
@@ -21,6 +22,22 @@ public static class CoreServiceCollectionExtensions
         services.TryAddEnumerable(
             ServiceDescriptor.Singleton<ICopilotCliAdapter, CopilotCliV1Adapter>());
         services.TryAddSingleton<ICopilotCliAdapterRegistry, CopilotCliAdapterRegistry>();
+
+        return services;
+    }
+
+    /// <summary>
+    /// Registers the session discovery pipeline (paths, store, discovery
+    /// service). Implies <see cref="AddCopilotCliAdapters"/>.
+    /// </summary>
+    public static IServiceCollection AddSessionDiscovery(this IServiceCollection services)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        services.AddCopilotCliAdapters();
+        services.TryAddSingleton<ICopilotPaths, DefaultCopilotPaths>();
+        services.TryAddSingleton<ISessionStore, SessionStore>();
+        services.TryAddSingleton<ISessionDiscoveryService, SessionDiscoveryService>();
 
         return services;
     }
