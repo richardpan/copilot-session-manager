@@ -55,6 +55,36 @@ Pre-condition: disable the network adapter, or block `api.github.com` and
       without requiring a restart.
 - [ ] No infinite-retry loop visible in `--verbose` log output.
 
+### 3a. Offline banner (#84)
+
+- [ ] Disable the network adapter; within roughly one availability poll
+      cycle (~30 s), the **amber offline banner** appears at the top of
+      the main window with the GitHub status message.
+- [ ] Re-enable the adapter; the offline banner auto-dismisses on the
+      next poll without any user action.
+- [ ] A screen reader (Narrator) announces the banner when it appears,
+      because of `AutomationProperties.LiveSetting="Polite"`.
+
+### 3b. Unauthenticated banner (#84)
+
+Pre-condition: network is online; run `gh auth logout` in PowerShell so
+the GitHub CLI is installed but signed-out.
+
+- [ ] The **red unauthenticated banner** appears (visually distinct from
+      the amber offline banner) and tells the tester to run
+      `gh auth login`.
+- [ ] Hovering a session card's PR badge shows a tooltip explaining
+      `gh auth login` instead of the usual PR description.
+- [ ] Hovering the branch hyperlink shows the same auth tooltip.
+- [ ] Clicking a PR badge while unauthenticated does not crash; the
+      browser may open but the underlying enrichment stays empty until
+      the CLI is re-authenticated. (Note the actual current behaviour in
+      the sign-off table below.)
+- [ ] Run `gh auth login` and re-authenticate; the banner clears on the
+      next availability poll without a restart.
+- [ ] The PR / branch tooltips revert to their normal text once the
+      banner clears.
+
 ## 4. Missing Copilot CLI degradation
 
 Pre-condition: temporarily rename `copilot.exe` on `PATH` (e.g. via a

@@ -143,12 +143,24 @@
                                     CornerRadius="3"
                                     Padding="6,1"
                                     Margin="6,2,0,0"
-                                    ToolTip="{Binding PullRequestTooltip}"
                                     Visibility="{Binding HasPullRequest, Converter={StaticResource BoolToVisibility}}"
                                     Cursor="Hand"
                                     Focusable="True"
                                     AutomationProperties.Name="{Binding PullRequestTooltip}"
                                     AutomationProperties.HelpText="Press Enter to open this pull request in your browser.">
+                                <Border.Style>
+                                    <!-- Default tooltip describes the PR. When the parent VM reports
+                                         GitHub CLI is unauthenticated, swap to a remediation tooltip
+                                         pointing at `gh auth login` (#84). -->
+                                    <Style TargetType="Border">
+                                        <Setter Property="ToolTip" Value="{Binding PullRequestTooltip}" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding DataContext.IsGitHubUnauthenticated, RelativeSource={RelativeSource AncestorType=Window}}" Value="True">
+                                                <Setter Property="ToolTip" Value="GitHub CLI not authenticated. Run `gh auth login` in PowerShell to enable PR actions." />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Border.Style>
                                 <Border.InputBindings>
                                     <MouseBinding MouseAction="LeftClick"
                                                   Command="{Binding OpenUrlCommand}"
@@ -202,9 +214,18 @@
                             <TextBlock Foreground="#A6ADC8" FontSize="11">
                                 <Hyperlink Foreground="#89B4FA"
                                            TextDecorations="None"
-                                           ToolTip="Open branch on GitHub"
                                            Command="{Binding OpenUrlCommand}"
                                            CommandParameter="{Binding BranchUrl}">
+                                    <Hyperlink.Style>
+                                        <Style TargetType="Hyperlink">
+                                            <Setter Property="ToolTip" Value="Open branch on GitHub" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding DataContext.IsGitHubUnauthenticated, RelativeSource={RelativeSource AncestorType=Window}}" Value="True">
+                                                    <Setter Property="ToolTip" Value="GitHub CLI not authenticated. Run `gh auth login` in PowerShell to enable branch actions." />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Hyperlink.Style>
                                     <Run Text="{Binding Branch, FallbackValue='—', Mode=OneWay}" />
                                 </Hyperlink>
                             </TextBlock>
@@ -294,6 +315,7 @@
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
@@ -328,7 +350,79 @@
             </MenuItem>
         </Menu>
 
-        <Border Grid.Row="1" Padding="16,12" Background="#181825">
+        <!--
+            GitHub availability banner (#84). Two stacked banners keep the
+            visibility binding trivial (no multi-converter) and let each state
+            carry its own colour palette + AutomationProperties text. Inline
+            hex colours below — TODO: replace with named brushes once #95
+            (palette extraction to App.xaml resources) lands.
+        -->
+        <StackPanel Grid.Row="1"
+                    Orientation="Vertical"
+                    Visibility="{Binding ShowGitHubBanner, Converter={StaticResource BoolToVisibility}}">
+            <Border Padding="16,8"
+                    MinHeight="32"
+                    Background="#3D2C0E"
+                    BorderBrush="#F9E2AF"
+                    BorderThickness="0,0,0,2"
+                    Visibility="{Binding IsGitHubOffline, Converter={StaticResource BoolToVisibility}}"
+                    AutomationProperties.LiveSetting="Polite"
+                    AutomationProperties.Name="GitHub offline banner"
+                    AutomationProperties.HelpText="Indicates the GitHub CLI cannot reach github.com. PR and issue enrichment are paused until connectivity returns.">
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock Text="⚠"
+                               Foreground="#F9E2AF"
+                               FontSize="14"
+                               FontWeight="SemiBold"
+                               VerticalAlignment="Center"
+                               Margin="0,0,8,0" />
+                    <TextBlock Text="{Binding GitHubStatusMessage}"
+                               Foreground="#F9E2AF"
+                               FontSize="12"
+                               VerticalAlignment="Center"
+                               TextWrapping="Wrap" />
+                </StackPanel>
+            </Border>
+            <Border Padding="16,8"
+                    MinHeight="32"
+                    Background="#3D1F26"
+                    BorderBrush="#F38BA8"
+                    BorderThickness="0,0,0,2"
+                    Visibility="{Binding IsGitHubUnauthenticated, Converter={StaticResource BoolToVisibility}}"
+                    AutomationProperties.LiveSetting="Polite"
+                    AutomationProperties.Name="GitHub unauthenticated banner"
+                    AutomationProperties.HelpText="Indicates the GitHub CLI is installed but not authenticated. Run gh auth login in PowerShell to enable PR and issue enrichment.">
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock Text="🔒"
+                               Foreground="#F38BA8"
+                               FontSize="14"
+                               FontWeight="SemiBold"
+                               VerticalAlignment="Center"
+                               Margin="0,0,8,0" />
+                    <TextBlock Text="{Binding GitHubStatusMessage}"
+                               Foreground="#F38BA8"
+                               FontSize="12"
+                               VerticalAlignment="Center"
+                               TextWrapping="Wrap" />
+                    <TextBlock Text=" — Run "
+                               Foreground="#F38BA8"
+                               FontSize="12"
+                               VerticalAlignment="Center" />
+                    <TextBlock Text="gh auth login"
+                               Foreground="#F38BA8"
+                               FontFamily="Consolas"
+                               FontSize="12"
+                               FontWeight="SemiBold"
+                               VerticalAlignment="Center" />
+                    <TextBlock Text=" in PowerShell."
+                               Foreground="#F38BA8"
+                               FontSize="12"
+                               VerticalAlignment="Center" />
+                </StackPanel>
+            </Border>
+        </StackPanel>
+
+        <Border Grid.Row="2" Padding="16,12" Background="#181825">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
@@ -363,7 +457,7 @@
             </Grid>
         </Border>
 
-        <Border Grid.Row="2" Padding="16,8" Background="#11111B">
+        <Border Grid.Row="3" Padding="16,8" Background="#11111B">
             <StackPanel Orientation="Horizontal">
                 <CheckBox Content="Show inactive"
                           IsChecked="{Binding Sessions.ShowInactive}"
@@ -382,7 +476,7 @@
             </StackPanel>
         </Border>
 
-        <Border Grid.Row="3" Padding="16,6" Background="#11111B" BorderBrush="#181825" BorderThickness="0,1,0,0">
+        <Border Grid.Row="4" Padding="16,6" Background="#11111B" BorderBrush="#181825" BorderThickness="0,1,0,0">
             <StackPanel Orientation="Vertical">
                 <StackPanel Orientation="Horizontal">
                     <TextBlock Text="Labels:"
@@ -415,12 +509,12 @@
             </StackPanel>
         </Border>
 
-        <ScrollViewer Grid.Row="4" Padding="16" VerticalScrollBarVisibility="Auto">
+        <ScrollViewer Grid.Row="5" Padding="16" VerticalScrollBarVisibility="Auto">
             <ItemsControl ItemsSource="{Binding Sessions.VisibleSessions}"
                           ItemTemplate="{StaticResource SessionCardTemplate}" />
         </ScrollViewer>
 
-        <Border Grid.Row="5" Padding="16,8" Background="#181825">
+        <Border Grid.Row="6" Padding="16,8" Background="#181825">
             <TextBlock Text="{Binding Sessions.StatusMessage}"
                        Foreground="#7F849C"
                        FontSize="11" />
