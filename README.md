@@ -186,7 +186,7 @@ The app is a single .NET 8 WPF process that runs as a tray-resident desktop appl
 - **Hosted PowerShell runspaces** — instead of spawning standalone `powershell.exe` windows for every session, the app hosts PowerShell runspaces *in-process* via `System.Management.Automation`. This gives us full control over input/output streams, lifecycle, and lets us render a custom terminal experience while still being a real PowerShell.
 - **Optional standalone window mode** — for users who prefer a real PowerShell window, the app can spawn `pwsh.exe`, capture the HWND, and use Win32 `SetForegroundWindow` / `ShowWindow` to focus it on demand.
 - **MVVM with CommunityToolkit.Mvvm** — clean separation between UI and logic, making the codebase testable and maintainable.
-- **Local SQLite database** — session metadata, token history, and settings persist locally in `%LOCALAPPDATA%\CopilotSessionManager\sessions.db`.
+- **Read Copilot CLI's session storage directly** — the dashboard does not duplicate Copilot's session metadata. It reads `~/.copilot/session-store.db`, `workspace.yaml`, `events.jsonl`, and lock files **read-only**, and writes only app-specific augmentation (labels, settings, future encrypted `app.db`) under `%LOCALAPPDATA%\CopilotSessionManager\`. The two stores are joined by the Copilot session id. See [ADR-0002](docs/adr/0002-read-copilot-cli-storage-directly.md) for the full decision, the interfaces involved (`ISessionStore`, `ISessionFolderReader`, `ISessionDiscoveryService`, `ICopilotPaths`), and the join-key contract.
 
 ### Session Lifecycle
 

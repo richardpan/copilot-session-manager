@@ -73,8 +73,9 @@ Our **app-only SQLite** stores only what Copilot doesn't track:
 
 ### Neutral
 
-- All access goes through `ICopilotSessionRepository` so a future "hybrid
-  cache" mode could be added without touching consumers
+- All read access to Copilot's storage is funneled through a small set of
+  read-only interfaces (see [How we comply](#how-we-comply)), so a future
+  "hybrid cache" mode could be slotted in without touching consumers
 
 ## Pros and cons of the options
 
@@ -97,6 +98,76 @@ Our **app-only SQLite** stores only what Copilot doesn't track:
 - Con: Combines both downsides — code complexity and drift potential
 - Con: Premature optimization until we measure read latency
 
+## How we comply
+
+The "Copilot session repository" envisioned by issue #31 is implemented as a
+small set of focused read-only interfaces in `CopilotSessionManager.Core`,
+each owning one slice of `~/.copilot/`. The combination is what consumers
+treat as `ICopilotSessionRepository`; we deliberately split it rather than
+build a single wide interface so that test doubles stay tiny and watcher
+plumbing only lives where it's needed.
+
+| Concern | Interface | Implementation | Reads from |
+|---|---|---|---|
+| Resolve `~/.copilot/` paths | `Sessions/ICopilotPaths` | `Sessions/DefaultCopilotPaths` (delegates to `Configuration/AppPaths`) | `%USERPROFILE%\.copilot\` |
+| `sessions` / `turns` rows | `Sessions/ISessionStore` | `Sessions/SessionStore` (Microsoft.Data.Sqlite, `Mode=ReadOnly`, `PRAGMA busy_timeout = 5000`) | `~/.copilot/session-store.db` |
+| Per-session folder + checkpoints | `Sessions/ISessionFolderReader` | `Sessions/SessionFolderReader` | `~/.copilot/session-state/<id>/` |
+| `workspace.yaml` parsing | _internal_ `Cli/Adapters/V1/WorkspaceYamlReader` (via `ICopilotCliAdapter`) | `Cli/Adapters/V1/CopilotCliV1Adapter` | `~/.copilot/session-state/<id>/workspace.yaml` |
+| `events.jsonl` streaming | _internal_ `Cli/Adapters/V1/EventsJsonlReader` (via `ICopilotCliAdapter`) | `Cli/Adapters/V1/CopilotCliV1Adapter` | `~/.copilot/session-state/<id>/events.jsonl` |
+| Active-session lock files | `Sessions/ISessionLockMonitor` | `Sessions/SessionLockMonitor` | `~/.copilot/session-state/<id>/inuse.<PID>.lock` |
+| Combined view + change notifications | `Sessions/ISessionDiscoveryService` | `Sessions/SessionDiscoveryService` (composes all of the above + `FileSystemWatcher`) | all of `~/.copilot/` |
+
+`Configuration/AppPaths` is the single source of truth for both sides and
+documents the read-only invariant in its XML doc comment:
+
+> All app-owned data lives under `%LOCALAPPDATA%\CopilotSessionManager\`.
+> We never write inside `~/.copilot/`; that folder is treated as read-only
+> Copilot CLI state.
+
+App-only writes are limited to:
+
+| What | Where | Why it's app-only |
+|---|---|---|
+| Session-type labels (#2) | `%LOCALAPPDATA%\CopilotSessionManager\labels.json` via `Sessions/JsonSessionLabelStore` | Copilot CLI has no concept of label/category |
+| Settings | `%LOCALAPPDATA%\CopilotSessionManager\settings.json` via `Settings/JsonAppSettingsStore` | UI/user prefs |
+| Reserved app DB | `%LOCALAPPDATA%\CopilotSessionManager\app.db` (`AppPaths.AppDatabasePath`) — encrypted per ADR-0004 | Future app-only augmentation |
+| Logs | `%LOCALAPPDATA%\CopilotSessionManager\logs\` via Serilog | Diagnostics |
+
+`SESSION-README.md` is written **inside the session's working directory**
+(not under `~/.copilot/`) by `Sessions/FileSessionReadmeStore` so it
+travels with the repo and can be committed.
+
+## Join keys
+
+There is exactly one join key between Copilot's storage and our app-only
+storage: **the Copilot session id** — the lowercase GUID-shaped string the
+CLI assigns when a session is created (e.g.
+`9f3b1c2d-7a4e-4d8e-9f10-abcdef012345`).
+
+It originates in Copilot's `sessions.id` column (`session-store.db`) and
+flows through our code as `string Id` everywhere it appears:
+
+- `Sessions/SessionStoreRecord.Id` — value read from `sessions.id`
+- `Models/Session.Id` — propagated unchanged into the unified view
+- `Sessions/ICopilotPaths.SessionStateDirectory` + `<Id>` resolves the
+  per-session folder on disk
+- `Sessions/ISessionLabelStore` keys (`labels.json`'s `labels` map)
+- `Sessions/FileSessionReadmeStore` lookups via `ISessionFolderReader`
+- All future rows in the encrypted `app.db` MUST use a `session_id TEXT`
+  column whose value is the same string
+
+Rules for the join key:
+
+1. **Treat as opaque.** Do not parse, validate as a GUID, or transform case.
+   Compare with `StringComparison.OrdinalIgnoreCase` (the labels store
+   already does).
+2. **Never invent one.** App-only rows are only created in response to a
+   session id we observed in `~/.copilot/`.
+3. **Don't cascade-delete.** When Copilot's session disappears, our app-only
+   rows for that id stay until the user (or a future cleanup job) removes
+   them. We never react to Copilot's deletes by writing — that would violate
+   the "read-only" half of this ADR.
+
 ## Notes
 
 - Read patterns we expect to need (drove the decision):
@@ -106,3 +177,7 @@ Our **app-only SQLite** stores only what Copilot doesn't track:
   - Detect lock files for active state
 - We will benchmark cold-start enumeration against ~100 sessions before V1
   and revisit if we hit scaling issues
+- Issue #31 originally proposed a single `ICopilotSessionRepository`
+  interface. We chose the split-by-concern shape above instead so each
+  collaborator can be mocked in isolation and so the per-folder vs.
+  global-DB readers don't get coupled.
