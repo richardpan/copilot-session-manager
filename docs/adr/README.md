@@ -38,7 +38,7 @@ straightforward features that fit existing patterns).
 
 | #    | Title                                                  | Status   |
 |------|--------------------------------------------------------|----------|
-| 0001 | [Use ConPTY for the embedded terminal](0001-conpty-for-embedded-terminal.md) | Accepted |
+| 0001 | [Use ConPTY for the embedded terminal](0001-conpty-for-embedded-terminal.md) | Proposed |
 | 0002 | [Read Copilot CLI's session storage directly](0002-read-copilot-cli-storage-directly.md) | Accepted |
 | 0003 | [Versioned adapter layer for Copilot CLI compatibility](0003-versioned-cli-adapter.md) | Accepted |
 | 0004 | [Encrypt app DB at rest with DPAPI](0004-encrypt-app-db-with-dpapi.md) | Accepted |
