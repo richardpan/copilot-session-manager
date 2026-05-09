@@ -1,9 +1,16 @@
 using System;
+using System.IO;
+using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CopilotSessionManager.Core.Configuration;
+using CopilotSessionManager.Core.Logging;
+using CopilotSessionManager.Core.Settings;
+using CopilotSessionManager.Logging;
+using CopilotSessionManager.Services;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Win32;
 
 namespace CopilotSessionManager.ViewModels;
 
@@ -14,6 +21,10 @@ public sealed partial class MainWindowViewModel : ObservableObject
 {
     private readonly ILogger<MainWindowViewModel> _logger;
     private readonly IServiceProvider _serviceProvider;
+    private readonly IAppSettingsStore _settingsStore;
+    private readonly ILogBundler _logBundler;
+    private readonly LogLevelSwitchAccessor _levelSwitch;
+    private readonly IFileLauncher _fileLauncher;
 
     [ObservableProperty]
     private string _title = $"{AppMetadata.ProductName} {AppMetadata.Version}";
@@ -24,18 +35,35 @@ public sealed partial class MainWindowViewModel : ObservableObject
     [ObservableProperty]
     private string _statusBarText = $"v{AppMetadata.Version} — ready";
 
+    [ObservableProperty]
+    private bool _isVerboseLogging;
+
     public MainWindowViewModel(
         SessionsViewModel sessions,
         IServiceProvider serviceProvider,
+        IAppSettingsStore settingsStore,
+        ILogBundler logBundler,
+        LogLevelSwitchAccessor levelSwitch,
+        IFileLauncher fileLauncher,
         ILogger<MainWindowViewModel> logger)
     {
         ArgumentNullException.ThrowIfNull(sessions);
         ArgumentNullException.ThrowIfNull(serviceProvider);
+        ArgumentNullException.ThrowIfNull(settingsStore);
+        ArgumentNullException.ThrowIfNull(logBundler);
+        ArgumentNullException.ThrowIfNull(levelSwitch);
+        ArgumentNullException.ThrowIfNull(fileLauncher);
         ArgumentNullException.ThrowIfNull(logger);
 
         Sessions = sessions;
         _serviceProvider = serviceProvider;
+        _settingsStore = settingsStore;
+        _logBundler = logBundler;
+        _levelSwitch = levelSwitch;
+        _fileLauncher = fileLauncher;
         _logger = logger;
+
+        _isVerboseLogging = _levelSwitch.IsVerbose;
         _logger.LogInformation("MainWindowViewModel constructed.");
     }
 
@@ -59,6 +87,75 @@ public sealed partial class MainWindowViewModel : ObservableObject
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to open onboarding window from Help menu.");
+        }
+    }
+
+    /// <summary>Opens the per-user log folder in Explorer.</summary>
+    [RelayCommand]
+    public async Task OpenLogFolderAsync()
+    {
+        try
+        {
+            Directory.CreateDirectory(AppPaths.LogsDirectory);
+            await _fileLauncher.OpenAsync(AppPaths.LogsDirectory).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to open log folder.");
+        }
+    }
+
+    /// <summary>Prompts for a destination zip and bundles the current logs.</summary>
+    [RelayCommand]
+    public async Task BundleLogsAsync()
+    {
+        try
+        {
+            var dialog = new SaveFileDialog
+            {
+                Title = "Save Copilot Session Manager log bundle",
+                Filter = "Zip archive (*.zip)|*.zip",
+                FileName = $"copilot-session-manager-logs-{DateTime.UtcNow:yyyyMMdd-HHmmss}.zip",
+                AddExtension = true,
+                DefaultExt = ".zip",
+                OverwritePrompt = true,
+            };
+
+            var owner = System.Windows.Application.Current?.MainWindow;
+            var picked = owner is null ? dialog.ShowDialog() : dialog.ShowDialog(owner);
+            if (picked != true)
+            {
+                return;
+            }
+
+            var result = await _logBundler.BundleAsync(dialog.FileName).ConfigureAwait(false);
+            StatusBarText = $"Bundled {result.FileCount} log file(s) → {Path.GetFileName(result.DestinationPath)}";
+            _logger.LogInformation(
+                "Wrote log bundle to {DestinationPath} ({FileCount} files, {TotalBytes} bytes).",
+                result.DestinationPath, result.FileCount, result.TotalBytes);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to bundle logs.");
+            StatusBarText = "Failed to bundle logs — see app log.";
+        }
+    }
+
+    /// <summary>Toggles between Information and Debug verbosity, live + persisted.</summary>
+    [RelayCommand]
+    public async Task ToggleVerboseLoggingAsync()
+    {
+        try
+        {
+            _levelSwitch.SetVerbose(IsVerboseLogging);
+            var settings = await _settingsStore.LoadAsync().ConfigureAwait(false);
+            settings.LogLevel = IsVerboseLogging ? "Debug" : "Information";
+            await _settingsStore.SaveAsync(settings).ConfigureAwait(false);
+            _logger.LogInformation("Log level switched to {LogLevel}.", settings.LogLevel);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to persist verbose logging setting.");
         }
     }
 }

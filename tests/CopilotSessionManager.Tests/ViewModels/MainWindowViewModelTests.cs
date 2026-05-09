@@ -2,20 +2,29 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using CopilotSessionManager.Core.Logging;
 using CopilotSessionManager.Core.Models;
 using CopilotSessionManager.Core.Sessions;
+using CopilotSessionManager.Core.Settings;
+using CopilotSessionManager.Logging;
 using CopilotSessionManager.Services;
 using CopilotSessionManager.ViewModels;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using Serilog.Core;
+using Serilog.Events;
 using Xunit;
 
 namespace CopilotSessionManager.Tests.ViewModels;
 
 public class MainWindowViewModelTests
 {
-    private static MainWindowViewModel CreateSut()
+    private static MainWindowViewModel CreateSut(
+        FakeAppSettingsStore? settingsStore = null,
+        FakeLogBundler? logBundler = null,
+        LogLevelSwitchAccessor? levelSwitch = null,
+        FakeFileLauncher? fileLauncher = null)
     {
         var sessions = new SessionsViewModel(
             new FakeDiscoveryService(),
@@ -28,6 +37,10 @@ public class MainWindowViewModelTests
         return new MainWindowViewModel(
             sessions,
             new ServiceCollection().BuildServiceProvider(),
+            settingsStore ?? new FakeAppSettingsStore(),
+            logBundler ?? new FakeLogBundler(),
+            levelSwitch ?? new LogLevelSwitchAccessor(new LoggingLevelSwitch(LogEventLevel.Information)),
+            fileLauncher ?? new FakeFileLauncher(),
             NullLogger<MainWindowViewModel>.Instance);
     }
 
@@ -77,6 +90,45 @@ public class MainWindowViewModelTests
         raised.Should().BeTrue();
     }
 
+    [Fact]
+    public void IsVerboseLogging_DefaultsFromSwitch_AndIsFalseAtInformation()
+    {
+        var sut = CreateSut();
+        sut.IsVerboseLogging.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task ToggleVerboseLogging_FlipsLevel_AndPersists()
+    {
+        var levelSwitch = new LoggingLevelSwitch(LogEventLevel.Information);
+        var accessor = new LogLevelSwitchAccessor(levelSwitch);
+        var settings = new FakeAppSettingsStore();
+        var sut = CreateSut(settingsStore: settings, levelSwitch: accessor);
+
+        sut.IsVerboseLogging = true;
+        await sut.ToggleVerboseLoggingCommand.ExecuteAsync(null);
+
+        levelSwitch.MinimumLevel.Should().Be(LogEventLevel.Debug);
+        settings.LastSaved!.LogLevel.Should().Be("Debug");
+
+        sut.IsVerboseLogging = false;
+        await sut.ToggleVerboseLoggingCommand.ExecuteAsync(null);
+
+        levelSwitch.MinimumLevel.Should().Be(LogEventLevel.Information);
+        settings.LastSaved!.LogLevel.Should().Be("Information");
+    }
+
+    [Fact]
+    public async Task OpenLogFolder_DelegatesToFileLauncher()
+    {
+        var launcher = new FakeFileLauncher();
+        var sut = CreateSut(fileLauncher: launcher);
+
+        await sut.OpenLogFolderCommand.ExecuteAsync(null);
+
+        launcher.OpenedPaths.Should().ContainSingle();
+    }
+
     private sealed class FakeDiscoveryService : ISessionDiscoveryService
     {
         public IReadOnlyList<Session> CurrentSessions { get; } = Array.Empty<Session>();
@@ -115,7 +167,34 @@ public class MainWindowViewModelTests
 
     private sealed class FakeFileLauncher : IFileLauncher
     {
-        public Task OpenAsync(string path, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public List<string> OpenedPaths { get; } = new();
+        public Task OpenAsync(string path, CancellationToken cancellationToken = default)
+        {
+            OpenedPaths.Add(path);
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed class FakeAppSettingsStore : IAppSettingsStore
+    {
+        public AppSettings Current { get; set; } = new();
+        public AppSettings? LastSaved { get; private set; }
+
+        public Task<AppSettings> LoadAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult(Current);
+
+        public Task SaveAsync(AppSettings settings, CancellationToken cancellationToken = default)
+        {
+            Current = settings;
+            LastSaved = settings;
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed class FakeLogBundler : ILogBundler
+    {
+        public Task<LogBundleResult> BundleAsync(string destinationPath, CancellationToken cancellationToken = default) =>
+            Task.FromResult(new LogBundleResult(destinationPath, FileCount: 0, TotalBytes: 0));
     }
 
     private sealed class SyncDispatcher : IUiDispatcher
