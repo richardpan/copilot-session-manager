@@ -1,0 +1,62 @@
+# Build artifacts
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+out/
+build/
+artifacts/
+
+# .NET
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+*.userprefs
+.vs/
+.vshistory/
+.vscode/
+.idea/
+
+# NuGet
+*.nuget.props
+*.nuget.targets
+project.lock.json
+project.fragment.lock.json
+artifacts/
+
+# Rider
+.idea/
+*.iml
+
+# JetBrains
+_ReSharper*/
+*.[Rr]e[Ss]harper
+*.DotSettings.user
+
+# OS
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+.DS_Store
+
+# Test results
+TestResults/
+*.coverage
+*.coveragexml
+coverage*.xml
+*.trx
+
+# Publish
+publish/
+*.pubxml.user
+
+# Tooling
+.tools/
+.config/
+
+# Local secrets / settings
+appsettings.Development.json
+appsettings.Local.json
+*.key
+secrets.json
