@@ -18,14 +18,17 @@ public sealed partial class MainWindowViewModel : ObservableObject
     private string _headerText = AppMetadata.ProductName;
 
     [ObservableProperty]
-    private string _welcomeText = "Welcome.";
-
-    [ObservableProperty]
     private string _statusBarText = $"v{AppMetadata.Version} — ready";
 
-    public MainWindowViewModel(ILogger<MainWindowViewModel> logger)
+    public MainWindowViewModel(SessionsViewModel sessions, ILogger<MainWindowViewModel> logger)
     {
+        ArgumentNullException.ThrowIfNull(sessions);
+        ArgumentNullException.ThrowIfNull(logger);
+
+        Sessions = sessions;
         _logger = logger;
         _logger.LogInformation("MainWindowViewModel constructed.");
     }
+
+    public SessionsViewModel Sessions { get; }
 }

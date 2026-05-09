@@ -1,4 +1,9 @@
 using System;
+using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
+using CopilotSessionManager.Core.Models;
+using CopilotSessionManager.Core.Sessions;
 using CopilotSessionManager.ViewModels;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -8,8 +13,15 @@ namespace CopilotSessionManager.Tests.ViewModels;
 
 public class MainWindowViewModelTests
 {
-    private static MainWindowViewModel CreateSut() =>
-        new(NullLogger<MainWindowViewModel>.Instance);
+    private static MainWindowViewModel CreateSut()
+    {
+        var sessions = new SessionsViewModel(
+            new FakeDiscoveryService(),
+            new SyncDispatcher(),
+            TimeProvider.System,
+            NullLogger<SessionsViewModel>.Instance);
+        return new MainWindowViewModel(sessions, NullLogger<MainWindowViewModel>.Instance);
+    }
 
     [Fact]
     public void Title_DefaultsToProductAndVersion()
@@ -26,17 +38,17 @@ public class MainWindowViewModelTests
     }
 
     [Fact]
-    public void WelcomeText_HasDefault()
-    {
-        var sut = CreateSut();
-        sut.WelcomeText.Should().NotBeNullOrWhiteSpace();
-    }
-
-    [Fact]
     public void StatusBarText_HasDefault()
     {
         var sut = CreateSut();
         sut.StatusBarText.Should().NotBeNullOrWhiteSpace();
+    }
+
+    [Fact]
+    public void Sessions_IsNotNull()
+    {
+        var sut = CreateSut();
+        sut.Sessions.Should().NotBeNull();
     }
 
     [Fact]
@@ -46,14 +58,32 @@ public class MainWindowViewModelTests
         var raised = false;
         sut.PropertyChanged += (_, e) =>
         {
-            if (e.PropertyName == nameof(MainWindowViewModel.WelcomeText))
+            if (e.PropertyName == nameof(MainWindowViewModel.HeaderText))
             {
                 raised = true;
             }
         };
 
-        sut.WelcomeText = "changed";
+        sut.HeaderText = "changed";
 
         raised.Should().BeTrue();
+    }
+
+    private sealed class FakeDiscoveryService : ISessionDiscoveryService
+    {
+        public IReadOnlyList<Session> CurrentSessions { get; } = Array.Empty<Session>();
+#pragma warning disable CS0067 // Event never invoked: needed only to satisfy the interface.
+        public event EventHandler<SessionsChangedEventArgs>? SessionsChanged;
+#pragma warning restore CS0067
+        public Task<IReadOnlyList<Session>> ScanAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult(CurrentSessions);
+        public Task StartWatchingAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task StopWatchingAsync() => Task.CompletedTask;
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+    }
+
+    private sealed class SyncDispatcher : IUiDispatcher
+    {
+        public void Post(Action action) => action();
     }
 }
