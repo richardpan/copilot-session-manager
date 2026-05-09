@@ -254,6 +254,36 @@ public class SessionsViewModelTests
     }
 
     [Fact]
+    public async Task TierFilter_HidesUncheckedTiers()
+    {
+        // All sessions land under "Unknown" tier because Build() doesn't
+        // populate ModelInfo. Toggling Unknown off should hide all of them;
+        // toggling another tier off should not affect them.
+        var (vm, _, _, _, _) = CreateSut(new[]
+        {
+            Build("a", SessionStatus.Idle),
+            Build("b", SessionStatus.Idle),
+        });
+
+        vm.TierFilters.Should().Contain(c => c.Tier == ModelTier.Unknown);
+        var unknown = vm.TierFilters.Single(c => c.Tier == ModelTier.Unknown);
+        var premium = vm.TierFilters.Single(c => c.Tier == ModelTier.Premium);
+
+        vm.VisibleSessions.Should().HaveCount(2);
+
+        premium.IsVisible = false;
+        vm.VisibleSessions.Should().HaveCount(2, because: "no premium sessions to hide");
+
+        unknown.IsVisible = false;
+        vm.VisibleSessions.Should().BeEmpty();
+
+        unknown.IsVisible = true;
+        vm.VisibleSessions.Should().HaveCount(2);
+
+        await vm.DisposeAsync();
+    }
+
+    [Fact]
     public async Task DisposeAsync_UnsubscribesFromBothEvents()
     {
         var (vm, disc, labels, _, _) = CreateSut(new[] { Build("a", SessionStatus.Idle) });

@@ -16,12 +16,14 @@ public sealed class CopilotCliV1Adapter : ICopilotCliAdapter
 
     private readonly EventsJsonlReader _eventsReader;
     private readonly WorkspaceYamlReader _workspaceReader;
+    private readonly SessionModelInfoReader _modelInfoReader;
 
     public CopilotCliV1Adapter(ILogger<CopilotCliV1Adapter> logger)
     {
         ArgumentNullException.ThrowIfNull(logger);
         _eventsReader = new EventsJsonlReader(logger);
         _workspaceReader = new WorkspaceYamlReader();
+        _modelInfoReader = new SessionModelInfoReader(logger);
     }
 
     public CopilotVersion MinSupported => Min;
@@ -64,6 +66,11 @@ public sealed class CopilotCliV1Adapter : ICopilotCliAdapter
         Stream eventsJsonl,
         CancellationToken cancellationToken = default) =>
         _eventsReader.ReadAsync(eventsJsonl, cancellationToken);
+
+    public Task<SessionModelInfo> ReadSessionModelInfoAsync(
+        Stream eventsJsonl,
+        CancellationToken cancellationToken = default) =>
+        _modelInfoReader.ReadAsync(eventsJsonl, cancellationToken);
 
     public WorkspaceManifest ParseWorkspace(string yaml) =>
         _workspaceReader.Parse(yaml);

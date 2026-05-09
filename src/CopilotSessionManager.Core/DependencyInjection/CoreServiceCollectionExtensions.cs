@@ -1,6 +1,7 @@
 using CopilotSessionManager.Core.Cli;
 using CopilotSessionManager.Core.Cli.Adapters.V1;
 using CopilotSessionManager.Core.Configuration;
+using CopilotSessionManager.Core.Cost;
 using CopilotSessionManager.Core.Sessions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -24,6 +25,8 @@ public static class CoreServiceCollectionExtensions
         services.TryAddEnumerable(
             ServiceDescriptor.Singleton<ICopilotCliAdapter, CopilotCliV1Adapter>());
         services.TryAddSingleton<ICopilotCliAdapterRegistry, CopilotCliAdapterRegistry>();
+        services.TryAddSingleton<IModelCatalog, EmbeddedModelCatalog>();
+        services.TryAddSingleton<IModelCostCalculator, ModelCostCalculator>();
 
         return services;
     }
