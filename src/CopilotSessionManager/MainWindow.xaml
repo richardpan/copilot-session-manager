@@ -133,6 +133,17 @@
                                            FontSize="10"
                                            FontWeight="SemiBold" />
                             </Border>
+                            <Border Background="{Binding CheckBadgeBrush}"
+                                    CornerRadius="3"
+                                    Padding="5,1"
+                                    Margin="3,2,0,0"
+                                    ToolTip="{Binding CheckTooltip}"
+                                    Visibility="{Binding HasChecks, Converter={StaticResource BoolToVisibility}}">
+                                <TextBlock Text="{Binding CheckBadgeText}"
+                                           Foreground="#11111B"
+                                           FontSize="10"
+                                           FontWeight="SemiBold" />
+                            </Border>
                         </StackPanel>
 
                         <StackPanel Orientation="Horizontal" Margin="0,4,0,0">

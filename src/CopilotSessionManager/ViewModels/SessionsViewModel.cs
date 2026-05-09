@@ -8,6 +8,7 @@ using CommunityToolkit.Mvvm.Input;
 using CopilotSessionManager.Core.Cli;
 using CopilotSessionManager.Core.Cost;
 using CopilotSessionManager.Core.GitHub;
+using CopilotSessionManager.Core.GitHub.Checks;
 using CopilotSessionManager.Core.Models;
 using CopilotSessionManager.Core.Sessions;
 using CopilotSessionManager.Services;
@@ -32,6 +33,7 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
     private readonly IModelCatalog? _modelCatalog;
     private readonly IModelCostCalculator? _costCalculator;
     private readonly IGitHubClient? _githubClient;
+    private readonly IGitHubChecksClient? _checksClient;
     private readonly ISessionLockCleanup? _lockCleanup;
     private readonly ISessionLauncher? _sessionLauncher;
     private readonly ILoggerFactory? _loggerFactory;
@@ -113,6 +115,34 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
         ISessionLauncher? sessionLauncher,
         ILoggerFactory? loggerFactory,
         ILogger<SessionsViewModel> logger)
+        : this(discovery, labelStore, readmeService, fileLauncher, dispatcher,
+            timeProvider, modelCatalog, costCalculator, githubClient,
+            checksClient: null, lockCleanup, sessionLauncher, loggerFactory, logger)
+    {
+    }
+
+    /// <summary>
+    /// DI-preferred constructor: when <see cref="IGitHubChecksClient"/> is
+    /// also registered (added by <c>AddGitHubLinks()</c>), this overload is
+    /// selected because it has the most resolvable parameters. Older call
+    /// sites that don't supply a checks client keep working via the
+    /// <c>checksClient: null</c> chain above.
+    /// </summary>
+    public SessionsViewModel(
+        ISessionDiscoveryService discovery,
+        ISessionLabelStore labelStore,
+        ISessionReadmeService readmeService,
+        IFileLauncher fileLauncher,
+        IUiDispatcher dispatcher,
+        TimeProvider timeProvider,
+        IModelCatalog? modelCatalog,
+        IModelCostCalculator? costCalculator,
+        IGitHubClient? githubClient,
+        IGitHubChecksClient? checksClient,
+        ISessionLockCleanup? lockCleanup,
+        ISessionLauncher? sessionLauncher,
+        ILoggerFactory? loggerFactory,
+        ILogger<SessionsViewModel> logger)
     {
         ArgumentNullException.ThrowIfNull(discovery);
         ArgumentNullException.ThrowIfNull(labelStore);
@@ -131,6 +161,7 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
         _modelCatalog = modelCatalog;
         _costCalculator = costCalculator;
         _githubClient = githubClient;
+        _checksClient = checksClient;
         _lockCleanup = lockCleanup;
         _sessionLauncher = sessionLauncher;
         _loggerFactory = loggerFactory;
@@ -473,6 +504,34 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
                             card.SetPullRequest(pr);
                         }
                     });
+
+                    // Once we have a PR number, kick off the CI rollup
+                    // probe. Best-effort and independent — failures here
+                    // just leave the check badge empty.
+                    if (pr is not null && _checksClient is not null)
+                    {
+                        try
+                        {
+                            var checks = await _checksClient
+                                .GetChecksAsync(repoSlug, pr.Number, CancellationToken.None)
+                                .ConfigureAwait(false);
+                            _dispatcher.Post(() =>
+                            {
+                                if (_byId.TryGetValue(sessionId, out var card))
+                                {
+                                    card.SetChecks(checks);
+                                }
+                            });
+                        }
+                        catch (Exception checksEx)
+                        {
+                            _logger.LogDebug(
+                                checksEx,
+                                "PR checks lookup failed for {Slug}#{Pr}",
+                                repoSlug,
+                                pr.Number);
+                        }
+                    }
                 }
                 catch (Exception ex)
                 {
