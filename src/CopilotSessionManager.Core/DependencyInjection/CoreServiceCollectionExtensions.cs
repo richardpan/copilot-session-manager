@@ -47,9 +47,30 @@ public static class CoreServiceCollectionExtensions
         services.AddSessionLabels();
         services.AddSessionReadme();
         services.AddGitHubLinks();
+        services.AddSessionLifecycle();
         services.TryAddSingleton<ICopilotPaths, DefaultCopilotPaths>();
         services.TryAddSingleton<ISessionStore, SessionStore>();
         services.TryAddSingleton<ISessionDiscoveryService, SessionDiscoveryService>();
+
+        return services;
+    }
+
+    /// <summary>
+    /// Registers session-lifecycle services: stale lock cleanup and the
+    /// external-PowerShell session launcher used by the "Resume" action on
+    /// crashed sessions. Safe to call multiple times.
+    /// </summary>
+    public static IServiceCollection AddSessionLifecycle(this IServiceCollection services)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        services.TryAddSingleton<ICopilotPaths, DefaultCopilotPaths>();
+        services.TryAddSingleton<IProcessChecker, ProcessChecker>();
+        services.TryAddSingleton<ISessionLockMonitor, SessionLockMonitor>();
+        services.TryAddSingleton<ISessionLockCleanup, SessionLockCleanup>();
+        services.TryAddSingleton<IProcessLauncher, ProcessLauncher>();
+        services.TryAddSingleton<IPowerShellHostResolver, PathPowerShellHostResolver>();
+        services.TryAddSingleton<ISessionLauncher, PowerShellSessionLauncher>();
 
         return services;
     }

@@ -8,7 +8,10 @@ using CommunityToolkit.Mvvm.Input;
 using CopilotSessionManager.Core.Cli;
 using CopilotSessionManager.Core.Cost;
 using CopilotSessionManager.Core.Models;
+using CopilotSessionManager.Core.Sessions;
 using CopilotSessionManager.Services;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace CopilotSessionManager.ViewModels;
 
@@ -26,19 +29,23 @@ public sealed partial class SessionCardViewModel : ObservableObject
     private readonly IModelCatalog? _modelCatalog;
     private readonly IModelCostCalculator? _costCalculator;
     private readonly IFileLauncher? _fileLauncher;
+    private readonly ISessionLockCleanup? _lockCleanup;
+    private readonly ISessionLauncher? _sessionLauncher;
+    private readonly ILogger _logger;
+    private string? _lastActionMessage;
 
     public SessionCardViewModel(Session model)
-        : this(model, SessionType.Exploratory, TimeProvider.System, modelCatalog: null, costCalculator: null, fileLauncher: null)
+        : this(model, SessionType.Exploratory, TimeProvider.System, modelCatalog: null, costCalculator: null, fileLauncher: null, lockCleanup: null, sessionLauncher: null, logger: null)
     {
     }
 
     public SessionCardViewModel(Session model, TimeProvider timeProvider)
-        : this(model, SessionType.Exploratory, timeProvider, modelCatalog: null, costCalculator: null, fileLauncher: null)
+        : this(model, SessionType.Exploratory, timeProvider, modelCatalog: null, costCalculator: null, fileLauncher: null, lockCleanup: null, sessionLauncher: null, logger: null)
     {
     }
 
     public SessionCardViewModel(Session model, SessionType label, TimeProvider timeProvider)
-        : this(model, label, timeProvider, modelCatalog: null, costCalculator: null, fileLauncher: null)
+        : this(model, label, timeProvider, modelCatalog: null, costCalculator: null, fileLauncher: null, lockCleanup: null, sessionLauncher: null, logger: null)
     {
     }
 
@@ -48,7 +55,7 @@ public sealed partial class SessionCardViewModel : ObservableObject
         TimeProvider timeProvider,
         IModelCatalog? modelCatalog,
         IModelCostCalculator? costCalculator)
-        : this(model, label, timeProvider, modelCatalog, costCalculator, fileLauncher: null)
+        : this(model, label, timeProvider, modelCatalog, costCalculator, fileLauncher: null, lockCleanup: null, sessionLauncher: null, logger: null)
     {
     }
 
@@ -59,6 +66,20 @@ public sealed partial class SessionCardViewModel : ObservableObject
         IModelCatalog? modelCatalog,
         IModelCostCalculator? costCalculator,
         IFileLauncher? fileLauncher)
+        : this(model, label, timeProvider, modelCatalog, costCalculator, fileLauncher, lockCleanup: null, sessionLauncher: null, logger: null)
+    {
+    }
+
+    public SessionCardViewModel(
+        Session model,
+        SessionType label,
+        TimeProvider timeProvider,
+        IModelCatalog? modelCatalog,
+        IModelCostCalculator? costCalculator,
+        IFileLauncher? fileLauncher,
+        ISessionLockCleanup? lockCleanup,
+        ISessionLauncher? sessionLauncher,
+        ILogger? logger)
     {
         ArgumentNullException.ThrowIfNull(model);
         ArgumentNullException.ThrowIfNull(timeProvider);
@@ -69,8 +90,13 @@ public sealed partial class SessionCardViewModel : ObservableObject
         _modelCatalog = modelCatalog;
         _costCalculator = costCalculator;
         _fileLauncher = fileLauncher;
+        _lockCleanup = lockCleanup;
+        _sessionLauncher = sessionLauncher;
+        _logger = logger ?? NullLogger.Instance;
 
         OpenUrlCommand = new AsyncRelayCommand<string?>(OpenUrlAsync, CanOpenUrl);
+        CleanupStaleLocksCommand = new AsyncRelayCommand(CleanupStaleLocksAsync, CanCleanupStaleLocks);
+        ResumeCommand = new AsyncRelayCommand(ResumeAsync, CanResume);
     }
 
     public Session Model => _model;
@@ -132,9 +158,13 @@ public sealed partial class SessionCardViewModel : ObservableObject
         SessionStatus.AwaitingInput => "Awaiting input",
         SessionStatus.Idle => "Idle",
         SessionStatus.Inactive => "Inactive",
-        SessionStatus.Orphaned => "Orphaned",
+        SessionStatus.Orphaned => "Crashed",
         _ => "Unknown",
     };
+
+    /// <summary>True when the session is a crashed (orphaned) session that
+    /// has stale lock files left behind by a dead process.</summary>
+    public bool IsCrashed => _model.Status == SessionStatus.Orphaned;
 
     /// <summary>Color used for the status pill / left edge accent.</summary>
     public Brush StatusBrush => _model.Status switch
@@ -312,6 +342,84 @@ public sealed partial class SessionCardViewModel : ObservableObject
     public ICommand OpenUrlCommand { get; }
 
     /// <summary>
+    /// Removes stale <c>inuse.*.lock</c> files for this session. Visible only
+    /// when <see cref="IsCrashed"/> is true. Posts a status message after
+    /// running.
+    /// </summary>
+    public IAsyncRelayCommand CleanupStaleLocksCommand { get; }
+
+    /// <summary>
+    /// Spawns an external PowerShell window running
+    /// <c>copilot --resume &lt;id&gt;</c>. Cleans up stale lock files first.
+    /// Visible only when <see cref="IsCrashed"/> is true.
+    /// </summary>
+    public IAsyncRelayCommand ResumeCommand { get; }
+
+    /// <summary>
+    /// Last result string from a card-level action (cleanup or resume), or
+    /// null if no action has been invoked yet. Bound by tests; XAML can
+    /// surface it via tooltip if desired.
+    /// </summary>
+    public string? LastActionMessage
+    {
+        get => _lastActionMessage;
+        private set => SetProperty(ref _lastActionMessage, value);
+    }
+
+    private bool CanCleanupStaleLocks() => IsCrashed && _lockCleanup is not null;
+
+    private async Task CleanupStaleLocksAsync()
+    {
+        if (_lockCleanup is null)
+        {
+            return;
+        }
+        try
+        {
+            var removed = await _lockCleanup.CleanupAsync(_model.Id).ConfigureAwait(true);
+            LastActionMessage = removed == 0
+                ? "No stale locks to remove."
+                : removed == 1
+                    ? "Removed 1 stale lock."
+                    : $"Removed {removed} stale locks.";
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to clean up stale locks for {SessionId}.", _model.Id);
+            LastActionMessage = $"Cleanup failed: {ex.Message}";
+        }
+    }
+
+    private bool CanResume() => IsCrashed && _sessionLauncher is not null;
+
+    private async Task ResumeAsync()
+    {
+        if (_sessionLauncher is null)
+        {
+            return;
+        }
+        try
+        {
+            // Best-effort: nuke stale locks first so the resumed CLI doesn't
+            // trip over them. Failures here don't block the launch.
+            if (_lockCleanup is not null)
+            {
+                try
+                { await _lockCleanup.CleanupAsync(_model.Id).ConfigureAwait(true); }
+                catch (Exception ex) { _logger.LogWarning(ex, "Pre-resume cleanup failed for {SessionId}.", _model.Id); }
+            }
+
+            var result = await _sessionLauncher.LaunchAsync(_model.Id, _model.Cwd).ConfigureAwait(true);
+            LastActionMessage = $"Launched PowerShell (pid {result.ProcessId?.ToString() ?? "?"}).";
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to resume session {SessionId}.", _model.Id);
+            LastActionMessage = $"Resume failed: {ex.Message}";
+        }
+    }
+
+    /// <summary>
     /// Replaces the cached PR for this card with <paramref name="info"/>
     /// (or clears it when null). Raises change notifications for every
     /// PR-derived property so the badge updates without a full UpdateFrom.
@@ -373,6 +481,9 @@ public sealed partial class SessionCardViewModel : ObservableObject
         OnPropertyChanged(nameof(Status));
         OnPropertyChanged(nameof(StatusLabel));
         OnPropertyChanged(nameof(StatusBrush));
+        OnPropertyChanged(nameof(IsCrashed));
+        CleanupStaleLocksCommand.NotifyCanExecuteChanged();
+        ResumeCommand.NotifyCanExecuteChanged();
         OnPropertyChanged(nameof(UpdatedRelative));
         OnPropertyChanged(nameof(Age));
         OnPropertyChanged(nameof(LockSummary));
