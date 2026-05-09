@@ -172,6 +172,72 @@ public class SessionCardViewModelTests
         b.Should().Throw<ArgumentNullException>();
     }
 
+    [Theory]
+    [InlineData(SessionType.Exploratory, "Exploratory")]
+    [InlineData(SessionType.Research, "Research")]
+    [InlineData(SessionType.Feature, "Feature")]
+    [InlineData(SessionType.Bug, "Bug")]
+    [InlineData(SessionType.Refactor, "Refactor")]
+    [InlineData(SessionType.Docs, "Docs")]
+    [InlineData(SessionType.Infra, "Infra")]
+    [InlineData(SessionType.Experiment, "Experiment")]
+    public void LabelText_MatchesEnum(SessionType type, string expected)
+    {
+        var sut = new SessionCardViewModel(BuildSession(), type, TimeAt(Now));
+        sut.LabelText.Should().Be(expected);
+    }
+
+    [Fact]
+    public void LabelBrush_DiffersAcrossTypes()
+    {
+        var bug = new SessionCardViewModel(BuildSession(), SessionType.Bug, TimeAt(Now)).LabelBrush;
+        var feat = new SessionCardViewModel(BuildSession(), SessionType.Feature, TimeAt(Now)).LabelBrush;
+        ((SolidColorBrush)bug).Color.Should().NotBe(((SolidColorBrush)feat).Color);
+    }
+
+    [Fact]
+    public void DefaultLabel_IsExploratory()
+    {
+        new SessionCardViewModel(BuildSession()).Label.Should().Be(SessionType.Exploratory);
+        new SessionCardViewModel(BuildSession(), TimeAt(Now)).Label.Should().Be(SessionType.Exploratory);
+    }
+
+    [Fact]
+    public void UpdateLabel_RaisesChangeNotifications()
+    {
+        var sut = new SessionCardViewModel(BuildSession(), SessionType.Exploratory, TimeAt(Now));
+        var changed = new List<string>();
+        sut.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName is not null)
+            {
+                changed.Add(e.PropertyName);
+            }
+        };
+
+        sut.UpdateLabel(SessionType.Bug);
+
+        changed.Should().Contain(new[]
+        {
+            nameof(SessionCardViewModel.Label),
+            nameof(SessionCardViewModel.LabelText),
+            nameof(SessionCardViewModel.LabelBrush),
+        });
+        sut.Label.Should().Be(SessionType.Bug);
+    }
+
+    [Fact]
+    public void UpdateLabel_SameValue_NoOp()
+    {
+        var sut = new SessionCardViewModel(BuildSession(), SessionType.Bug, TimeAt(Now));
+        var fired = 0;
+        sut.PropertyChanged += (_, _) => fired++;
+
+        sut.UpdateLabel(SessionType.Bug);
+
+        fired.Should().Be(0);
+    }
+
     private sealed class FixedTimeProvider : TimeProvider
     {
         private readonly DateTimeOffset _now;

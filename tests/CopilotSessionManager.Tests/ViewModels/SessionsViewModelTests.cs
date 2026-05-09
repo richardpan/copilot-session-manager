@@ -34,35 +34,45 @@ public class SessionsViewModelTests
             CopilotVersion: CopilotVersion.Zero,
             Locks: Array.Empty<SessionLockInfo>());
 
-    private static (SessionsViewModel vm, FakeDiscoveryService disc) CreateSut(
+    private static (SessionsViewModel vm, FakeDiscoveryService disc, FakeLabelStore labels) CreateSut(
         IEnumerable<Session>? initial = null,
-        bool startWatcher = true)
+        bool startWatcher = true,
+        IEnumerable<KeyValuePair<string, SessionType>>? seedLabels = null)
     {
         var tp = new FixedTimeProvider(Now);
         var disc = new FakeDiscoveryService(initial?.ToArray() ?? Array.Empty<Session>());
-        var vm = new SessionsViewModel(disc, new SyncDispatcher(), tp, NullLogger<SessionsViewModel>.Instance);
+        var labels = new FakeLabelStore();
+        if (seedLabels is not null)
+        {
+            foreach (var kv in seedLabels)
+            {
+                labels.Seed(kv.Key, kv.Value);
+            }
+        }
+        var vm = new SessionsViewModel(disc, labels, new SyncDispatcher(), tp, NullLogger<SessionsViewModel>.Instance);
         if (startWatcher)
         {
             vm.InitializeAsync().GetAwaiter().GetResult();
         }
-        return (vm, disc);
+        return (vm, disc, labels);
     }
 
     [Fact]
     public void Defaults_AreEmpty_AndShowInactiveTrue()
     {
-        var (vm, _) = CreateSut(startWatcher: false);
+        var (vm, _, _) = CreateSut(startWatcher: false);
         vm.ShowInactive.Should().BeTrue();
         vm.Sessions.Should().BeEmpty();
         vm.VisibleSessions.Should().BeEmpty();
         vm.TotalCount.Should().Be(0);
         vm.ActiveCount.Should().Be(0);
+        vm.LabelFilters.Should().HaveCount(8, because: "one chip per SessionType");
     }
 
     [Fact]
     public async Task InitializeAsync_PopulatesSessionsFromInitialScan()
     {
-        var (vm, _) = CreateSut(new[]
+        var (vm, _, _) = CreateSut(new[]
         {
             Build("a", SessionStatus.Working),
             Build("b", SessionStatus.Idle),
@@ -75,9 +85,21 @@ public class SessionsViewModelTests
     }
 
     [Fact]
+    public async Task InitializeAsync_AppliesStoredLabels()
+    {
+        var (vm, _, _) = CreateSut(
+            new[] { Build("a", SessionStatus.Idle), Build("b", SessionStatus.Idle) },
+            seedLabels: new Dictionary<string, SessionType> { ["a"] = SessionType.Bug });
+
+        vm.Sessions.Single(s => s.Id == "a").Label.Should().Be(SessionType.Bug);
+        vm.Sessions.Single(s => s.Id == "b").Label.Should().Be(SessionType.Exploratory);
+        await vm.DisposeAsync();
+    }
+
+    [Fact]
     public async Task InitializeAsync_IsIdempotent()
     {
-        var (vm, disc) = CreateSut(new[] { Build("a", SessionStatus.Working) });
+        var (vm, disc, _) = CreateSut(new[] { Build("a", SessionStatus.Working) });
         var before = disc.StartCalls;
         await vm.InitializeAsync();
         disc.StartCalls.Should().Be(before);
@@ -87,7 +109,7 @@ public class SessionsViewModelTests
     [Fact]
     public async Task SessionsChangedEvent_TriggersInPlaceUpdate()
     {
-        var (vm, disc) = CreateSut(new[] { Build("a", SessionStatus.Idle) });
+        var (vm, disc, _) = CreateSut(new[] { Build("a", SessionStatus.Idle) });
         var card = vm.Sessions[0];
 
         disc.RaiseChanged(new[] { Build("a", SessionStatus.Working) });
@@ -101,7 +123,7 @@ public class SessionsViewModelTests
     [Fact]
     public async Task SessionsChangedEvent_AddsAndRemovesByDiff()
     {
-        var (vm, disc) = CreateSut(new[]
+        var (vm, disc, _) = CreateSut(new[]
         {
             Build("a", SessionStatus.Idle),
             Build("b", SessionStatus.Working),
@@ -120,7 +142,7 @@ public class SessionsViewModelTests
     [Fact]
     public async Task ShowInactive_False_HidesInactiveAndOrphaned()
     {
-        var (vm, _) = CreateSut(new[]
+        var (vm, _, _) = CreateSut(new[]
         {
             Build("w", SessionStatus.Working),
             Build("i", SessionStatus.Idle),
@@ -139,7 +161,7 @@ public class SessionsViewModelTests
     [Fact]
     public async Task ResortInPlace_PutsAwaitingApprovalFirst()
     {
-        var (vm, disc) = CreateSut(new[]
+        var (vm, disc, _) = CreateSut(new[]
         {
             Build("idle", SessionStatus.Idle),
             Build("inactive", SessionStatus.Inactive),
@@ -159,7 +181,7 @@ public class SessionsViewModelTests
     [Fact]
     public async Task ActiveCount_ExcludesInactiveAndOrphaned()
     {
-        var (vm, _) = CreateSut(new[]
+        var (vm, _, _) = CreateSut(new[]
         {
             Build("w", SessionStatus.Working),
             Build("i", SessionStatus.Idle),
@@ -173,15 +195,71 @@ public class SessionsViewModelTests
     }
 
     [Fact]
-    public async Task DisposeAsync_UnsubscribesAndStopsWatcher()
+    public async Task SetLabelAsync_PersistsAndUpdatesCard()
     {
-        var (vm, disc) = CreateSut(new[] { Build("a", SessionStatus.Idle) });
+        var (vm, _, labels) = CreateSut(new[] { Build("a", SessionStatus.Idle) });
+        var card = vm.Sessions[0];
+
+        await vm.SetLabelAsync(card, SessionType.Bug);
+
+        labels.GetSeed("a").Should().Be(SessionType.Bug);
+        card.Label.Should().Be(SessionType.Bug);
+        await vm.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task LabelChangedFromStore_UpdatesMatchingCard()
+    {
+        var (vm, _, labels) = CreateSut(new[] { Build("a", SessionStatus.Idle) });
+        var card = vm.Sessions[0];
+
+        labels.RaiseLabelChanged("a", SessionType.Refactor);
+
+        card.Label.Should().Be(SessionType.Refactor);
+        await vm.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task LabelFilter_HidesUncheckedLabels()
+    {
+        var (vm, _, _) = CreateSut(
+            new[]
+            {
+                Build("a", SessionStatus.Idle),
+                Build("b", SessionStatus.Idle),
+            },
+            seedLabels: new Dictionary<string, SessionType>
+            {
+                ["a"] = SessionType.Bug,
+                ["b"] = SessionType.Feature,
+            });
+
+        vm.VisibleSessions.Should().HaveCount(2);
+
+        var bugChip = vm.LabelFilters.Single(c => c.Type == SessionType.Bug);
+        bugChip.IsVisible = false;
+
+        vm.VisibleSessions.Select(s => s.Id).Should().BeEquivalentTo(new[] { "b" });
+
+        bugChip.IsVisible = true;
+        vm.VisibleSessions.Should().HaveCount(2);
+
+        await vm.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task DisposeAsync_UnsubscribesFromBothEvents()
+    {
+        var (vm, disc, labels) = CreateSut(new[] { Build("a", SessionStatus.Idle) });
         await vm.DisposeAsync();
         disc.StopCalls.Should().Be(1);
 
         // Subsequent events should not crash or update collections.
         disc.RaiseChanged(new[] { Build("b", SessionStatus.Idle) });
+        labels.RaiseLabelChanged("a", SessionType.Bug);
+
         vm.Sessions.Select(s => s.Id).Should().BeEquivalentTo(new[] { "a" });
+        vm.Sessions[0].Label.Should().Be(SessionType.Exploratory);
     }
 
     private sealed class FakeDiscoveryService : ISessionDiscoveryService
@@ -224,6 +302,49 @@ public class SessionsViewModelTests
             _current = new List<Session>(snapshot);
             SessionsChanged?.Invoke(this, new SessionsChangedEventArgs(snapshot));
         }
+    }
+
+    private sealed class FakeLabelStore : ISessionLabelStore
+    {
+        private readonly Dictionary<string, SessionType> _labels = new(StringComparer.OrdinalIgnoreCase);
+
+        public event EventHandler<SessionLabelChangedEventArgs>? LabelChanged;
+
+        public Task<SessionType> GetAsync(string sessionId, CancellationToken cancellationToken = default) =>
+            Task.FromResult(_labels.TryGetValue(sessionId, out var t) ? t : SessionType.Exploratory);
+
+        public Task<IReadOnlyDictionary<string, SessionType>> GetAllAsync(
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyDictionary<string, SessionType>>(
+                new Dictionary<string, SessionType>(_labels, StringComparer.OrdinalIgnoreCase));
+
+        public Task SetAsync(string sessionId, SessionType type, CancellationToken cancellationToken = default)
+        {
+            var changed = !_labels.TryGetValue(sessionId, out var existing) || existing != type;
+            _labels[sessionId] = type;
+            if (changed)
+            {
+                LabelChanged?.Invoke(this, new SessionLabelChangedEventArgs(sessionId, type));
+            }
+            return Task.CompletedTask;
+        }
+
+        public Task RemoveAsync(string sessionId, CancellationToken cancellationToken = default)
+        {
+            if (_labels.Remove(sessionId))
+            {
+                LabelChanged?.Invoke(this, new SessionLabelChangedEventArgs(sessionId, SessionType.Exploratory));
+            }
+            return Task.CompletedTask;
+        }
+
+        public void Seed(string sessionId, SessionType type) => _labels[sessionId] = type;
+
+        public SessionType GetSeed(string sessionId) =>
+            _labels.TryGetValue(sessionId, out var t) ? t : SessionType.Exploratory;
+
+        public void RaiseLabelChanged(string sessionId, SessionType type) =>
+            LabelChanged?.Invoke(this, new SessionLabelChangedEventArgs(sessionId, type));
     }
 
     private sealed class SyncDispatcher : IUiDispatcher

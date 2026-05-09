@@ -15,17 +15,19 @@ namespace CopilotSessionManager.ViewModels;
 /// Top-level view model behind the sessions dashboard. Owns the live
 /// <see cref="ObservableCollection{T}"/> of <see cref="SessionCardViewModel"/>,
 /// subscribes to <see cref="ISessionDiscoveryService.SessionsChanged"/>, and
-/// applies the active-only filter.
+/// applies the active-only + label filters.
 /// </summary>
 public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposable
 {
     private readonly ISessionDiscoveryService _discovery;
+    private readonly ISessionLabelStore _labelStore;
     private readonly IUiDispatcher _dispatcher;
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<SessionsViewModel> _logger;
 
     private readonly Dictionary<string, SessionCardViewModel> _byId =
         new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<SessionType> _hiddenLabels = new();
     private bool _started;
     private bool _disposed;
 
@@ -40,29 +42,40 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
 
     public SessionsViewModel(
         ISessionDiscoveryService discovery,
+        ISessionLabelStore labelStore,
         IUiDispatcher dispatcher,
         TimeProvider timeProvider,
         ILogger<SessionsViewModel> logger)
     {
         ArgumentNullException.ThrowIfNull(discovery);
+        ArgumentNullException.ThrowIfNull(labelStore);
         ArgumentNullException.ThrowIfNull(dispatcher);
         ArgumentNullException.ThrowIfNull(timeProvider);
         ArgumentNullException.ThrowIfNull(logger);
 
         _discovery = discovery;
+        _labelStore = labelStore;
         _dispatcher = dispatcher;
         _timeProvider = timeProvider;
         _logger = logger;
 
         Sessions = new ObservableCollection<SessionCardViewModel>();
         VisibleSessions = new ObservableCollection<SessionCardViewModel>();
+        LabelFilters = new ObservableCollection<LabelFilterChip>();
+        foreach (var t in Enum.GetValues<SessionType>())
+        {
+            LabelFilters.Add(new LabelFilterChip(t, isVisible: true, this));
+        }
     }
 
     /// <summary>The full set of discovered sessions (unfiltered).</summary>
     public ObservableCollection<SessionCardViewModel> Sessions { get; }
 
-    /// <summary>Sessions after the active-only filter has been applied.</summary>
+    /// <summary>Sessions after the active-only + label filters have been applied.</summary>
     public ObservableCollection<SessionCardViewModel> VisibleSessions { get; }
+
+    /// <summary>One filter chip per <see cref="SessionType"/>.</summary>
+    public ObservableCollection<LabelFilterChip> LabelFilters { get; }
 
     public int TotalCount => Sessions.Count;
 
@@ -100,11 +113,13 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
             StatusMessage = "Scanning sessions…";
 
             _discovery.SessionsChanged += OnSessionsChanged;
+            _labelStore.LabelChanged += OnLabelChangedFromStore;
             await _discovery.StartWatchingAsync(cancellationToken).ConfigureAwait(false);
 
             // StartWatchingAsync does an initial scan internally and updates
             // CurrentSessions; mirror it now so the UI has data immediately.
-            ApplySnapshot(_discovery.CurrentSessions);
+            await ApplySnapshotAsync(_discovery.CurrentSessions, cancellationToken)
+                .ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -125,7 +140,7 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
             IsLoading = true;
             StatusMessage = "Rescanning…";
             var sessions = await _discovery.ScanAsync(cancellationToken).ConfigureAwait(false);
-            ApplySnapshot(sessions);
+            await ApplySnapshotAsync(sessions, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -138,15 +153,88 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
         }
     }
 
+    /// <summary>
+    /// Persists <paramref name="type"/> as the user-assigned label for
+    /// <paramref name="card"/>. The store will raise <see cref="ISessionLabelStore.LabelChanged"/>,
+    /// which updates the matching card on the UI thread.
+    /// </summary>
+    public async Task SetLabelAsync(
+        SessionCardViewModel card,
+        SessionType type,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(card);
+        try
+        {
+            await _labelStore.SetAsync(card.Id, type, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to set label for session {Id}.", card.Id);
+            StatusMessage = $"Could not set label: {ex.Message}";
+        }
+    }
+
     partial void OnShowInactiveChanged(bool value) => RebuildVisible();
 
     private void OnSessionsChanged(object? sender, SessionsChangedEventArgs e)
     {
         // Marshal to the UI thread so ObservableCollection mutations are safe.
-        _dispatcher.Post(() => ApplySnapshot(e.Sessions));
+        _dispatcher.Post(() =>
+        {
+            // Fire-and-forget: ApplySnapshotAsync awaits the label store but
+            // mutations of the observable collections happen synchronously
+            // before the first await, then again after labels are loaded.
+            _ = ApplySnapshotAsync(e.Sessions, CancellationToken.None);
+        });
     }
 
-    private void ApplySnapshot(IReadOnlyList<Session> snapshot)
+    private void OnLabelChangedFromStore(object? sender, SessionLabelChangedEventArgs e)
+    {
+        _dispatcher.Post(() =>
+        {
+            if (_byId.TryGetValue(e.SessionId, out var card))
+            {
+                card.UpdateLabel(e.NewType);
+                if (_hiddenLabels.Count > 0)
+                {
+                    RebuildVisible();
+                }
+            }
+        });
+    }
+
+    private async Task ApplySnapshotAsync(
+        IReadOnlyList<Session> snapshot,
+        CancellationToken cancellationToken)
+    {
+        // Pre-fetch labels for any newly-seen sessions before we touch the UI
+        // collections so the first paint already has the right chip color.
+        var newLabels = new Dictionary<string, SessionType>(StringComparer.OrdinalIgnoreCase);
+        foreach (var session in snapshot)
+        {
+            if (!_byId.ContainsKey(session.Id))
+            {
+                try
+                {
+                    newLabels[session.Id] = await _labelStore
+                        .GetAsync(session.Id, cancellationToken)
+                        .ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogDebug(ex, "Could not read label for {Id}; using default.", session.Id);
+                    newLabels[session.Id] = SessionType.Exploratory;
+                }
+            }
+        }
+
+        _dispatcher.Post(() => ApplySnapshot(snapshot, newLabels));
+    }
+
+    private void ApplySnapshot(
+        IReadOnlyList<Session> snapshot,
+        IReadOnlyDictionary<string, SessionType> newLabels)
     {
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var inserted = false;
@@ -161,7 +249,8 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
             }
             else
             {
-                var card = new SessionCardViewModel(session, _timeProvider);
+                var label = newLabels.TryGetValue(session.Id, out var t) ? t : SessionType.Exploratory;
+                var card = new SessionCardViewModel(session, label, _timeProvider);
                 _byId[session.Id] = card;
                 Sessions.Add(card);
                 inserted = true;
@@ -218,10 +307,23 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
         VisibleSessions.Clear();
         foreach (var card in Sessions)
         {
-            if (ShowInactive || IsActive(card.Status))
+            if ((ShowInactive || IsActive(card.Status)) && !_hiddenLabels.Contains(card.Label))
             {
                 VisibleSessions.Add(card);
             }
+        }
+    }
+
+    /// <summary>
+    /// Toggles whether sessions of <paramref name="type"/> are visible. Used
+    /// by <see cref="LabelFilterChip"/> bindings.
+    /// </summary>
+    internal void SetLabelVisible(SessionType type, bool isVisible)
+    {
+        var changed = isVisible ? _hiddenLabels.Remove(type) : _hiddenLabels.Add(type);
+        if (changed)
+        {
+            RebuildVisible();
         }
     }
 
@@ -251,6 +353,7 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
         _disposed = true;
 
         _discovery.SessionsChanged -= OnSessionsChanged;
+        _labelStore.LabelChanged -= OnLabelChangedFromStore;
         try
         {
             await _discovery.StopWatchingAsync().ConfigureAwait(false);
@@ -260,4 +363,42 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
             _logger.LogDebug(ex, "Error stopping discovery watcher.");
         }
     }
+}
+
+/// <summary>
+/// Bindable toggle representing one <see cref="SessionType"/> in the dashboard
+/// filter row. Two-way bound to a CheckBox; setting <see cref="IsVisible"/>
+/// calls back into <see cref="SessionsViewModel.SetLabelVisible"/>.
+/// </summary>
+public sealed partial class LabelFilterChip : ObservableObject
+{
+    private readonly SessionsViewModel _owner;
+
+    [ObservableProperty]
+    private bool _isVisible;
+
+    public LabelFilterChip(SessionType type, bool isVisible, SessionsViewModel owner)
+    {
+        ArgumentNullException.ThrowIfNull(owner);
+        Type = type;
+        _isVisible = isVisible;
+        _owner = owner;
+    }
+
+    public SessionType Type { get; }
+
+    public string Label => Type switch
+    {
+        SessionType.Exploratory => "Exploratory",
+        SessionType.Research => "Research",
+        SessionType.Feature => "Feature",
+        SessionType.Bug => "Bug",
+        SessionType.Refactor => "Refactor",
+        SessionType.Docs => "Docs",
+        SessionType.Infra => "Infra",
+        SessionType.Experiment => "Experiment",
+        _ => Type.ToString(),
+    };
+
+    partial void OnIsVisibleChanged(bool value) => _owner.SetLabelVisible(Type, value);
 }

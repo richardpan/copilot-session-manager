@@ -17,6 +17,7 @@ public class MainWindowViewModelTests
     {
         var sessions = new SessionsViewModel(
             new FakeDiscoveryService(),
+            new FakeLabelStore(),
             new SyncDispatcher(),
             TimeProvider.System,
             NullLogger<SessionsViewModel>.Instance);
@@ -80,6 +81,22 @@ public class MainWindowViewModelTests
         public Task StartWatchingAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task StopWatchingAsync() => Task.CompletedTask;
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+    }
+
+    private sealed class FakeLabelStore : ISessionLabelStore
+    {
+#pragma warning disable CS0067
+        public event EventHandler<SessionLabelChangedEventArgs>? LabelChanged;
+#pragma warning restore CS0067
+        public Task<SessionType> GetAsync(string sessionId, CancellationToken cancellationToken = default) =>
+            Task.FromResult(SessionType.Exploratory);
+        public Task<IReadOnlyDictionary<string, SessionType>> GetAllAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyDictionary<string, SessionType>>(
+                new Dictionary<string, SessionType>(StringComparer.OrdinalIgnoreCase));
+        public Task SetAsync(string sessionId, SessionType type, CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+        public Task RemoveAsync(string sessionId, CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
     }
 
     private sealed class SyncDispatcher : IUiDispatcher
