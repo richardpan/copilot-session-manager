@@ -9,6 +9,8 @@ using CopilotSessionManager.Core.Cli;
 using CopilotSessionManager.Core.Cost;
 using CopilotSessionManager.Core.GitHub;
 using CopilotSessionManager.Core.GitHub.Checks;
+using CopilotSessionManager.Core.GitHub.Issues;
+using CopilotSessionManager.Core.GitHub.Storage;
 using CopilotSessionManager.Core.Models;
 using CopilotSessionManager.Core.Sessions;
 using CopilotSessionManager.Services;
@@ -39,6 +41,12 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
     private readonly ILoggerFactory? _loggerFactory;
     private readonly ILogger<SessionsViewModel> _logger;
     private Action<SessionCardViewModel>? _openMergeWizard;
+
+    #region IssueLinks
+    private readonly IGitHubIssuesClient? _issuesClient;
+    private readonly ISessionGitHubLinksStore? _linksStore;
+    private readonly Func<string?, IssueRef?>? _showAddIssueDialog;
+    #endregion
 
     private readonly Dictionary<string, SessionCardViewModel> _byId =
         new(StringComparer.OrdinalIgnoreCase);
@@ -144,6 +152,38 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
         ISessionLauncher? sessionLauncher,
         ILoggerFactory? loggerFactory,
         ILogger<SessionsViewModel> logger)
+        : this(discovery, labelStore, readmeService, fileLauncher, dispatcher,
+            timeProvider, modelCatalog, costCalculator, githubClient, checksClient,
+            lockCleanup, sessionLauncher, loggerFactory, logger,
+            issuesClient: null, linksStore: null, showAddIssueDialog: null)
+    {
+    }
+
+    /// <summary>
+    /// DI-preferred constructor. Adds <see cref="IGitHubIssuesClient"/> and
+    /// <see cref="ISessionGitHubLinksStore"/> for the manual issue-linking
+    /// feature (#70). When <paramref name="showAddIssueDialog"/> is also
+    /// provided by the host, each card gets a fully wired
+    /// <see cref="IssueLinksViewModel"/>.
+    /// </summary>
+    public SessionsViewModel(
+        ISessionDiscoveryService discovery,
+        ISessionLabelStore labelStore,
+        ISessionReadmeService readmeService,
+        IFileLauncher fileLauncher,
+        IUiDispatcher dispatcher,
+        TimeProvider timeProvider,
+        IModelCatalog? modelCatalog,
+        IModelCostCalculator? costCalculator,
+        IGitHubClient? githubClient,
+        IGitHubChecksClient? checksClient,
+        ISessionLockCleanup? lockCleanup,
+        ISessionLauncher? sessionLauncher,
+        ILoggerFactory? loggerFactory,
+        ILogger<SessionsViewModel> logger,
+        IGitHubIssuesClient? issuesClient,
+        ISessionGitHubLinksStore? linksStore,
+        Func<string?, IssueRef?>? showAddIssueDialog)
     {
         ArgumentNullException.ThrowIfNull(discovery);
         ArgumentNullException.ThrowIfNull(labelStore);
@@ -167,6 +207,9 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
         _sessionLauncher = sessionLauncher;
         _loggerFactory = loggerFactory;
         _logger = logger;
+        _issuesClient = issuesClient;
+        _linksStore = linksStore;
+        _showAddIssueDialog = showAddIssueDialog;
 
         Sessions = new ObservableCollection<SessionCardViewModel>();
         VisibleSessions = new ObservableCollection<SessionCardViewModel>();
@@ -474,13 +517,19 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
             {
                 var label = newLabels.TryGetValue(session.Id, out var t) ? t : SessionType.Exploratory;
                 var cardLogger = _loggerFactory?.CreateLogger<SessionCardViewModel>();
+                var issueLinks = TryCreateIssueLinks(session);
                 var card = new SessionCardViewModel(
                     session, label, _timeProvider, _modelCatalog, _costCalculator,
                     _fileLauncher, _lockCleanup, _sessionLauncher, cardLogger,
-                    _openMergeWizard);
+                    _openMergeWizard, issueLinks);
                 _byId[session.Id] = card;
                 Sessions.Add(card);
                 inserted = true;
+
+                if (issueLinks is not null)
+                {
+                    _ = issueLinks.LoadAsync();
+                }
             }
         }
 
@@ -593,6 +642,36 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
             ? repositoryUrl[prefix.Length..]
             : null;
     }
+
+    #region IssueLinks
+    private IssueLinksViewModel? TryCreateIssueLinks(Session session)
+    {
+        // Without a dialog callback the panel can't add new issues; without
+        // an issues client we can't fetch metadata; without a links store we
+        // can't persist. We need at minimum the dialog + store to be useful,
+        // and the issues client for metadata enrichment. If any are missing
+        // we degrade gracefully — still show the panel if we have a store
+        // and a dialog (so previously linked issues hydrate), otherwise
+        // skip entirely so the panel doesn't render.
+        if (_linksStore is null && _issuesClient is null)
+        {
+            return null;
+        }
+
+        var defaultSlug = ExtractSlug(session.GitHubLinks?.RepositoryUrl);
+        var dialog = _showAddIssueDialog ?? (static (_) => null);
+        var logger = _loggerFactory?.CreateLogger<IssueLinksViewModel>();
+        return new IssueLinksViewModel(
+            session.Id,
+            defaultSlug,
+            _issuesClient,
+            _linksStore,
+            _fileLauncher,
+            _dispatcher,
+            dialog,
+            logger);
+    }
+    #endregion
 
     private void ResortInPlace()
     {

@@ -4,6 +4,8 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:vm="clr-namespace:CopilotSessionManager.ViewModels"
+        xmlns:v="clr-namespace:CopilotSessionManager.Views"
+        xmlns:conv="clr-namespace:CopilotSessionManager.Converters"
         xmlns:models="clr-namespace:CopilotSessionManager.Core.Models;assembly=CopilotSessionManager.Core"
         mc:Ignorable="d"
         d:DataContext="{d:DesignInstance Type=vm:MainWindowViewModel}"
@@ -14,6 +16,7 @@
         Background="#1E1E2E">
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
+        <conv:NullToVisibilityConverter x:Key="NullToVisibility" />
 
         <DataTemplate x:Key="LabelFilterTemplate" DataType="{x:Type vm:LabelFilterChip}">
             <CheckBox Content="{Binding Label}"
@@ -181,6 +184,9 @@
                                 </Hyperlink>
                             </TextBlock>
                         </StackPanel>
+
+                        <v:IssueLinksPanel DataContext="{Binding IssueLinks}"
+                                           Visibility="{Binding IssueLinks, RelativeSource={RelativeSource AncestorType=ContentPresenter}, Converter={StaticResource NullToVisibility}}" />
 
                         <TextBlock Text="{Binding Cwd}"
                                    Foreground="#6C7086"

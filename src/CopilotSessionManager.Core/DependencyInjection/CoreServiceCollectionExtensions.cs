@@ -5,6 +5,7 @@ using CopilotSessionManager.Core.Configuration;
 using CopilotSessionManager.Core.Cost;
 using CopilotSessionManager.Core.GitHub;
 using CopilotSessionManager.Core.GitHub.Checks;
+using CopilotSessionManager.Core.GitHub.Issues;
 using CopilotSessionManager.Core.GitHub.Storage;
 using CopilotSessionManager.Core.Logging;
 using CopilotSessionManager.Core.Merge;
@@ -189,6 +190,26 @@ public static class CoreServiceCollectionExtensions
         services.TryAddSingleton<ICopilotPaths, DefaultCopilotPaths>();
         services.TryAddSingleton<ISessionFolderReader, SessionFolderReader>();
         services.TryAddSingleton<ISessionGitHubLinksStore, JsonSessionGitHubLinksStore>();
+
+        return services;
+    }
+
+    /// <summary>
+    /// Registers the manual GitHub-issue linking client
+    /// (<see cref="IGitHubIssuesClient"/>) backed by
+    /// <see cref="GhCliGitHubIssuesClient"/>. Implies the <c>gh</c>-CLI
+    /// dependencies registered by <see cref="AddGitHubLinks"/>
+    /// (<see cref="IProcessRunner"/> and
+    /// <see cref="IGitHubAvailabilityProvider"/>) so call sites can use this
+    /// extension on its own. Safe to call multiple times.
+    /// </summary>
+    public static IServiceCollection AddGitHubIssues(this IServiceCollection services)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        services.TryAddSingleton<IProcessRunner, ProcessRunner>();
+        services.TryAddSingleton<IGitHubAvailabilityProvider, GitHubAvailabilityProvider>();
+        services.TryAddSingleton<IGitHubIssuesClient, GhCliGitHubIssuesClient>();
 
         return services;
     }

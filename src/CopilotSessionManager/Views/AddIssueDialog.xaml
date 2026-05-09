@@ -1,0 +1,85 @@
+<Window x:Class="CopilotSessionManager.Views.AddIssueDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d"
+        Title="Link GitHub issue"
+        Height="220"
+        Width="440"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        ShowInTaskbar="False"
+        WindowStyle="SingleBorderWindow"
+        Background="#1E1E2E">
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0"
+                   Text="Issue reference"
+                   Foreground="#CDD6F4"
+                   FontWeight="SemiBold"
+                   FontSize="13"
+                   Margin="0,0,0,4" />
+
+        <TextBox x:Name="InputBox"
+                 Grid.Row="1"
+                 Background="#11111B"
+                 Foreground="#CDD6F4"
+                 BorderBrush="#45475A"
+                 CaretBrush="#CDD6F4"
+                 Padding="6,4"
+                 FontSize="13"
+                 Margin="0,0,0,6"
+                 TextChanged="InputBox_TextChanged" />
+
+        <TextBlock x:Name="HintText"
+                   Grid.Row="2"
+                   Text="Accepts owner/repo#NN, #NN, NN, or full https://github.com/.../issues/NN URL."
+                   Foreground="#A6ADC8"
+                   FontSize="11"
+                   TextWrapping="Wrap"
+                   Margin="0,0,0,4" />
+
+        <TextBlock x:Name="ValidationText"
+                   Grid.Row="3"
+                   Text=""
+                   Foreground="#F38BA8"
+                   FontSize="12"
+                   TextWrapping="Wrap"
+                   VerticalAlignment="Top" />
+
+        <StackPanel Grid.Row="4"
+                    Orientation="Horizontal"
+                    HorizontalAlignment="Right"
+                    Margin="0,12,0,0">
+            <Button x:Name="CancelButton"
+                    Content="Cancel"
+                    Width="90"
+                    Padding="8,6"
+                    Margin="0,0,8,0"
+                    Background="#313244"
+                    Foreground="#CDD6F4"
+                    BorderBrush="#45475A"
+                    Click="CancelButton_Click"
+                    IsCancel="True" />
+            <Button x:Name="AddButton"
+                    Content="Add"
+                    Width="90"
+                    Padding="8,6"
+                    Background="#89B4FA"
+                    Foreground="#11111B"
+                    BorderBrush="#74C7EC"
+                    FontWeight="SemiBold"
+                    IsEnabled="False"
+                    IsDefault="True"
+                    Click="AddButton_Click" />
+        </StackPanel>
+    </Grid>
+</Window>

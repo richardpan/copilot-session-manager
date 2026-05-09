@@ -309,6 +309,9 @@ public partial class App : Application
         services.AddSessionDiscovery();
         services.AddOnboarding();
         services.AddSessionMerge();
+        services.AddGitHubLinks();
+        services.AddGitHubLinkStorage();
+        services.AddGitHubIssues();
         CoreServiceCollectionExtensions.AddLogging(services);
 
         // UI infrastructure — the dispatcher must wrap the WPF UI thread.
@@ -331,6 +334,21 @@ public partial class App : Application
         services.AddSingleton<SessionsViewModel>();
         services.AddSingleton<MainWindowViewModel>();
         services.AddTransient<OnboardingViewModel>();
+
+        // Issue-link dialog factory (#70). The view-model layer has no
+        // reference to Views, so we hand it a callback the WPF host owns.
+        services.AddSingleton<Func<string?, Core.GitHub.Issues.IssueRef?>>(_ =>
+            defaultRepo =>
+            {
+                Core.GitHub.Issues.IssueRef? result = null;
+                Current.Dispatcher.Invoke(() =>
+                {
+                    var owner = Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+                                ?? Current.MainWindow;
+                    Views.AddIssueDialog.TryShow(owner, defaultRepo, out result);
+                });
+                return result;
+            });
     }
 
     /// <summary>

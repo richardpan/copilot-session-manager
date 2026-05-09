@@ -1,5 +1,6 @@
 using CopilotSessionManager.Core.Cli;
 using CopilotSessionManager.Core.Cli.Adapters.V1;
+using CopilotSessionManager.Core.GitHub.Issues;
 using CopilotSessionManager.Core.GitHub.Storage;
 using CopilotSessionManager.Core.Models;
 using CopilotSessionManager.Core.Sessions;
@@ -417,6 +418,12 @@ public class SessionDiscoveryServiceTests : IAsyncDisposable, IDisposable
             _store.Remove(sessionId);
             return Task.CompletedTask;
         }
+
+        public Task AddIssueRefAsync(string sessionId, IssueRef issueRef, CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+
+        public Task RemoveIssueRefAsync(string sessionId, IssueRef issueRef, CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
     }
 
     private sealed class ThrowingGitHubLinksStore : ISessionGitHubLinksStore
@@ -428,6 +435,12 @@ public class SessionDiscoveryServiceTests : IAsyncDisposable, IDisposable
             throw new InvalidOperationException("simulated store failure");
 
         public Task ClearAsync(string sessionId, CancellationToken cancellationToken = default) =>
+            throw new InvalidOperationException("simulated store failure");
+
+        public Task AddIssueRefAsync(string sessionId, IssueRef issueRef, CancellationToken cancellationToken = default) =>
+            throw new InvalidOperationException("simulated store failure");
+
+        public Task RemoveIssueRefAsync(string sessionId, IssueRef issueRef, CancellationToken cancellationToken = default) =>
             throw new InvalidOperationException("simulated store failure");
     }
 }
