@@ -8,10 +8,12 @@ using CopilotSessionManager.Core.DependencyInjection;
 using CopilotSessionManager.Core.Onboarding;
 using CopilotSessionManager.Core.Settings;
 using CopilotSessionManager.Logging;
+using CopilotSessionManager.Services.SingleInstance;
 using CopilotSessionManager.ViewModels;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Serilog;
 using Serilog.Core;
 using Serilog.Events;
@@ -25,6 +27,7 @@ public partial class App : Application
 {
     private IHost? _host;
     private readonly LoggingLevelSwitch _levelSwitch = new(LogEventLevel.Information);
+    private MutexSingleInstanceCoordinator? _singleInstance;
 
     /// <summary>
     /// Gets the application's <see cref="IServiceProvider"/>. Available after
@@ -41,6 +44,20 @@ public partial class App : Application
         var logDirectory = AppPaths.LogsDirectory;
         Directory.CreateDirectory(logDirectory);
 
+        // Single-instance gate runs before anything expensive. If another
+        // instance is already running we ping it (it raises ActivationRequested)
+        // and exit silently. The gate uses a per-user mutex + named pipe.
+        _singleInstance = new MutexSingleInstanceCoordinator(NullLogger<MutexSingleInstanceCoordinator>.Instance);
+        var acquired = await _singleInstance.TryAcquireAsync().ConfigureAwait(true);
+        if (!acquired)
+        {
+            _singleInstance.Dispose();
+            _singleInstance = null;
+            Shutdown(exitCode: 0);
+            return;
+        }
+        _singleInstance.ActivationRequested += OnActivationRequested;
+
         // Probe the Copilot CLI version once at startup so every log line gets
         // it via the BuildInfoEnricher. Best-effort: if the probe fails we
         // record "unknown" and continue.
@@ -52,7 +69,7 @@ public partial class App : Application
             var settingsPath = Path.Combine(AppPaths.LocalAppDataDirectory, JsonAppSettingsStore.DefaultFileName);
             if (File.Exists(settingsPath))
             {
-                var bootstrapLogger = Microsoft.Extensions.Logging.Abstractions.NullLogger<JsonAppSettingsStore>.Instance;
+                var bootstrapLogger = NullLogger<JsonAppSettingsStore>.Instance;
                 var bootstrapStore = new JsonAppSettingsStore(settingsPath, bootstrapLogger);
                 var settings = await bootstrapStore.LoadAsync().ConfigureAwait(true);
                 _levelSwitch.MinimumLevel = LogLevelSwitchAccessor.ParseLevel(settings.LogLevel);
@@ -130,6 +147,13 @@ public partial class App : Application
     {
         Log.Information("Shutting down.");
 
+        if (_singleInstance is not null)
+        {
+            _singleInstance.ActivationRequested -= OnActivationRequested;
+            _singleInstance.Dispose();
+            _singleInstance = null;
+        }
+
         if (_host is not null)
         {
             await _host.StopAsync(TimeSpan.FromSeconds(5));
@@ -138,6 +162,37 @@ public partial class App : Application
 
         await Log.CloseAndFlushAsync();
         base.OnExit(e);
+    }
+
+    /// <summary>
+    /// Raised by <see cref="MutexSingleInstanceCoordinator"/> when a second
+    /// process tried to launch. Marshal to the UI thread, then restore +
+    /// foreground the existing main window.
+    /// </summary>
+    private void OnActivationRequested(object? sender, EventArgs e)
+    {
+        Dispatcher.BeginInvoke(new Action(() =>
+        {
+            var window = MainWindow;
+            if (window is null)
+            {
+                return;
+            }
+
+            if (window.WindowState == WindowState.Minimized)
+            {
+                window.WindowState = WindowState.Normal;
+            }
+            window.Show();
+            window.Activate();
+
+            // Topmost flicker is the standard WPF trick for forcing a window
+            // back to the foreground when SetForegroundWindow would otherwise
+            // be denied by Win32 focus rules.
+            var wasTopmost = window.Topmost;
+            window.Topmost = true;
+            window.Topmost = wasTopmost;
+        }));
     }
 
     private void ConfigureServices(HostBuilderContext context, IServiceCollection services)
@@ -172,7 +227,7 @@ public partial class App : Application
     {
         try
         {
-            var runner = new ProcessRunner(Microsoft.Extensions.Logging.Abstractions.NullLogger<ProcessRunner>.Instance);
+            var runner = new ProcessRunner(NullLogger<ProcessRunner>.Instance);
             var result = await runner
                 .RunAsync(new ProcessRunRequest("copilot", new[] { "--version" }, TimeoutSeconds: 5))
                 .ConfigureAwait(false);
