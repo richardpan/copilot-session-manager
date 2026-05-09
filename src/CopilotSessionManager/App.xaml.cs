@@ -3,6 +3,7 @@ using System.IO;
 using System.Threading.Tasks;
 using System.Windows;
 using CopilotSessionManager.Core.Configuration;
+using CopilotSessionManager.Core.DependencyInjection;
 using CopilotSessionManager.ViewModels;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -90,12 +91,18 @@ public partial class App : Application
 
     private static void ConfigureServices(HostBuilderContext context, IServiceCollection services)
     {
+        // Core
+        services.AddSessionDiscovery();
+
+        // UI infrastructure — the dispatcher must wrap the WPF UI thread.
+        services.AddSingleton<IUiDispatcher>(_ => new WpfDispatcher(Current.Dispatcher));
+        services.AddSingleton(TimeProvider.System);
+
         // Views
         services.AddSingleton<MainWindow>();
 
         // ViewModels
+        services.AddSingleton<SessionsViewModel>();
         services.AddSingleton<MainWindowViewModel>();
-
-        // Core services will be registered here as they're built out.
     }
 }
