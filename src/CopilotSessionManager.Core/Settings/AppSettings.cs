@@ -38,6 +38,15 @@ public sealed class AppSettings
     /// </summary>
     public string LogLevel { get; set; } = "Information";
 
+    /// <summary>
+    /// When <c>true</c> (default), pressing the close button on the main
+    /// window hides the window into the system tray instead of exiting the
+    /// process. The user can still quit explicitly via the tray context
+    /// menu or <c>File &gt; Quit</c>. Flip to <c>false</c> for "always exit
+    /// on close" behaviour. Additive, non-breaking — no schema bump needed.
+    /// </summary>
+    public bool MinimizeToTrayOnClose { get; set; } = true;
+
     /// <summary>Returns a fresh instance with all defaults.</summary>
     public static AppSettings Defaults() => new();
 }
