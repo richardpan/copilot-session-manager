@@ -23,7 +23,9 @@
                       IsChecked="{Binding IsVisible, Mode=TwoWay}"
                       Foreground="#CDD6F4"
                       Margin="0,0,12,0"
-                      VerticalAlignment="Center" />
+                      VerticalAlignment="Center"
+                      AutomationProperties.Name="{Binding Label}"
+                      AutomationProperties.HelpText="Toggle visibility of sessions with this label." />
         </DataTemplate>
 
         <DataTemplate x:Key="TierFilterTemplate" DataType="{x:Type vm:TierFilterChip}">
@@ -31,7 +33,9 @@
                       IsChecked="{Binding IsVisible, Mode=TwoWay}"
                       Foreground="#CDD6F4"
                       Margin="0,0,12,0"
-                      VerticalAlignment="Center" />
+                      VerticalAlignment="Center"
+                      AutomationProperties.Name="{Binding Label}"
+                      AutomationProperties.HelpText="Toggle visibility of sessions running models in this tier." />
         </DataTemplate>
 
         <DataTemplate x:Key="SessionCardTemplate" DataType="{x:Type vm:SessionCardViewModel}">
@@ -40,10 +44,16 @@
                     CornerRadius="6"
                     Background="#181825"
                     BorderBrush="#313244"
-                    BorderThickness="1">
+                    BorderThickness="1"
+                    AutomationProperties.Name="{Binding AutomationName}"
+                    AutomationProperties.HelpText="Right-click for the merge menu. Use Tab to step through this card's actions."
+                    KeyboardNavigation.TabNavigation="Local">
                 <Border.ContextMenu>
                     <ContextMenu>
-                        <MenuItem Header="Merge into…" Command="{Binding MergeIntoCommand}" />
+                        <MenuItem Header="Merge into…"
+                                  Command="{Binding MergeIntoCommand}"
+                                  AutomationProperties.Name="Merge this session into another"
+                                  AutomationProperties.HelpText="Opens the merge wizard to export this session via copilot --share and append it to a target session." />
                     </ContextMenu>
                 </Border.ContextMenu>
                 <Grid>
@@ -69,8 +79,9 @@
                             <Border Background="{Binding StatusBrush}"
                                     CornerRadius="3"
                                     Padding="6,1"
-                                    Margin="10,2,0,0">
-                                <TextBlock Text="{Binding StatusLabel}"
+                                    Margin="10,2,0,0"
+                                    AutomationProperties.Name="{Binding StatusBadgeText}">
+                                <TextBlock Text="{Binding StatusBadgeText}"
                                            Foreground="#11111B"
                                            FontSize="10"
                                            FontWeight="SemiBold" />
@@ -80,7 +91,9 @@
                                     Padding="6,1"
                                     Margin="6,2,0,0"
                                     Cursor="Hand"
-                                    ToolTip="Right-click to change label">
+                                    ToolTip="Right-click to change label"
+                                    AutomationProperties.Name="{Binding LabelText}"
+                                    AutomationProperties.HelpText="Session label. Right-click to change.">
                                 <Border.ContextMenu>
                                     <ContextMenu>
                                         <MenuItem Header="Exploratory"
@@ -118,7 +131,9 @@
                                     CornerRadius="3"
                                     Padding="6,1"
                                     Margin="6,2,0,0"
-                                    ToolTip="{Binding ModelTooltip}">
+                                    ToolTip="{Binding ModelTooltip}"
+                                    AutomationProperties.Name="{Binding ModelDisplay}"
+                                    AutomationProperties.HelpText="{Binding ModelTooltip}">
                                 <TextBlock Text="{Binding ModelDisplay}"
                                            Foreground="#11111B"
                                            FontSize="10"
@@ -130,11 +145,20 @@
                                     Margin="6,2,0,0"
                                     ToolTip="{Binding PullRequestTooltip}"
                                     Visibility="{Binding HasPullRequest, Converter={StaticResource BoolToVisibility}}"
-                                    Cursor="Hand">
+                                    Cursor="Hand"
+                                    Focusable="True"
+                                    AutomationProperties.Name="{Binding PullRequestTooltip}"
+                                    AutomationProperties.HelpText="Press Enter to open this pull request in your browser.">
                                 <Border.InputBindings>
                                     <MouseBinding MouseAction="LeftClick"
                                                   Command="{Binding OpenUrlCommand}"
                                                   CommandParameter="{Binding PullRequestUrl}" />
+                                    <KeyBinding Key="Enter"
+                                                Command="{Binding OpenUrlCommand}"
+                                                CommandParameter="{Binding PullRequestUrl}" />
+                                    <KeyBinding Key="Space"
+                                                Command="{Binding OpenUrlCommand}"
+                                                CommandParameter="{Binding PullRequestUrl}" />
                                 </Border.InputBindings>
                                 <TextBlock Text="{Binding PullRequestBadgeText}"
                                            Foreground="#11111B"
@@ -146,7 +170,8 @@
                                     Padding="5,1"
                                     Margin="3,2,0,0"
                                     ToolTip="{Binding CheckTooltip}"
-                                    Visibility="{Binding HasChecks, Converter={StaticResource BoolToVisibility}}">
+                                    Visibility="{Binding HasChecks, Converter={StaticResource BoolToVisibility}}"
+                                    AutomationProperties.Name="{Binding CheckTooltip}">
                                 <TextBlock Text="{Binding CheckBadgeText}"
                                            Foreground="#11111B"
                                            FontSize="10"
@@ -160,7 +185,7 @@
                                        FontFamily="Consolas"
                                        FontSize="11" />
                             <TextBlock Text=" • "
-                                       Foreground="#585B70"
+                                       Foreground="#7F849C"
                                        FontSize="11" />
                             <TextBlock Foreground="#A6ADC8" FontSize="11">
                                 <Hyperlink Foreground="#89B4FA"
@@ -172,7 +197,7 @@
                                 </Hyperlink>
                             </TextBlock>
                             <TextBlock Text=" @ "
-                                       Foreground="#585B70"
+                                       Foreground="#7F849C"
                                        FontSize="11" />
                             <TextBlock Foreground="#A6ADC8" FontSize="11">
                                 <Hyperlink Foreground="#89B4FA"
@@ -226,6 +251,8 @@
                                 Foreground="#CDD6F4"
                                 BorderBrush="#45475A"
                                 ToolTip="Open the auto-generated SESSION-README.md for this session"
+                                AutomationProperties.Name="Open SESSION-README"
+                                AutomationProperties.HelpText="Opens the auto-generated SESSION-README.md for this session in the OS default markdown viewer."
                                 HorizontalAlignment="Right"
                                 Command="{Binding DataContext.Sessions.OpenReadmeCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                                 CommandParameter="{Binding}" />
@@ -241,6 +268,8 @@
                                     Foreground="#11111B"
                                     BorderBrush="#94D396"
                                     ToolTip="Launch a new PowerShell window and resume this Copilot session (cleans up stale lock files first)"
+                                    AutomationProperties.Name="Resume crashed session"
+                                    AutomationProperties.HelpText="Cleans stale lock files and launches a new PowerShell window that resumes this Copilot session."
                                     Command="{Binding ResumeCommand}" />
                             <Button Content="🧹 Clean up"
                                     Padding="8,3"
@@ -249,6 +278,8 @@
                                     Foreground="#CDD6F4"
                                     BorderBrush="#45475A"
                                     ToolTip="Delete stale inuse.*.lock files for this crashed session"
+                                    AutomationProperties.Name="Clean up stale lock files"
+                                    AutomationProperties.HelpText="Deletes inuse.*.lock files left behind by a crashed Copilot process for this session."
                                     Command="{Binding CleanupStaleLocksCommand}" />
                         </StackPanel>
                     </StackPanel>
@@ -269,23 +300,31 @@
 
         <!-- Top menu bar (Help → Onboarding…) -->
         <Menu Grid.Row="0" Background="#11111B" Foreground="#CDD6F4" Padding="4,2">
-            <MenuItem Header="_Help" Foreground="#CDD6F4">
+            <MenuItem Header="_Help" Foreground="#CDD6F4" AutomationProperties.Name="Help menu">
                 <MenuItem Header="_Onboarding…"
                           Command="{Binding OpenOnboardingCommand}"
-                          ToolTip="Re-run the welcome flow and prerequisite checks." />
+                          ToolTip="Re-run the welcome flow and prerequisite checks."
+                          AutomationProperties.Name="Re-run onboarding"
+                          AutomationProperties.HelpText="Reopens the welcome flow and prerequisite checks." />
                 <Separator />
                 <MenuItem Header="Open _log folder"
                           Command="{Binding OpenLogFolderCommand}"
-                          ToolTip="Open the per-user log folder in Explorer." />
+                          ToolTip="Open the per-user log folder in Explorer."
+                          AutomationProperties.Name="Open log folder"
+                          AutomationProperties.HelpText="Opens the per-user log folder in Windows Explorer." />
                 <MenuItem Header="_Bundle logs for bug report…"
                           Command="{Binding BundleLogsCommand}"
-                          ToolTip="Zip current log files for sharing in a bug report." />
+                          ToolTip="Zip current log files for sharing in a bug report."
+                          AutomationProperties.Name="Bundle logs for bug report"
+                          AutomationProperties.HelpText="Zips current log files into a single archive for sharing in a bug report." />
                 <Separator />
                 <MenuItem Header="_Verbose logging"
                           IsCheckable="True"
                           IsChecked="{Binding IsVerboseLogging, Mode=TwoWay}"
                           Command="{Binding ToggleVerboseLoggingCommand}"
-                          ToolTip="Switch between Information and Debug log level. Persisted." />
+                          ToolTip="Switch between Information and Debug log level. Persisted."
+                          AutomationProperties.Name="Verbose logging"
+                          AutomationProperties.HelpText="Toggle between Information and Debug log level. The setting is persisted across restarts." />
             </MenuItem>
         </Menu>
 
@@ -309,12 +348,16 @@
                             Foreground="#CDD6F4"
                             BorderBrush="#45475A"
                             ToolTip="Sweep ~/.copilot/session-state and delete inuse.*.lock files whose owning process is no longer running"
+                            AutomationProperties.Name="Clean all stale locks"
+                            AutomationProperties.HelpText="Sweeps the Copilot session-state folder and deletes inuse lock files left behind by dead processes."
                             Command="{Binding Sessions.CleanAllStaleLocksCommand}" />
                     <Button Content="Refresh"
                             Padding="14,6"
                             Background="#313244"
                             Foreground="#CDD6F4"
                             BorderBrush="#45475A"
+                            AutomationProperties.Name="Refresh sessions"
+                            AutomationProperties.HelpText="Re-scans the local Copilot session folder for new and updated sessions."
                             Command="{Binding Sessions.RefreshCommand}" />
                 </StackPanel>
             </Grid>
@@ -325,7 +368,9 @@
                 <CheckBox Content="Show inactive"
                           IsChecked="{Binding Sessions.ShowInactive}"
                           Foreground="#CDD6F4"
-                          VerticalAlignment="Center" />
+                          VerticalAlignment="Center"
+                          AutomationProperties.Name="Show inactive sessions"
+                          AutomationProperties.HelpText="When checked, the dashboard also lists sessions whose process is no longer running." />
                 <TextBlock Text="{Binding Sessions.ActiveCount, StringFormat='{}{0} active'}"
                            Foreground="#A6E3A1"
                            Margin="20,0,8,0"

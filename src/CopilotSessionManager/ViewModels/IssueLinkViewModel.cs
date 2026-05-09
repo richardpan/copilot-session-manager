@@ -82,6 +82,7 @@ public sealed partial class IssueLinkViewModel : ObservableObject
             if (SetProperty(ref _title, value ?? string.Empty))
             {
                 OnPropertyChanged(nameof(Tooltip));
+                OnPropertyChanged(nameof(AutomationName));
             }
         }
     }
@@ -95,7 +96,9 @@ public sealed partial class IssueLinkViewModel : ObservableObject
             if (SetProperty(ref _state, value))
             {
                 OnPropertyChanged(nameof(BadgeBrush));
+                OnPropertyChanged(nameof(BadgeGlyph));
                 OnPropertyChanged(nameof(Tooltip));
+                OnPropertyChanged(nameof(AutomationName));
             }
         }
     }
@@ -107,6 +110,44 @@ public sealed partial class IssueLinkViewModel : ObservableObject
         IssueState.Closed => ClosedBrush,
         _ => UnknownBrush,
     };
+
+    #region A11y
+    /// <summary>
+    /// Glyph rendered alongside the issue number so colour-blind users have a
+    /// non-colour signal for state. ● = open, ○ = closed, – = unknown. Pair
+    /// this with <see cref="Display"/> (e.g. <c>"● #42"</c>) at the view
+    /// layer; do not bake it into <see cref="Display"/> because the existing
+    /// short-form contract is part of the public API for tests.
+    /// </summary>
+    public string BadgeGlyph => State switch
+    {
+        IssueState.Open => "●",
+        IssueState.Closed => "○",
+        _ => "–",
+    };
+
+    /// <summary>
+    /// Full screen-reader-friendly description: "Open issue octo/widgets#42 —
+    /// Add cool feature". Used for <c>AutomationProperties.Name</c> on the
+    /// badge button.
+    /// </summary>
+    public string AutomationName
+    {
+        get
+        {
+            var stateText = State switch
+            {
+                IssueState.Open => "Open issue",
+                IssueState.Closed => "Closed issue",
+                _ => "Issue (state unknown)",
+            };
+            var qualified = $"{Ref.OwnerRepo}#{Ref.Number.ToString(CultureInfo.InvariantCulture)}";
+            return string.IsNullOrWhiteSpace(_title)
+                ? $"{stateText} {qualified}"
+                : $"{stateText} {qualified} — {_title}";
+        }
+    }
+    #endregion
 
     /// <summary>Tooltip rendered on hover. Falls back to the URL when no title is known yet.</summary>
     public string Tooltip

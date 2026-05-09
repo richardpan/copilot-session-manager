@@ -195,7 +195,9 @@
                                                 BorderBrush="#45475A"
                                                 Visibility="{Binding HasInstallUrl, Converter={StaticResource BoolToVisibility}}"
                                                 Command="{Binding DataContext.OpenInstallUrlCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                CommandParameter="{Binding InstallUrl}" />
+                                                CommandParameter="{Binding InstallUrl}"
+                                                AutomationProperties.Name="Open install instructions"
+                                                AutomationProperties.HelpText="Opens the install URL for this prerequisite in your browser." />
                                     </Grid>
                                 </Border>
                             </DataTemplate>
@@ -208,12 +210,15 @@
                             Style="{StaticResource StepButton}"
                             Margin="0"
                             IsEnabled="{Binding CanRecheck}"
-                            Command="{Binding RecheckPrerequisitesCommand}" />
+                            Command="{Binding RecheckPrerequisitesCommand}"
+                            AutomationProperties.Name="Re-check prerequisites"
+                            AutomationProperties.HelpText="Re-runs the system checks for PowerShell, the Copilot CLI, and the gh CLI." />
                     <TextBlock Text="Checking…"
                                Foreground="#A6ADC8"
                                VerticalAlignment="Center"
                                Margin="12,0,0,0"
-                               Visibility="{Binding IsCheckingPrerequisites, Converter={StaticResource BoolToVisibility}}" />
+                               Visibility="{Binding IsCheckingPrerequisites, Converter={StaticResource BoolToVisibility}}"
+                               AutomationProperties.LiveSetting="Polite" />
                 </StackPanel>
             </Grid>
 
@@ -293,8 +298,12 @@
                     Margin="0,18,0,0">
             <Button Content="Skip"
                     Style="{StaticResource StepButton}"
-                    Command="{Binding SkipCommand}" />
-            <Button Command="{Binding BackCommand}">
+                    Command="{Binding SkipCommand}"
+                    IsCancel="True"
+                    AutomationProperties.Name="Skip onboarding"
+                    AutomationProperties.HelpText="Closes the onboarding flow without completing the remaining steps." />
+            <Button Command="{Binding BackCommand}"
+                    AutomationProperties.Name="Previous step">
                 <Button.Style>
                     <Style TargetType="Button" BasedOn="{StaticResource StepButton}">
                         <Setter Property="Content" Value="Back" />
@@ -307,7 +316,10 @@
                     </Style>
                 </Button.Style>
             </Button>
-            <Button Command="{Binding NextCommand}">
+            <Button Command="{Binding NextCommand}"
+                    IsDefault="True"
+                    AutomationProperties.Name="Next step"
+                    AutomationProperties.HelpText="Advances to the next onboarding step.">
                 <Button.Style>
                     <Style TargetType="Button" BasedOn="{StaticResource PrimaryButton}">
                         <Setter Property="Content" Value="Next" />
