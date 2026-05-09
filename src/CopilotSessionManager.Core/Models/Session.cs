@@ -16,4 +16,5 @@ public sealed record Session(
     DateTimeOffset UpdatedAt,
     int TurnCount,
     SessionStatus Status,
-    CopilotVersion CopilotVersion);
+    CopilotVersion CopilotVersion,
+    IReadOnlyList<SessionLockInfo> Locks);

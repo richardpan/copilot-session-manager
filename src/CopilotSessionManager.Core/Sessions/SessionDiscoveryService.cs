@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using CopilotSessionManager.Core.Cli;
 using CopilotSessionManager.Core.Models;
 using Microsoft.Extensions.Logging;
@@ -10,12 +9,16 @@ public sealed class SessionDiscoveryService : ISessionDiscoveryService
 {
     private const string WorkspaceFileName = "workspace.yaml";
     private const string EventsFileName = "events.jsonl";
+    private const string LockFilePattern = "inuse.*.lock";
 
     private static readonly TimeSpan DebounceInterval = TimeSpan.FromMilliseconds(400);
 
     private readonly ISessionStore _store;
     private readonly ICopilotCliAdapterRegistry _adapterRegistry;
     private readonly ICopilotPaths _paths;
+    private readonly ISessionLockMonitor _lockMonitor;
+    private readonly ISessionStatusEvaluator _statusEvaluator;
+    private readonly TimeProvider _timeProvider;
     private readonly ILogger<SessionDiscoveryService> _logger;
 
     private readonly object _watcherLock = new();
@@ -23,6 +26,7 @@ public sealed class SessionDiscoveryService : ISessionDiscoveryService
 
     private FileSystemWatcher? _databaseWatcher;
     private FileSystemWatcher? _stateDirectoryWatcher;
+    private FileSystemWatcher? _stateContentsWatcher;
     private CancellationTokenSource? _debounceCts;
     private volatile IReadOnlyList<Session> _currentSessions = Array.Empty<Session>();
     private bool _disposed;
@@ -31,16 +35,36 @@ public sealed class SessionDiscoveryService : ISessionDiscoveryService
         ISessionStore store,
         ICopilotCliAdapterRegistry adapterRegistry,
         ICopilotPaths paths,
+        ISessionLockMonitor lockMonitor,
+        ISessionStatusEvaluator statusEvaluator,
+        ILogger<SessionDiscoveryService> logger)
+        : this(store, adapterRegistry, paths, lockMonitor, statusEvaluator, TimeProvider.System, logger)
+    {
+    }
+
+    public SessionDiscoveryService(
+        ISessionStore store,
+        ICopilotCliAdapterRegistry adapterRegistry,
+        ICopilotPaths paths,
+        ISessionLockMonitor lockMonitor,
+        ISessionStatusEvaluator statusEvaluator,
+        TimeProvider timeProvider,
         ILogger<SessionDiscoveryService> logger)
     {
         ArgumentNullException.ThrowIfNull(store);
         ArgumentNullException.ThrowIfNull(adapterRegistry);
         ArgumentNullException.ThrowIfNull(paths);
+        ArgumentNullException.ThrowIfNull(lockMonitor);
+        ArgumentNullException.ThrowIfNull(statusEvaluator);
+        ArgumentNullException.ThrowIfNull(timeProvider);
         ArgumentNullException.ThrowIfNull(logger);
 
         _store = store;
         _adapterRegistry = adapterRegistry;
         _paths = paths;
+        _lockMonitor = lockMonitor;
+        _statusEvaluator = statusEvaluator;
+        _timeProvider = timeProvider;
         _logger = logger;
     }
 
@@ -133,6 +157,22 @@ public sealed class SessionDiscoveryService : ISessionDiscoveryService
                 _stateDirectoryWatcher.Deleted += OnFilesystemChanged;
                 _stateDirectoryWatcher.Renamed += OnFilesystemChanged;
                 _stateDirectoryWatcher.Error += OnWatcherError;
+
+                // Watch lock files + events.jsonl across every session
+                // subdirectory so status changes (and orphaned lock cleanup)
+                // trigger a rescan.
+                _stateContentsWatcher = new FileSystemWatcher(stateDir)
+                {
+                    NotifyFilter = NotifyFilters.FileName | NotifyFilters.LastWrite | NotifyFilters.Size,
+                    IncludeSubdirectories = true,
+                    EnableRaisingEvents = true,
+                };
+                _stateContentsWatcher.Filter = "*.*";
+                _stateContentsWatcher.Created += OnSessionContentChanged;
+                _stateContentsWatcher.Changed += OnSessionContentChanged;
+                _stateContentsWatcher.Deleted += OnSessionContentChanged;
+                _stateContentsWatcher.Renamed += OnSessionContentChanged;
+                _stateContentsWatcher.Error += OnWatcherError;
             }
         }
     }
@@ -182,6 +222,18 @@ public sealed class SessionDiscoveryService : ISessionDiscoveryService
                 _stateDirectoryWatcher = null;
             }
 
+            if (_stateContentsWatcher is not null)
+            {
+                _stateContentsWatcher.EnableRaisingEvents = false;
+                _stateContentsWatcher.Created -= OnSessionContentChanged;
+                _stateContentsWatcher.Changed -= OnSessionContentChanged;
+                _stateContentsWatcher.Deleted -= OnSessionContentChanged;
+                _stateContentsWatcher.Renamed -= OnSessionContentChanged;
+                _stateContentsWatcher.Error -= OnWatcherError;
+                _stateContentsWatcher.Dispose();
+                _stateContentsWatcher = null;
+            }
+
             _debounceCts?.Cancel();
             _debounceCts?.Dispose();
             _debounceCts = null;
@@ -190,6 +242,27 @@ public sealed class SessionDiscoveryService : ISessionDiscoveryService
 
     private void OnFilesystemChanged(object sender, FileSystemEventArgs e)
     {
+        ScheduleRescan();
+    }
+
+    private void OnSessionContentChanged(object sender, FileSystemEventArgs e)
+    {
+        // Only react to lock files and events.jsonl — ignore noisy SQLite WAL
+        // chatter, workspace.yaml saves from non-status edits, etc.
+        var name = Path.GetFileName(e.Name) ?? string.Empty;
+        if (name.Length == 0)
+        {
+            return;
+        }
+
+        var isLock = name.StartsWith("inuse.", StringComparison.OrdinalIgnoreCase) &&
+                     name.EndsWith(".lock", StringComparison.OrdinalIgnoreCase);
+        var isEvents = string.Equals(name, EventsFileName, StringComparison.OrdinalIgnoreCase);
+        if (!isLock && !isEvents)
+        {
+            return;
+        }
+
         ScheduleRescan();
     }
 
@@ -272,9 +345,10 @@ public sealed class SessionDiscoveryService : ISessionDiscoveryService
         var createdAt = record?.CreatedAt ?? workspace?.CreatedAt ?? DateTimeOffset.MinValue;
         var updatedAt = record?.UpdatedAt ?? workspace?.UpdatedAt ?? DateTimeOffset.MinValue;
 
-        // Status detection (lock + events) lands in a follow-up PR; for now,
-        // every discovered session starts as Inactive.
-        var status = SessionStatus.Inactive;
+        var locks = _lockMonitor.GetLocks(id);
+        var status = await _statusEvaluator
+            .EvaluateAsync(id, locks, version, _timeProvider.GetUtcNow(), cancellationToken)
+            .ConfigureAwait(false);
 
         return new Session(
             Id: id,
@@ -287,7 +361,8 @@ public sealed class SessionDiscoveryService : ISessionDiscoveryService
             UpdatedAt: updatedAt,
             TurnCount: record?.TurnCount ?? 0,
             Status: status,
-            CopilotVersion: version);
+            CopilotVersion: version,
+            Locks: locks);
     }
 
     private async Task<CopilotVersion> TryReadCopilotVersionAsync(

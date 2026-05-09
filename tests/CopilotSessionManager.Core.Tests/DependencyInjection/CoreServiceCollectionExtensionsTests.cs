@@ -44,5 +44,24 @@ public class CoreServiceCollectionExtensionsTests
         provider.GetRequiredService<ISessionStore>().Should().BeOfType<SessionStore>();
         provider.GetRequiredService<ISessionDiscoveryService>().Should().BeOfType<SessionDiscoveryService>();
         provider.GetRequiredService<ICopilotCliAdapterRegistry>().Should().NotBeNull();
+        provider.GetRequiredService<IProcessChecker>().Should().BeOfType<ProcessChecker>();
+        provider.GetRequiredService<ISessionLockMonitor>().Should().BeOfType<SessionLockMonitor>();
+        provider.GetRequiredService<ISessionStatusEvaluator>().Should().BeOfType<SessionStatusEvaluator>();
+        provider.GetRequiredService<StatusDetectionOptions>().Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task AddStatusDetection_honors_options_configurator()
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton<ILoggerFactory>(NullLoggerFactory.Instance);
+        services.AddSingleton(typeof(ILogger<>), typeof(NullLogger<>));
+
+        services.AddStatusDetection(options => options.IdleThreshold = TimeSpan.FromMinutes(42));
+
+        await using var provider = services.BuildServiceProvider();
+
+        provider.GetRequiredService<StatusDetectionOptions>().IdleThreshold
+            .Should().Be(TimeSpan.FromMinutes(42));
     }
 }
