@@ -97,6 +97,96 @@ public class SessionsViewModelCleanupTests
         vm.StatusMessage.Should().Contain("io broke");
     }
 
+    [Fact]
+    public async Task InitializeAsync_AutoCleanFalse_DoesNotInvokeCleanup()
+    {
+        // Bypass the cached CreateSut helper because it always calls
+        // InitializeAsync() with the default (false) — we want to assert that
+        // path also doesn't trigger any cleanup.
+        var cleanup = new FakeBulkCleanup();
+        var tp = new SessionsViewModelTests.FixedTimeProvider(Now);
+        var disc = new SessionsViewModelTests.FakeDiscoveryService(new[] { BuildSession("s1") });
+        var labels = new SessionsViewModelTests.FakeLabelStore();
+        var readme = new SessionsViewModelTests.FakeReadmeService();
+        var launcher = new SessionsViewModelTests.FakeFileLauncher();
+        var vm = new SessionsViewModel(
+            disc, labels, readme, launcher, new SessionsViewModelTests.SyncDispatcher(), tp,
+            modelCatalog: null, costCalculator: null, githubClient: null,
+            lockCleanup: cleanup, sessionLauncher: null, loggerFactory: null,
+            NullLogger<SessionsViewModel>.Instance);
+
+        await vm.InitializeAsync(autoCleanStaleLocksOnStartup: false);
+
+        cleanup.BulkCalls.Should().Be(0,
+            "with the V1.8 (#74) opt-in disabled, startup must never sweep locks");
+    }
+
+    [Fact]
+    public async Task InitializeAsync_AutoCleanTrue_InvokesCleanupExactlyOnce_AfterScan()
+    {
+        var cleanup = new FakeBulkCleanup(new SessionLockCleanupResult(LocksRemoved: 3, SessionsAffected: 2));
+        var tp = new SessionsViewModelTests.FixedTimeProvider(Now);
+        var disc = new SessionsViewModelTests.FakeDiscoveryService(new[] { BuildSession("s1") });
+        var labels = new SessionsViewModelTests.FakeLabelStore();
+        var readme = new SessionsViewModelTests.FakeReadmeService();
+        var launcher = new SessionsViewModelTests.FakeFileLauncher();
+        var vm = new SessionsViewModel(
+            disc, labels, readme, launcher, new SessionsViewModelTests.SyncDispatcher(), tp,
+            modelCatalog: null, costCalculator: null, githubClient: null,
+            lockCleanup: cleanup, sessionLauncher: null, loggerFactory: null,
+            NullLogger<SessionsViewModel>.Instance);
+
+        await vm.InitializeAsync(autoCleanStaleLocksOnStartup: true);
+
+        cleanup.BulkCalls.Should().Be(1,
+            "the V1.8 (#74) opt-in must trigger CleanupAllAsync exactly once after the initial scan");
+        vm.StatusMessage.Should().Be("Removed 3 stale lock(s) across 2 session(s).",
+            "the post-cleanup status message must reflect what was removed");
+    }
+
+    [Fact]
+    public async Task InitializeAsync_AutoCleanTrue_NoLockCleanupInjected_DoesNotThrow()
+    {
+        // Some hosts (tests, headless tools) construct SessionsViewModel
+        // without an ISessionLockCleanup. Auto-clean must degrade gracefully
+        // rather than crash the dashboard during startup.
+        var tp = new SessionsViewModelTests.FixedTimeProvider(Now);
+        var disc = new SessionsViewModelTests.FakeDiscoveryService(new[] { BuildSession("s1") });
+        var labels = new SessionsViewModelTests.FakeLabelStore();
+        var readme = new SessionsViewModelTests.FakeReadmeService();
+        var launcher = new SessionsViewModelTests.FakeFileLauncher();
+        var vm = new SessionsViewModel(
+            disc, labels, readme, launcher, new SessionsViewModelTests.SyncDispatcher(), tp,
+            modelCatalog: null, costCalculator: null, githubClient: null,
+            lockCleanup: null, sessionLauncher: null, loggerFactory: null,
+            NullLogger<SessionsViewModel>.Instance);
+
+        var act = () => vm.InitializeAsync(autoCleanStaleLocksOnStartup: true);
+        await act.Should().NotThrowAsync();
+    }
+
+    [Fact]
+    public async Task InitializeAsync_SecondCallIsIdempotent_NoSecondAutoClean()
+    {
+        var cleanup = new FakeBulkCleanup();
+        var tp = new SessionsViewModelTests.FixedTimeProvider(Now);
+        var disc = new SessionsViewModelTests.FakeDiscoveryService(new[] { BuildSession("s1") });
+        var labels = new SessionsViewModelTests.FakeLabelStore();
+        var readme = new SessionsViewModelTests.FakeReadmeService();
+        var launcher = new SessionsViewModelTests.FakeFileLauncher();
+        var vm = new SessionsViewModel(
+            disc, labels, readme, launcher, new SessionsViewModelTests.SyncDispatcher(), tp,
+            modelCatalog: null, costCalculator: null, githubClient: null,
+            lockCleanup: cleanup, sessionLauncher: null, loggerFactory: null,
+            NullLogger<SessionsViewModel>.Instance);
+
+        await vm.InitializeAsync(autoCleanStaleLocksOnStartup: true);
+        await vm.InitializeAsync(autoCleanStaleLocksOnStartup: true);
+
+        cleanup.BulkCalls.Should().Be(1,
+            "InitializeAsync is idempotent (already-started short-circuits), so auto-clean must run at most once per process");
+    }
+
     private sealed class FakeBulkCleanup : ISessionLockCleanup
     {
         private readonly SessionLockCleanupResult _bulk;

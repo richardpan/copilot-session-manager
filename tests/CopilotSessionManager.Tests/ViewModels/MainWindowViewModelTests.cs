@@ -135,6 +135,46 @@ public class MainWindowViewModelTests
     }
 
     [Fact]
+    public async Task RunStartupTasks_LoadsSettings_AndForwardsAutoCleanFlag()
+    {
+        var settings = new FakeAppSettingsStore
+        {
+            Current = new AppSettings { AutoCleanStaleLocksOnStartup = true },
+        };
+        var sut = CreateSut(settingsStore: settings);
+
+        await sut.RunStartupTasksAsync();
+
+        settings.LoadCount.Should().Be(1,
+            "RunStartupTasksAsync must consult settings to decide whether to opt into the V1.8 (#74) auto-clean");
+    }
+
+    [Fact]
+    public async Task RunStartupTasks_DefaultsToNoAutoClean_WhenSettingsLoadThrows()
+    {
+        var settings = new FakeAppSettingsStore { ThrowOnLoad = true };
+        var sut = CreateSut(settingsStore: settings);
+
+        var act = () => sut.RunStartupTasksAsync();
+        await act.Should().NotThrowAsync(
+            "settings load failures must never block the dashboard from initialising");
+    }
+
+    [Fact]
+    public async Task RunStartupTasks_CanBeCalledTwice_Idempotent()
+    {
+        // SessionsViewModel.InitializeAsync short-circuits on the second call;
+        // RunStartupTasksAsync must be safe to invoke more than once (e.g.
+        // re-entrant Loaded events from XAML reattachment).
+        var settings = new FakeAppSettingsStore();
+        var sut = CreateSut(settingsStore: settings);
+
+        await sut.RunStartupTasksAsync();
+        var act = () => sut.RunStartupTasksAsync();
+        await act.Should().NotThrowAsync();
+    }
+
+    [Fact]
     public void NoAvailabilityProvider_DefaultsAreNotOfflineAndNotUnauth()
     {
         var sut = CreateSut(availability: null);
@@ -292,9 +332,18 @@ public class MainWindowViewModelTests
     {
         public AppSettings Current { get; set; } = new();
         public AppSettings? LastSaved { get; private set; }
+        public int LoadCount { get; private set; }
+        public bool ThrowOnLoad { get; set; }
 
-        public Task<AppSettings> LoadAsync(CancellationToken cancellationToken = default) =>
-            Task.FromResult(Current);
+        public Task<AppSettings> LoadAsync(CancellationToken cancellationToken = default)
+        {
+            LoadCount++;
+            if (ThrowOnLoad)
+            {
+                throw new System.IO.IOException("simulated load failure");
+            }
+            return Task.FromResult(Current);
+        }
 
         public Task SaveAsync(AppSettings settings, CancellationToken cancellationToken = default)
         {

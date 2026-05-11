@@ -47,6 +47,18 @@ public sealed class AppSettings
     /// </summary>
     public bool MinimizeToTrayOnClose { get; set; } = true;
 
+    /// <summary>
+    /// When <c>true</c>, csm runs the equivalent of the toolbar
+    /// <c>🧹 Clean stale locks</c> command once after the initial session
+    /// scan completes on every launch, sweeping
+    /// <c>~/.copilot/session-state</c> for <c>inuse.&lt;pid&gt;.lock</c>
+    /// files whose owning process is no longer running. Live locks are never
+    /// touched, so it is always safe to enable. Defaults to <c>false</c> so
+    /// the historical opt-in cleanup behaviour is preserved. Additive,
+    /// non-breaking — no schema bump needed.
+    /// </summary>
+    public bool AutoCleanStaleLocksOnStartup { get; set; }
+
     /// <summary>Returns a fresh instance with all defaults.</summary>
     public static AppSettings Defaults() => new();
 }
