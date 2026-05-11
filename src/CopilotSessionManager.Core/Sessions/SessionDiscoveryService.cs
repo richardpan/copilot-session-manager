@@ -393,6 +393,8 @@ public sealed class SessionDiscoveryService : ISessionDiscoveryService
         var workspace = TryParseWorkspace(sessionDir, hasStateDir, version);
         var modelInfo = await TryReadModelInfoAsync(sessionDir, hasStateDir, version, cancellationToken)
             .ConfigureAwait(false);
+        var producer = await TryReadProducerAsync(sessionDir, hasStateDir, cancellationToken)
+            .ConfigureAwait(false);
 
         if (record is null && workspace is null)
         {
@@ -430,7 +432,8 @@ public sealed class SessionDiscoveryService : ISessionDiscoveryService
             CopilotVersion: version,
             Locks: locks,
             ModelInfo: modelInfo,
-            GitHubLinks: links);
+            GitHubLinks: links,
+            Producer: producer);
     }
 
     private async Task<SessionGitHubLinks> ApplyGitHubLinkOverridesAsync(
@@ -613,6 +616,81 @@ public sealed class SessionDiscoveryService : ISessionDiscoveryService
         catch (IOException ex)
         {
             _logger.LogDebug(ex, "Could not read model info from events.jsonl at {Path}.", eventsPath);
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Reads <c>session.start.data.producer</c> from the first non-empty line
+    /// of <c>events.jsonl</c> (#113). Producer is a stable, version-agnostic
+    /// top-level field, so a tiny inline parser is preferred over going
+    /// through the adapter pipeline. Returns <c>null</c> when the field is
+    /// missing or unreadable; the chip group renders that as "(unknown)".
+    /// </summary>
+    private async Task<string?> TryReadProducerAsync(
+        string sessionDir,
+        bool hasStateDir,
+        CancellationToken cancellationToken)
+    {
+        if (!hasStateDir)
+        {
+            return null;
+        }
+
+        var eventsPath = Path.Combine(sessionDir, EventsFileName);
+        if (!File.Exists(eventsPath))
+        {
+            return null;
+        }
+
+        try
+        {
+            await using var stream = new FileStream(
+                eventsPath,
+                FileMode.Open,
+                FileAccess.Read,
+                FileShare.ReadWrite | FileShare.Delete);
+            using var reader = new StreamReader(stream);
+
+            // Scan up to ~5 lines so we tolerate occasional preceding empty
+            // / non-session.start events without paying the cost of streaming
+            // the whole file.
+            for (var i = 0; i < 5; i++)
+            {
+                var line = await reader.ReadLineAsync(cancellationToken).ConfigureAwait(false);
+                if (line is null)
+                {
+                    return null;
+                }
+                if (string.IsNullOrWhiteSpace(line))
+                {
+                    continue;
+                }
+
+                try
+                {
+                    using var doc = System.Text.Json.JsonDocument.Parse(line);
+                    var root = doc.RootElement;
+                    if (root.TryGetProperty("data", out var data)
+                        && data.ValueKind == System.Text.Json.JsonValueKind.Object
+                        && data.TryGetProperty("producer", out var producer)
+                        && producer.ValueKind == System.Text.Json.JsonValueKind.String)
+                    {
+                        var value = producer.GetString();
+                        return string.IsNullOrWhiteSpace(value) ? null : value;
+                    }
+                }
+                catch (System.Text.Json.JsonException)
+                {
+                    // Tolerate malformed lines and try the next one.
+                }
+            }
+
+            return null;
+        }
+        catch (IOException ex)
+        {
+            _logger.LogDebug(ex, "Could not read producer from events.jsonl at {Path}.", eventsPath);
             return null;
         }
     }

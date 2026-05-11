@@ -19,4 +19,5 @@ public sealed record Session(
     CopilotVersion CopilotVersion,
     IReadOnlyList<SessionLockInfo> Locks,
     SessionModelInfo? ModelInfo = null,
-    SessionGitHubLinks? GitHubLinks = null);
+    SessionGitHubLinks? GitHubLinks = null,
+    string? Producer = null);

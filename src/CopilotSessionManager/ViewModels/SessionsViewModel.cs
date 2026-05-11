@@ -54,6 +54,7 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
     private readonly IRunningSessionRegistry? _runningSessions;
     private readonly Native.IWindowActivator? _windowActivator;
     private readonly ISessionDisplayNameStore? _displayNameStore;
+    private readonly ISessionStarStore? _starStore;
     private readonly ISessionDeletionService? _deletionService;
     private readonly Func<SessionDeletionPrompt, bool>? _confirmDelete;
     #endregion
@@ -62,6 +63,11 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
         new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<SessionType> _hiddenLabels = new();
     private readonly HashSet<ModelTier> _hiddenTiers = new();
+    // V1.4 (#113): producer chip visibility — null is "(unknown)" producer.
+    // OrdinalIgnoreCase mirrors the case-insensitive comparison we use when
+    // grouping cards into chips and matching cards back to chips.
+    private readonly HashSet<string> _hiddenProducers = new(StringComparer.OrdinalIgnoreCase);
+    private bool _hideUnknownProducer;
     private bool _started;
     private bool _disposed;
 
@@ -275,6 +281,46 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
         ISessionDisplayNameStore? displayNameStore,
         ISessionDeletionService? deletionService,
         Func<SessionDeletionPrompt, bool>? confirmDelete)
+        : this(discovery, labelStore, readmeService, fileLauncher, dispatcher,
+            timeProvider, modelCatalog, costCalculator, githubClient, checksClient,
+            lockCleanup, sessionLauncher, loggerFactory, logger,
+            issuesClient, linksStore, showAddIssueDialog, readmeIssueRefs,
+            runningSessions, windowActivator, displayNameStore, deletionService,
+            confirmDelete, starStore: null)
+    {
+    }
+
+    /// <summary>
+    /// V1.4 canonical constructor (#112, #113). Adds the optional
+    /// <see cref="ISessionStarStore"/> for the "pin to top" feature on top of
+    /// the V1.1 plumbing. <paramref name="starStore"/> is nullable so test
+    /// fixtures and older call sites keep compiling.
+    /// </summary>
+    public SessionsViewModel(
+        ISessionDiscoveryService discovery,
+        ISessionLabelStore labelStore,
+        ISessionReadmeService readmeService,
+        IFileLauncher fileLauncher,
+        IUiDispatcher dispatcher,
+        TimeProvider timeProvider,
+        IModelCatalog? modelCatalog,
+        IModelCostCalculator? costCalculator,
+        IGitHubClient? githubClient,
+        IGitHubChecksClient? checksClient,
+        ISessionLockCleanup? lockCleanup,
+        ISessionLauncher? sessionLauncher,
+        ILoggerFactory? loggerFactory,
+        ILogger<SessionsViewModel> logger,
+        IGitHubIssuesClient? issuesClient,
+        ISessionGitHubLinksStore? linksStore,
+        Func<string?, IssueRef?>? showAddIssueDialog,
+        IReadmeIssueRefProvider? readmeIssueRefs,
+        IRunningSessionRegistry? runningSessions,
+        Native.IWindowActivator? windowActivator,
+        ISessionDisplayNameStore? displayNameStore,
+        ISessionDeletionService? deletionService,
+        Func<SessionDeletionPrompt, bool>? confirmDelete,
+        ISessionStarStore? starStore)
     {
         ArgumentNullException.ThrowIfNull(discovery);
         ArgumentNullException.ThrowIfNull(labelStore);
@@ -305,12 +351,18 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
         _runningSessions = runningSessions;
         _windowActivator = windowActivator;
         _displayNameStore = displayNameStore;
+        _starStore = starStore;
         _deletionService = deletionService;
         _confirmDelete = confirmDelete;
 
         if (_displayNameStore is not null)
         {
             _displayNameStore.DisplayNameChanged += OnDisplayNameStoreChanged;
+        }
+
+        if (_starStore is not null)
+        {
+            _starStore.StarsChanged += OnStarStoreChanged;
         }
 
         Sessions = new ObservableCollection<SessionCardViewModel>();
@@ -325,6 +377,7 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
         {
             TierFilters.Add(new TierFilterChip(t, isVisible: true, this));
         }
+        ProducerFilters = new ObservableCollection<ProducerFilterChip>();
     }
 
     private void OnDisplayNameStoreChanged(object? sender, SessionDisplayNameChangedEventArgs e)
@@ -350,6 +403,13 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
 
     /// <summary>One filter chip per <see cref="ModelTier"/>.</summary>
     public ObservableCollection<TierFilterChip> TierFilters { get; }
+
+    /// <summary>
+    /// V1.4 (#113): one filter chip per producer string discovered in
+    /// <see cref="Sessions"/> (plus an "(unknown)" chip if any session has no
+    /// recorded producer). Rebuilt incrementally as sessions appear.
+    /// </summary>
+    public ObservableCollection<ProducerFilterChip> ProducerFilters { get; }
 
     /// <summary>
     /// Wires the callback the WPF host uses to pop the merge wizard for a
@@ -387,7 +447,7 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
         }
         Sessions.Clear();
         _byId.Clear();
-        ApplySnapshot(snapshot, labels, new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase));
+        ApplySnapshot(snapshot, labels, new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase), new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase));
     }
 
     public int TotalCount => Sessions.Count;
@@ -645,6 +705,7 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
         // collections so the first paint already has the right chip color.
         var newLabels = new Dictionary<string, SessionType>(StringComparer.OrdinalIgnoreCase);
         var newDisplayNames = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+        var newStars = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
         foreach (var session in snapshot)
         {
             if (!_byId.ContainsKey(session.Id))
@@ -675,16 +736,32 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
                         newDisplayNames[session.Id] = null;
                     }
                 }
+
+                if (_starStore is not null)
+                {
+                    try
+                    {
+                        newStars[session.Id] = await _starStore
+                            .IsStarredAsync(session.Id, cancellationToken)
+                            .ConfigureAwait(false);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogDebug(ex, "Could not read star state for {Id}.", session.Id);
+                        newStars[session.Id] = false;
+                    }
+                }
             }
         }
 
-        _dispatcher.Post(() => ApplySnapshot(snapshot, newLabels, newDisplayNames));
+        _dispatcher.Post(() => ApplySnapshot(snapshot, newLabels, newDisplayNames, newStars));
     }
 
     private void ApplySnapshot(
         IReadOnlyList<Session> snapshot,
         IReadOnlyDictionary<string, SessionType> newLabels,
-        IReadOnlyDictionary<string, string?> newDisplayNames)
+        IReadOnlyDictionary<string, string?> newDisplayNames,
+        IReadOnlyDictionary<string, bool> newStars)
     {
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var inserted = false;
@@ -701,6 +778,7 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
             {
                 var label = newLabels.TryGetValue(session.Id, out var t) ? t : SessionType.Exploratory;
                 var displayName = newDisplayNames.TryGetValue(session.Id, out var d) ? d : null;
+                var isStarred = newStars.TryGetValue(session.Id, out var s) && s;
                 var cardLogger = _loggerFactory?.CreateLogger<SessionCardViewModel>();
                 var issueLinks = TryCreateIssueLinks(session);
                 var card = new SessionCardViewModel(
@@ -710,9 +788,11 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
                     _runningSessions, _windowActivator,
                     _displayNameStore, displayName,
                     _deletionService, _confirmDelete,
+                    _starStore, isStarred,
                     onDeleted: RemoveCardAsync);
                 _byId[session.Id] = card;
                 Sessions.Add(card);
+                EnsureProducerChip(session.Producer);
                 inserted = true;
 
                 if (issueLinks is not null)
@@ -868,6 +948,13 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
         var sorted = new List<SessionCardViewModel>(Sessions);
         sorted.Sort(static (a, b) =>
         {
+            // V1.4 (#112): starred sessions always pin to the top.
+            var byStar = (b.IsStarred ? 1 : 0).CompareTo(a.IsStarred ? 1 : 0);
+            if (byStar != 0)
+            {
+                return byStar;
+            }
+
             var byStatus = StatusPriority(a.Status).CompareTo(StatusPriority(b.Status));
             return byStatus != 0
                 ? byStatus
@@ -893,11 +980,21 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
             if ((ShowInactive || IsActive(card.Status))
                 && !_hiddenLabels.Contains(card.Label)
                 && !_hiddenTiers.Contains(card.ModelTier)
+                && IsProducerVisible(card.Producer)
                 && MatchesSearch(card, tokens))
             {
                 VisibleSessions.Add(card);
             }
         }
+    }
+
+    private bool IsProducerVisible(string? producer)
+    {
+        if (string.IsNullOrWhiteSpace(producer))
+        {
+            return !_hideUnknownProducer;
+        }
+        return !_hiddenProducers.Contains(producer);
     }
 
     private static string[] TokenizeSearch(string? text)
@@ -987,6 +1084,65 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
         }
     }
 
+    /// <summary>
+    /// V1.4 (#113): toggles whether sessions of <paramref name="producer"/>
+    /// are visible. Used by <see cref="ProducerFilterChip"/> bindings.
+    /// <c>null</c> is the special "(unknown)" producer chip.
+    /// </summary>
+    internal void SetProducerVisible(string? producer, bool isVisible)
+    {
+        bool changed;
+        if (string.IsNullOrWhiteSpace(producer))
+        {
+            changed = isVisible ? _hideUnknownProducer : !_hideUnknownProducer;
+            _hideUnknownProducer = !isVisible;
+        }
+        else
+        {
+            changed = isVisible ? _hiddenProducers.Remove(producer) : _hiddenProducers.Add(producer);
+        }
+        if (changed)
+        {
+            RebuildVisible();
+        }
+    }
+
+    /// <summary>
+    /// V1.4 (#113): adds a chip for <paramref name="producer"/> if no chip
+    /// already represents it. Idempotent. <c>null</c> / whitespace creates
+    /// the "(unknown)" chip.
+    /// </summary>
+    private void EnsureProducerChip(string? producer)
+    {
+        var key = string.IsNullOrWhiteSpace(producer) ? null : producer;
+        foreach (var chip in ProducerFilters)
+        {
+            if (string.Equals(chip.Producer, key, StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+        }
+        ProducerFilters.Add(new ProducerFilterChip(key, isVisible: true, this));
+    }
+
+    /// <summary>
+    /// V1.4 (#112): handles cross-component star changes (e.g. another
+    /// surface stars a session). Updates the card and re-sorts so the
+    /// pin animates to the top.
+    /// </summary>
+    private void OnStarStoreChanged(object? sender, SessionStarChangedEventArgs e)
+    {
+        _dispatcher.Post(() =>
+        {
+            if (_byId.TryGetValue(e.SessionId, out var card))
+            {
+                card.ApplyStarState(e.IsStarred);
+                ResortInPlace();
+                RebuildVisible();
+            }
+        });
+    }
+
     private static bool IsActive(SessionStatus status) =>
         status is SessionStatus.Working
             or SessionStatus.AwaitingApproval
@@ -1017,6 +1173,10 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
         if (_displayNameStore is not null)
         {
             _displayNameStore.DisplayNameChanged -= OnDisplayNameStoreChanged;
+        }
+        if (_starStore is not null)
+        {
+            _starStore.StarsChanged -= OnStarStoreChanged;
         }
         try
         {
@@ -1098,4 +1258,34 @@ public sealed partial class TierFilterChip : ObservableObject
     };
 
     partial void OnIsVisibleChanged(bool value) => _owner.SetTierVisible(Tier, value);
+}
+
+/// <summary>
+/// Bindable toggle representing one producer string in the dashboard filter
+/// row (V1.4 #113). Two-way bound to a CheckBox; setting <see cref="IsVisible"/>
+/// calls back into <see cref="SessionsViewModel.SetProducerVisible"/>. A
+/// <see cref="Producer"/> of <c>null</c> represents the "(unknown)" bucket
+/// for sessions whose first event did not record a producer.
+/// </summary>
+public sealed partial class ProducerFilterChip : ObservableObject
+{
+    private readonly SessionsViewModel _owner;
+
+    [ObservableProperty]
+    private bool _isVisible;
+
+    public ProducerFilterChip(string? producer, bool isVisible, SessionsViewModel owner)
+    {
+        ArgumentNullException.ThrowIfNull(owner);
+        Producer = string.IsNullOrWhiteSpace(producer) ? null : producer;
+        _isVisible = isVisible;
+        _owner = owner;
+    }
+
+    public string? Producer { get; }
+
+    /// <summary>User-visible chip caption.</summary>
+    public string Label => Producer ?? "(unknown)";
+
+    partial void OnIsVisibleChanged(bool value) => _owner.SetProducerVisible(Producer, value);
 }

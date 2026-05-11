@@ -42,6 +42,8 @@ public sealed partial class SessionCardViewModel : ObservableObject
     private readonly ISessionDeletionService? _deletionService;
     private readonly Func<SessionDeletionPrompt, bool>? _confirmDelete;
     private readonly Func<string, Task>? _onDeleted;
+    private readonly ISessionStarStore? _starStore;
+    private bool _isStarred;
     private readonly ILogger _logger;
     private string? _lastActionMessage;
     private string? _displayNameOverride;
@@ -192,6 +194,42 @@ public sealed partial class SessionCardViewModel : ObservableObject
         ISessionDeletionService? deletionService,
         Func<SessionDeletionPrompt, bool>? confirmDelete,
         Func<string, Task>? onDeleted)
+        : this(model, label, timeProvider, modelCatalog, costCalculator,
+            fileLauncher, lockCleanup, sessionLauncher, logger,
+            openMergeWizard, issueLinks,
+            runningSessions, windowActivator, displayNameStore, displayNameOverride,
+            deletionService, confirmDelete,
+            starStore: null, isStarred: false,
+            onDeleted: onDeleted)
+    {
+    }
+
+    /// <summary>
+    /// V1.4 canonical constructor adding the optional star plumbing
+    /// (#112). All new parameters are optional so older call sites (and
+    /// tests) compile unchanged via the chained ctor above.
+    /// </summary>
+    public SessionCardViewModel(
+        Session model,
+        SessionType label,
+        TimeProvider timeProvider,
+        IModelCatalog? modelCatalog,
+        IModelCostCalculator? costCalculator,
+        IFileLauncher? fileLauncher,
+        ISessionLockCleanup? lockCleanup,
+        ISessionLauncher? sessionLauncher,
+        ILogger? logger,
+        Action<SessionCardViewModel>? openMergeWizard,
+        IssueLinksViewModel? issueLinks,
+        IRunningSessionRegistry? runningSessions,
+        IWindowActivator? windowActivator,
+        ISessionDisplayNameStore? displayNameStore,
+        string? displayNameOverride,
+        ISessionDeletionService? deletionService,
+        Func<SessionDeletionPrompt, bool>? confirmDelete,
+        ISessionStarStore? starStore,
+        bool isStarred,
+        Func<string, Task>? onDeleted)
     {
         ArgumentNullException.ThrowIfNull(model);
         ArgumentNullException.ThrowIfNull(timeProvider);
@@ -211,6 +249,8 @@ public sealed partial class SessionCardViewModel : ObservableObject
         _deletionService = deletionService;
         _confirmDelete = confirmDelete;
         _onDeleted = onDeleted;
+        _starStore = starStore;
+        _isStarred = isStarred;
         _logger = logger ?? NullLogger.Instance;
         _openMergeWizard = openMergeWizard;
         _issueLinks = issueLinks;
@@ -223,6 +263,7 @@ public sealed partial class SessionCardViewModel : ObservableObject
         CommitRenameCommand = new AsyncRelayCommand(CommitRenameAsync, () => _isEditingTitle);
         CancelRenameCommand = new RelayCommand(CancelRename, () => _isEditingTitle);
         DeleteCommand = new AsyncRelayCommand(DeleteAsync, CanDelete);
+        ToggleStarCommand = new AsyncRelayCommand(ToggleStarAsync, () => _starStore is not null);
         MergeIntoCommand = new RelayCommand(InvokeMergeWizard, () => _openMergeWizard is not null);
     }
 
@@ -257,6 +298,25 @@ public sealed partial class SessionCardViewModel : ObservableObject
     public string Id => _model.Id;
 
     public string ShortId => _model.Id.Length >= 8 ? _model.Id[..8] : _model.Id;
+
+    /// <summary>
+    /// V1.4 (#113): producer string read from the first session.start event,
+    /// surfaced for filter chip grouping. <c>null</c> for sessions whose
+    /// producer wasn't recorded (rendered as "(unknown)").
+    /// </summary>
+    public string? Producer => _model.Producer;
+
+    /// <summary>
+    /// V1.4 (#112): true when this session is starred (pinned to top of
+    /// dashboard). Bound to the ★/☆ toggle on the card. Setting from XAML
+    /// goes through <see cref="ToggleStarCommand"/>; this setter is private
+    /// so changes always flow through the store.
+    /// </summary>
+    public bool IsStarred
+    {
+        get => _isStarred;
+        private set => SetProperty(ref _isStarred, value);
+    }
 
     /// <summary>
     /// Original Copilot-assigned title (summary, repository name, or short
@@ -619,6 +679,65 @@ public sealed partial class SessionCardViewModel : ObservableObject
     /// service.
     /// </summary>
     public IAsyncRelayCommand DeleteCommand { get; private set; } = new AsyncRelayCommand(static () => Task.CompletedTask, static () => false);
+
+    /// <summary>
+    /// V1.4 (#112): toggles star state. Disabled in unit-test contexts that
+    /// don't wire an <see cref="ISessionStarStore"/>.
+    /// </summary>
+    public IAsyncRelayCommand ToggleStarCommand { get; private set; } = new AsyncRelayCommand(static () => Task.CompletedTask, static () => false);
+
+    /// <summary>
+    /// V1.4 (#112): tooltip surfaced on the ★/☆ toggle.
+    /// </summary>
+    public string StarTooltip => IsStarred
+        ? "Unstar (remove pin)"
+        : "Star (pin to top)";
+
+    /// <summary>
+    /// V1.4 (#112): persists the new star state, then optimistically updates
+    /// the card. The store fires <see cref="ISessionStarStore.StarsChanged"/>
+    /// which the dashboard view-model uses to re-sort.
+    /// </summary>
+    private async Task ToggleStarAsync()
+    {
+        if (_starStore is null)
+        {
+            return;
+        }
+        try
+        {
+            if (IsStarred)
+            {
+                await _starStore.RemoveAsync(_model.Id, CancellationToken.None).ConfigureAwait(true);
+            }
+            else
+            {
+                await _starStore.SetAsync(_model.Id, CancellationToken.None).ConfigureAwait(true);
+            }
+            // Reflect immediately even if the store event hasn't fanned back yet.
+            ApplyStarState(!IsStarred);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to toggle star for {SessionId}.", _model.Id);
+            LastActionMessage = $"Could not update star: {ex.Message}";
+        }
+    }
+
+    /// <summary>
+    /// V1.4 (#112): cross-component star update path — the dashboard
+    /// view-model calls this when <see cref="ISessionStarStore.StarsChanged"/>
+    /// fires for this session id.
+    /// </summary>
+    internal void ApplyStarState(bool isStarred)
+    {
+        if (_isStarred == isStarred)
+        {
+            return;
+        }
+        IsStarred = isStarred;
+        OnPropertyChanged(nameof(StarTooltip));
+    }
 
     /// <summary>
     /// Last result string from a card-level action (cleanup or resume), or
