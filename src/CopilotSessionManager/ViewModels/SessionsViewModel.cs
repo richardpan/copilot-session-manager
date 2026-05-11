@@ -49,6 +49,15 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
     private readonly IReadmeIssueRefProvider? _readmeIssueRefs;
     #endregion
 
+    #region SessionManagement
+    // V1.1 polish: open / rename / delete plumbing (#104, #105, #106).
+    private readonly IRunningSessionRegistry? _runningSessions;
+    private readonly Native.IWindowActivator? _windowActivator;
+    private readonly ISessionDisplayNameStore? _displayNameStore;
+    private readonly ISessionDeletionService? _deletionService;
+    private readonly Func<SessionDeletionPrompt, bool>? _confirmDelete;
+    #endregion
+
     private readonly Dictionary<string, SessionCardViewModel> _byId =
         new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<SessionType> _hiddenLabels = new();
@@ -216,6 +225,45 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
         ISessionGitHubLinksStore? linksStore,
         Func<string?, IssueRef?>? showAddIssueDialog,
         IReadmeIssueRefProvider? readmeIssueRefs)
+        : this(discovery, labelStore, readmeService, fileLauncher, dispatcher,
+            timeProvider, modelCatalog, costCalculator, githubClient, checksClient,
+            lockCleanup, sessionLauncher, loggerFactory, logger,
+            issuesClient, linksStore, showAddIssueDialog, readmeIssueRefs,
+            runningSessions: null, windowActivator: null,
+            displayNameStore: null, deletionService: null, confirmDelete: null)
+    {
+    }
+
+    /// <summary>
+    /// V1.1 canonical constructor (#104, #105, #106). Adds the optional
+    /// open / rename / delete services on top of the existing plumbing. All
+    /// new parameters are nullable so existing call sites and tests keep
+    /// working unchanged.
+    /// </summary>
+    public SessionsViewModel(
+        ISessionDiscoveryService discovery,
+        ISessionLabelStore labelStore,
+        ISessionReadmeService readmeService,
+        IFileLauncher fileLauncher,
+        IUiDispatcher dispatcher,
+        TimeProvider timeProvider,
+        IModelCatalog? modelCatalog,
+        IModelCostCalculator? costCalculator,
+        IGitHubClient? githubClient,
+        IGitHubChecksClient? checksClient,
+        ISessionLockCleanup? lockCleanup,
+        ISessionLauncher? sessionLauncher,
+        ILoggerFactory? loggerFactory,
+        ILogger<SessionsViewModel> logger,
+        IGitHubIssuesClient? issuesClient,
+        ISessionGitHubLinksStore? linksStore,
+        Func<string?, IssueRef?>? showAddIssueDialog,
+        IReadmeIssueRefProvider? readmeIssueRefs,
+        IRunningSessionRegistry? runningSessions,
+        Native.IWindowActivator? windowActivator,
+        ISessionDisplayNameStore? displayNameStore,
+        ISessionDeletionService? deletionService,
+        Func<SessionDeletionPrompt, bool>? confirmDelete)
     {
         ArgumentNullException.ThrowIfNull(discovery);
         ArgumentNullException.ThrowIfNull(labelStore);
@@ -243,6 +291,16 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
         _linksStore = linksStore;
         _showAddIssueDialog = showAddIssueDialog;
         _readmeIssueRefs = readmeIssueRefs;
+        _runningSessions = runningSessions;
+        _windowActivator = windowActivator;
+        _displayNameStore = displayNameStore;
+        _deletionService = deletionService;
+        _confirmDelete = confirmDelete;
+
+        if (_displayNameStore is not null)
+        {
+            _displayNameStore.DisplayNameChanged += OnDisplayNameStoreChanged;
+        }
 
         Sessions = new ObservableCollection<SessionCardViewModel>();
         VisibleSessions = new ObservableCollection<SessionCardViewModel>();
@@ -256,6 +314,18 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
         {
             TierFilters.Add(new TierFilterChip(t, isVisible: true, this));
         }
+    }
+
+    private void OnDisplayNameStoreChanged(object? sender, SessionDisplayNameChangedEventArgs e)
+    {
+        // Push back to the dispatcher because the store can fire from any thread.
+        _dispatcher.Post(() =>
+        {
+            if (_byId.TryGetValue(e.SessionId, out var card))
+            {
+                card.ApplyDisplayNameOverride(e.NewDisplayName);
+            }
+        });
     }
 
     /// <summary>The full set of discovered sessions (unfiltered).</summary>
@@ -306,7 +376,7 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
         }
         Sessions.Clear();
         _byId.Clear();
-        ApplySnapshot(snapshot, labels);
+        ApplySnapshot(snapshot, labels, new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase));
     }
 
     public int TotalCount => Sessions.Count;
@@ -510,6 +580,7 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
         // Pre-fetch labels for any newly-seen sessions before we touch the UI
         // collections so the first paint already has the right chip color.
         var newLabels = new Dictionary<string, SessionType>(StringComparer.OrdinalIgnoreCase);
+        var newDisplayNames = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
         foreach (var session in snapshot)
         {
             if (!_byId.ContainsKey(session.Id))
@@ -525,15 +596,31 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
                     _logger.LogDebug(ex, "Could not read label for {Id}; using default.", session.Id);
                     newLabels[session.Id] = SessionType.Exploratory;
                 }
+
+                if (_displayNameStore is not null)
+                {
+                    try
+                    {
+                        newDisplayNames[session.Id] = await _displayNameStore
+                            .GetAsync(session.Id, cancellationToken)
+                            .ConfigureAwait(false);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogDebug(ex, "Could not read display-name override for {Id}.", session.Id);
+                        newDisplayNames[session.Id] = null;
+                    }
+                }
             }
         }
 
-        _dispatcher.Post(() => ApplySnapshot(snapshot, newLabels));
+        _dispatcher.Post(() => ApplySnapshot(snapshot, newLabels, newDisplayNames));
     }
 
     private void ApplySnapshot(
         IReadOnlyList<Session> snapshot,
-        IReadOnlyDictionary<string, SessionType> newLabels)
+        IReadOnlyDictionary<string, SessionType> newLabels,
+        IReadOnlyDictionary<string, string?> newDisplayNames)
     {
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var inserted = false;
@@ -549,12 +636,17 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
             else
             {
                 var label = newLabels.TryGetValue(session.Id, out var t) ? t : SessionType.Exploratory;
+                var displayName = newDisplayNames.TryGetValue(session.Id, out var d) ? d : null;
                 var cardLogger = _loggerFactory?.CreateLogger<SessionCardViewModel>();
                 var issueLinks = TryCreateIssueLinks(session);
                 var card = new SessionCardViewModel(
                     session, label, _timeProvider, _modelCatalog, _costCalculator,
                     _fileLauncher, _lockCleanup, _sessionLauncher, cardLogger,
-                    _openMergeWizard, issueLinks);
+                    _openMergeWizard, issueLinks,
+                    _runningSessions, _windowActivator,
+                    _displayNameStore, displayName,
+                    _deletionService, _confirmDelete,
+                    onDeleted: RemoveCardAsync);
                 _byId[session.Id] = card;
                 Sessions.Add(card);
                 inserted = true;
@@ -743,6 +835,29 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
     }
 
     /// <summary>
+    /// Removes a card from the live <see cref="Sessions"/> collection
+    /// immediately after a successful hard delete (#106) so the UI reflects
+    /// the change without waiting for the next discovery refresh. Safe to
+    /// call from any thread.
+    /// </summary>
+    private Task RemoveCardAsync(string sessionId)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(sessionId);
+        _dispatcher.Post(() =>
+        {
+            if (_byId.TryGetValue(sessionId, out var card))
+            {
+                Sessions.Remove(card);
+                _byId.Remove(sessionId);
+                RebuildVisible();
+                OnPropertyChanged(nameof(TotalCount));
+                OnPropertyChanged(nameof(ActiveCount));
+            }
+        });
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
     /// Toggles whether sessions of <paramref name="type"/> are visible. Used
     /// by <see cref="LabelFilterChip"/> bindings.
     /// </summary>
@@ -795,6 +910,10 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
 
         _discovery.SessionsChanged -= OnSessionsChanged;
         _labelStore.LabelChanged -= OnLabelChangedFromStore;
+        if (_displayNameStore is not null)
+        {
+            _displayNameStore.DisplayNameChanged -= OnDisplayNameStoreChanged;
+        }
         try
         {
             await _discovery.StopWatchingAsync().ConfigureAwait(false);

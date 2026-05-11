@@ -81,6 +81,32 @@ public static class CoreServiceCollectionExtensions
         services.TryAddSingleton<IProcessLauncher, ProcessLauncher>();
         services.TryAddSingleton<IPowerShellHostResolver, PathPowerShellHostResolver>();
         services.TryAddSingleton<ISessionLauncher, PowerShellSessionLauncher>();
+        services.TryAddSingleton<IRunningSessionRegistry, InMemoryRunningSessionRegistry>();
+        services.TryAddSingleton<ISessionFolderReader, SessionFolderReader>();
+        services.AddSessionDisplayNames();
+        services.TryAddSingleton<ISessionDeletionService, SessionDeletionService>();
+
+        return services;
+    }
+
+    /// <summary>
+    /// Registers <see cref="ISessionDisplayNameStore"/> backed by
+    /// <see cref="JsonSessionDisplayNameStore"/> at
+    /// <c>%LOCALAPPDATA%\CopilotSessionManager\display-names.json</c> for the
+    /// inline rename feature (#105). Safe to call multiple times.
+    /// </summary>
+    public static IServiceCollection AddSessionDisplayNames(this IServiceCollection services)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        services.TryAddSingleton<ISessionDisplayNameStore>(sp =>
+        {
+            var path = System.IO.Path.Combine(
+                AppPaths.LocalAppDataDirectory,
+                JsonSessionDisplayNameStore.DefaultFileName);
+            var logger = sp.GetRequiredService<ILogger<JsonSessionDisplayNameStore>>();
+            return new JsonSessionDisplayNameStore(path, logger);
+        });
 
         return services;
     }

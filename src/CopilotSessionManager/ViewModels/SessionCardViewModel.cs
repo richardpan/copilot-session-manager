@@ -1,5 +1,6 @@
 using System;
 using System.Globalization;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Input;
 using System.Windows.Media;
@@ -10,6 +11,7 @@ using CopilotSessionManager.Core.Cost;
 using CopilotSessionManager.Core.GitHub.Checks;
 using CopilotSessionManager.Core.Models;
 using CopilotSessionManager.Core.Sessions;
+using CopilotSessionManager.Native;
 using CopilotSessionManager.Services;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -34,8 +36,17 @@ public sealed partial class SessionCardViewModel : ObservableObject
     private readonly IFileLauncher? _fileLauncher;
     private readonly ISessionLockCleanup? _lockCleanup;
     private readonly ISessionLauncher? _sessionLauncher;
+    private readonly IRunningSessionRegistry? _runningSessions;
+    private readonly IWindowActivator? _windowActivator;
+    private readonly ISessionDisplayNameStore? _displayNameStore;
+    private readonly ISessionDeletionService? _deletionService;
+    private readonly Func<SessionDeletionPrompt, bool>? _confirmDelete;
+    private readonly Func<string, Task>? _onDeleted;
     private readonly ILogger _logger;
     private string? _lastActionMessage;
+    private string? _displayNameOverride;
+    private bool _isEditingTitle;
+    private string _editableTitle = string.Empty;
     private readonly Action<SessionCardViewModel>? _openMergeWizard;
 
     #region IssueLinks
@@ -148,6 +159,39 @@ public sealed partial class SessionCardViewModel : ObservableObject
         ILogger? logger,
         Action<SessionCardViewModel>? openMergeWizard,
         IssueLinksViewModel? issueLinks)
+        : this(model, label, timeProvider, modelCatalog, costCalculator,
+            fileLauncher, lockCleanup, sessionLauncher, logger,
+            openMergeWizard, issueLinks,
+            runningSessions: null, windowActivator: null, displayNameStore: null,
+            displayNameOverride: null,
+            deletionService: null, confirmDelete: null, onDeleted: null)
+    {
+    }
+
+    /// <summary>
+    /// V1.1 canonical constructor adding the open / rename / delete plumbing
+    /// (#104, #105, #106). All new parameters are optional so existing call
+    /// sites (and tests) continue to compile via the chained ctor above.
+    /// </summary>
+    public SessionCardViewModel(
+        Session model,
+        SessionType label,
+        TimeProvider timeProvider,
+        IModelCatalog? modelCatalog,
+        IModelCostCalculator? costCalculator,
+        IFileLauncher? fileLauncher,
+        ISessionLockCleanup? lockCleanup,
+        ISessionLauncher? sessionLauncher,
+        ILogger? logger,
+        Action<SessionCardViewModel>? openMergeWizard,
+        IssueLinksViewModel? issueLinks,
+        IRunningSessionRegistry? runningSessions,
+        IWindowActivator? windowActivator,
+        ISessionDisplayNameStore? displayNameStore,
+        string? displayNameOverride,
+        ISessionDeletionService? deletionService,
+        Func<SessionDeletionPrompt, bool>? confirmDelete,
+        Func<string, Task>? onDeleted)
     {
         ArgumentNullException.ThrowIfNull(model);
         ArgumentNullException.ThrowIfNull(timeProvider);
@@ -160,6 +204,13 @@ public sealed partial class SessionCardViewModel : ObservableObject
         _fileLauncher = fileLauncher;
         _lockCleanup = lockCleanup;
         _sessionLauncher = sessionLauncher;
+        _runningSessions = runningSessions;
+        _windowActivator = windowActivator;
+        _displayNameStore = displayNameStore;
+        _displayNameOverride = NormaliseOverride(displayNameOverride);
+        _deletionService = deletionService;
+        _confirmDelete = confirmDelete;
+        _onDeleted = onDeleted;
         _logger = logger ?? NullLogger.Instance;
         _openMergeWizard = openMergeWizard;
         _issueLinks = issueLinks;
@@ -167,6 +218,11 @@ public sealed partial class SessionCardViewModel : ObservableObject
         OpenUrlCommand = new AsyncRelayCommand<string?>(OpenUrlAsync, CanOpenUrl);
         CleanupStaleLocksCommand = new AsyncRelayCommand(CleanupStaleLocksAsync, CanCleanupStaleLocks);
         ResumeCommand = new AsyncRelayCommand(ResumeAsync, CanResume);
+        OpenCommand = new AsyncRelayCommand(OpenAsync, CanOpen);
+        BeginRenameCommand = new RelayCommand(BeginRename, CanRename);
+        CommitRenameCommand = new AsyncRelayCommand(CommitRenameAsync, () => _isEditingTitle);
+        CancelRenameCommand = new RelayCommand(CancelRename, () => _isEditingTitle);
+        DeleteCommand = new AsyncRelayCommand(DeleteAsync, CanDelete);
         MergeIntoCommand = new RelayCommand(InvokeMergeWizard, () => _openMergeWizard is not null);
     }
 
@@ -202,10 +258,57 @@ public sealed partial class SessionCardViewModel : ObservableObject
 
     public string ShortId => _model.Id.Length >= 8 ? _model.Id[..8] : _model.Id;
 
+    /// <summary>
+    /// Original Copilot-assigned title (summary, repository name, or short
+    /// id). Always reflects the underlying model — use
+    /// <see cref="DisplayName"/> to honour user renames (#105).
+    /// </summary>
     public string Title =>
         !string.IsNullOrWhiteSpace(_model.Summary) ? _model.Summary!
         : !string.IsNullOrWhiteSpace(_model.Repository) ? _model.Repository!
         : ShortId;
+
+    /// <summary>
+    /// User-visible title. Returns the inline-rename override if set,
+    /// otherwise falls back to <see cref="Title"/> (#105).
+    /// </summary>
+    public string DisplayName =>
+        string.IsNullOrWhiteSpace(_displayNameOverride) ? Title : _displayNameOverride!;
+
+    /// <summary>True when the user has set a display-name override.</summary>
+    public bool HasDisplayNameOverride => !string.IsNullOrWhiteSpace(_displayNameOverride);
+
+    /// <summary>
+    /// Tooltip surfaced on the card title — shows the original Copilot name
+    /// when an override is active so the user can still see the "real" name.
+    /// </summary>
+    public string TitleTooltip => HasDisplayNameOverride
+        ? $"Renamed. Original: {Title}\nClick title to edit. Esc cancels."
+        : "Click title to rename. Enter saves, Esc cancels.";
+
+    /// <summary>
+    /// True while the title is being edited inline. Bound by XAML to swap
+    /// between a TextBlock and a TextBox.
+    /// </summary>
+    public bool IsEditingTitle
+    {
+        get => _isEditingTitle;
+        private set
+        {
+            if (SetProperty(ref _isEditingTitle, value))
+            {
+                CommitRenameCommand.NotifyCanExecuteChanged();
+                CancelRenameCommand.NotifyCanExecuteChanged();
+            }
+        }
+    }
+
+    /// <summary>Two-way bound buffer for the inline rename editor.</summary>
+    public string EditableTitle
+    {
+        get => _editableTitle;
+        set => SetProperty(ref _editableTitle, value ?? string.Empty);
+    }
 
     public string? Repository => _model.Repository;
 
@@ -293,7 +396,7 @@ public sealed partial class SessionCardViewModel : ObservableObject
             var repo = string.IsNullOrWhiteSpace(_model.Repository) ? "no repo" : _model.Repository!;
             var branch = string.IsNullOrWhiteSpace(_model.Branch) ? "no branch" : _model.Branch!;
             var updated = UpdatedRelative;
-            return $"{LabelText} session: {Title}. Status {StatusLabel}. Repository {repo}, branch {branch}. Updated {updated}.";
+            return $"{LabelText} session: {DisplayName}. Status {StatusLabel}. Repository {repo}, branch {branch}. Updated {updated}.";
         }
     }
 
@@ -491,6 +594,33 @@ public sealed partial class SessionCardViewModel : ObservableObject
     public IAsyncRelayCommand ResumeCommand { get; }
 
     /// <summary>
+    /// Always-visible launch action (#104): activates an existing tracked
+    /// PowerShell window for this session if one is alive, otherwise spawns
+    /// a new one via <see cref="ISessionLauncher"/>. Disabled in unit tests
+    /// that don't wire a launcher.
+    /// </summary>
+    public IAsyncRelayCommand OpenCommand { get; private set; } = new AsyncRelayCommand(static () => Task.CompletedTask, static () => false);
+
+    /// <summary>
+    /// Begins inline editing of the card title (#105). No-op when no
+    /// display-name store is wired or when already editing.
+    /// </summary>
+    public IRelayCommand BeginRenameCommand { get; private set; } = new RelayCommand(static () => { }, static () => false);
+
+    /// <summary>Commits the inline-rename buffer to the display-name store (#105).</summary>
+    public IAsyncRelayCommand CommitRenameCommand { get; private set; } = new AsyncRelayCommand(static () => Task.CompletedTask, static () => false);
+
+    /// <summary>Cancels inline editing without saving (#105).</summary>
+    public IRelayCommand CancelRenameCommand { get; private set; } = new RelayCommand(static () => { }, static () => false);
+
+    /// <summary>
+    /// Hard-deletes the session from disk after the host's confirm callback
+    /// returns true (#106). Disabled in unit tests that don't wire a deletion
+    /// service.
+    /// </summary>
+    public IAsyncRelayCommand DeleteCommand { get; private set; } = new AsyncRelayCommand(static () => Task.CompletedTask, static () => false);
+
+    /// <summary>
     /// Last result string from a card-level action (cleanup or resume), or
     /// null if no action has been invoked yet. Bound by tests; XAML can
     /// surface it via tooltip if desired.
@@ -545,12 +675,215 @@ public sealed partial class SessionCardViewModel : ObservableObject
             }
 
             var result = await _sessionLauncher.LaunchAsync(_model.Id, _model.Cwd).ConfigureAwait(true);
+            if (result.ProcessId is int pid)
+            {
+                _runningSessions?.Register(_model.Id, pid);
+            }
             LastActionMessage = $"Launched PowerShell (pid {result.ProcessId?.ToString() ?? "?"}).";
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to resume session {SessionId}.", _model.Id);
             LastActionMessage = $"Resume failed: {ex.Message}";
+        }
+    }
+
+    private bool CanOpen() => _sessionLauncher is not null;
+
+    /// <summary>
+    /// V1.1 launch flow (#104): if a previous launch's PID is still alive
+    /// and has a top-level window, bring that window forward. Otherwise
+    /// spawn a fresh <c>pwsh.exe</c> via the existing launcher and remember
+    /// its PID for next time.
+    /// </summary>
+    private async Task OpenAsync()
+    {
+        if (_sessionLauncher is null)
+        {
+            return;
+        }
+
+        // Reuse path: try to bring the tracked window to the foreground.
+        if (_runningSessions is not null
+            && _windowActivator is not null
+            && _runningSessions.TryGetProcessId(_model.Id) is int trackedPid)
+        {
+            var outcome = _windowActivator.Activate(trackedPid);
+            switch (outcome)
+            {
+                case WindowActivationResult.Activated:
+                    LastActionMessage = $"Brought existing PowerShell window forward (pid {trackedPid}).";
+                    return;
+                case WindowActivationResult.Win32Failure:
+                    // Foreground was refused but the window flashed in the
+                    // taskbar; treat as success rather than spawn a duplicate.
+                    LastActionMessage = $"Existing window flashed (pid {trackedPid}). Click the taskbar to activate.";
+                    return;
+                case WindowActivationResult.NoMainWindow:
+                    // Window not yet available. Best-effort: relaunch only if
+                    // the tracked process truly looks dead; otherwise leave
+                    // the user with a duplicate-suppression message.
+                    LastActionMessage = $"PowerShell pid {trackedPid} has no window yet. Try again in a moment.";
+                    return;
+                case WindowActivationResult.ProcessNotRunning:
+                default:
+                    _runningSessions.Unregister(_model.Id);
+                    break;
+            }
+        }
+
+        // Fresh launch path.
+        try
+        {
+            var result = await _sessionLauncher.LaunchAsync(_model.Id, _model.Cwd).ConfigureAwait(true);
+            if (result.ProcessId is int pid)
+            {
+                _runningSessions?.Register(_model.Id, pid);
+                LastActionMessage = $"Launched PowerShell (pid {pid}).";
+            }
+            else
+            {
+                LastActionMessage = "Launched PowerShell.";
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to open session {SessionId}.", _model.Id);
+            LastActionMessage = $"Open failed: {ex.Message}";
+        }
+    }
+
+    private bool CanRename() => _displayNameStore is not null;
+
+    private void BeginRename()
+    {
+        if (_displayNameStore is null || _isEditingTitle)
+        {
+            return;
+        }
+        EditableTitle = DisplayName;
+        IsEditingTitle = true;
+    }
+
+    private async Task CommitRenameAsync()
+    {
+        if (_displayNameStore is null || !_isEditingTitle)
+        {
+            return;
+        }
+
+        var trimmed = (_editableTitle ?? string.Empty).Trim();
+        var clearing = string.IsNullOrEmpty(trimmed)
+                       || string.Equals(trimmed, Title, StringComparison.Ordinal);
+
+        try
+        {
+            if (clearing)
+            {
+                await _displayNameStore.RemoveAsync(_model.Id, CancellationToken.None).ConfigureAwait(true);
+                ApplyDisplayNameOverride(null);
+                LastActionMessage = "Reverted to original session name.";
+            }
+            else
+            {
+                await _displayNameStore.SetAsync(_model.Id, trimmed, CancellationToken.None).ConfigureAwait(true);
+                ApplyDisplayNameOverride(trimmed);
+                LastActionMessage = $"Renamed session to '{trimmed}'.";
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to save display-name override for {SessionId}.", _model.Id);
+            LastActionMessage = $"Rename failed: {ex.Message}";
+        }
+        finally
+        {
+            IsEditingTitle = false;
+        }
+    }
+
+    private void CancelRename()
+    {
+        if (!_isEditingTitle)
+        {
+            return;
+        }
+        EditableTitle = DisplayName;
+        IsEditingTitle = false;
+    }
+
+    /// <summary>
+    /// Updates the cached override (without writing to disk) and raises
+    /// change notifications for the title-derived projections. Called by
+    /// <see cref="SessionsViewModel"/> when the display-name store fires
+    /// <c>DisplayNameChanged</c> from another component.
+    /// </summary>
+    public void ApplyDisplayNameOverride(string? overrideValue)
+    {
+        var normalised = NormaliseOverride(overrideValue);
+        if (string.Equals(normalised, _displayNameOverride, StringComparison.Ordinal))
+        {
+            return;
+        }
+        _displayNameOverride = normalised;
+        OnPropertyChanged(nameof(DisplayName));
+        OnPropertyChanged(nameof(HasDisplayNameOverride));
+        OnPropertyChanged(nameof(TitleTooltip));
+        OnPropertyChanged(nameof(AutomationName));
+    }
+
+    private static string? NormaliseOverride(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private bool CanDelete() => _deletionService is not null && _confirmDelete is not null;
+
+    private async Task DeleteAsync()
+    {
+        if (_deletionService is null || _confirmDelete is null)
+        {
+            return;
+        }
+
+        var prompt = new SessionDeletionPrompt(_model.Id, DisplayName);
+        bool confirmed;
+        try
+        {
+            confirmed = _confirmDelete(prompt);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Delete-confirm callback threw for {SessionId}.", _model.Id);
+            LastActionMessage = $"Delete cancelled (dialog error: {ex.Message}).";
+            return;
+        }
+        if (!confirmed)
+        {
+            return;
+        }
+
+        try
+        {
+            var result = await _deletionService.DeleteAsync(_model.Id).ConfigureAwait(true);
+            if (!result.Success)
+            {
+                LastActionMessage = result.ErrorMessage ?? "Delete failed.";
+                return;
+            }
+            LastActionMessage = "Session deleted.";
+            if (_onDeleted is not null)
+            {
+                try
+                { await _onDeleted(_model.Id).ConfigureAwait(true); }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Post-delete callback threw for {SessionId}.", _model.Id);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to delete session {SessionId}.", _model.Id);
+            LastActionMessage = $"Delete failed: {ex.Message}";
         }
     }
 
@@ -693,6 +1026,9 @@ public sealed partial class SessionCardViewModel : ObservableObject
         _hasChecksOverride = false;
         _liveOverrideChecks = null;
         OnPropertyChanged(nameof(Title));
+        OnPropertyChanged(nameof(DisplayName));
+        OnPropertyChanged(nameof(HasDisplayNameOverride));
+        OnPropertyChanged(nameof(TitleTooltip));
         OnPropertyChanged(nameof(Repository));
         OnPropertyChanged(nameof(Branch));
         OnPropertyChanged(nameof(Cwd));
@@ -707,6 +1043,8 @@ public sealed partial class SessionCardViewModel : ObservableObject
         OnPropertyChanged(nameof(IsCrashed));
         CleanupStaleLocksCommand.NotifyCanExecuteChanged();
         ResumeCommand.NotifyCanExecuteChanged();
+        OpenCommand.NotifyCanExecuteChanged();
+        DeleteCommand.NotifyCanExecuteChanged();
         OnPropertyChanged(nameof(UpdatedRelative));
         OnPropertyChanged(nameof(Age));
         OnPropertyChanged(nameof(LockSummary));
@@ -773,3 +1111,10 @@ public sealed partial class SessionCardViewModel : ObservableObject
             : $"{(int)span.TotalDays}d {span.Hours}h";
     }
 }
+
+/// <summary>
+/// Payload handed to the host-supplied delete-confirm callback (#106). The
+/// callback returns <c>true</c> to proceed with the hard delete or
+/// <c>false</c> to abort.
+/// </summary>
+public sealed record SessionDeletionPrompt(string SessionId, string DisplayName);
