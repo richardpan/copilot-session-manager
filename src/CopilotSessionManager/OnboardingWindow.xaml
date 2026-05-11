@@ -193,6 +193,7 @@
                                                 Background="#313244"
                                                 Foreground="#CDD6F4"
                                                 BorderBrush="#45475A"
+                                                ToolTip="Open this prerequisite's install instructions in your default browser. Re-check after installing."
                                                 Visibility="{Binding HasInstallUrl, Converter={StaticResource BoolToVisibility}}"
                                                 Command="{Binding DataContext.OpenInstallUrlCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                                                 CommandParameter="{Binding InstallUrl}"
@@ -210,6 +211,7 @@
                             Style="{StaticResource StepButton}"
                             Margin="0"
                             IsEnabled="{Binding CanRecheck}"
+                            ToolTip="Re-run the prerequisite checks (PowerShell, Copilot CLI, gh CLI) after installing or updating one of them."
                             Command="{Binding RecheckPrerequisitesCommand}"
                             AutomationProperties.Name="Re-check prerequisites"
                             AutomationProperties.HelpText="Re-runs the system checks for PowerShell, the Copilot CLI, and the gh CLI." />
