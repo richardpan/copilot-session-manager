@@ -130,6 +130,7 @@ public partial class App : Application
             var mainWindow = _host.Services.GetRequiredService<MainWindow>();
             MainWindow = mainWindow;
             mainWindow.Closing += OnMainWindowClosing;
+            mainWindow.Closed += OnMainWindowClosed;
             mainWindow.Show();
 
             // Wire the merge wizard launcher into the sessions VM so the
@@ -301,6 +302,22 @@ public partial class App : Application
             // closing the window — fall through to the default close.
             Log.Warning(ex, "Could not consult MinimizeToTrayOnClose setting; closing normally.");
         }
+    }
+
+    /// <summary>
+    /// Fires after a non-cancelled MainWindow close. Because we use
+    /// <see cref="System.Windows.ShutdownMode.OnExplicitShutdown"/> (set in
+    /// <c>App.xaml</c> to keep the modal first-run Onboarding window from
+    /// taking the whole app down — see #102), we have to call
+    /// <see cref="Application.Shutdown()"/> ourselves once the user has
+    /// genuinely closed the window. <see cref="OnMainWindowClosing"/> may
+    /// have cancelled the close to minimise to tray instead, in which case
+    /// this handler never runs.
+    /// </summary>
+    private void OnMainWindowClosed(object? sender, EventArgs e)
+    {
+        Log.Information("MainWindow closed; shutting down application.");
+        Shutdown(0);
     }
 
     private void ConfigureServices(HostBuilderContext context, IServiceCollection services)
