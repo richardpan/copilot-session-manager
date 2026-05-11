@@ -100,6 +100,53 @@ public class PowerShellSessionLauncherTests
             .Should().ThrowAsync<ArgumentException>();
     }
 
+    [Fact]
+    public async Task LaunchNewAsync_BuildsBareCopilotInvocation()
+    {
+        var processes = new RecordingProcessLauncher(returnPid: 4321);
+        var resolver = new FakeHostResolver(@"C:\Program Files\PowerShell\7\pwsh.exe");
+        var sut = new PowerShellSessionLauncher(processes, resolver, NullLogger<PowerShellSessionLauncher>.Instance);
+
+        var existingCwd = Path.GetTempPath();
+        var result = await sut.LaunchNewAsync(existingCwd);
+
+        result.ProcessId.Should().Be(4321);
+        result.Executable.Should().Be(@"C:\Program Files\PowerShell\7\pwsh.exe");
+        result.WorkingDirectory.Should().Be(existingCwd);
+        result.Arguments.Should().Be("copilot");
+
+        processes.Requests.Should().ContainSingle();
+        var req = processes.Requests[0];
+        req.Arguments.Should().BeEquivalentTo(new[] { "-NoExit", "-Command", "copilot" });
+        req.WorkingDirectory.Should().Be(existingCwd);
+        req.UseShellExecute.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task LaunchNewAsync_FallsBackToUserProfile_WhenWorkingDirIsBlank()
+    {
+        var processes = new RecordingProcessLauncher(returnPid: 1);
+        var sut = new PowerShellSessionLauncher(processes, new FakeHostResolver(@"C:\pwsh.exe"),
+            NullLogger<PowerShellSessionLauncher>.Instance);
+
+        await sut.LaunchNewAsync("   ");
+
+        processes.Requests[0].WorkingDirectory
+            .Should().Be(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
+    }
+
+    [Fact]
+    public async Task LaunchNewAsync_NoHost_Throws()
+    {
+        var sut = new PowerShellSessionLauncher(
+            new RecordingProcessLauncher(returnPid: null),
+            new FakeHostResolver(host: null),
+            NullLogger<PowerShellSessionLauncher>.Instance);
+
+        await FluentActions.Invoking(() => sut.LaunchNewAsync())
+            .Should().ThrowAsync<InvalidOperationException>();
+    }
+
     private sealed class RecordingProcessLauncher : IProcessLauncher
     {
         private readonly int? _returnPid;

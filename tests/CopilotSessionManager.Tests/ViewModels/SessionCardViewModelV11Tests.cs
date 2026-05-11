@@ -341,6 +341,8 @@ public class SessionCardViewModelV11Tests
             Calls.Add((sessionId, workingDirectory));
             return Task.FromResult(new SessionLaunchResult(99, "pwsh.exe", "copilot --resume " + sessionId, workingDirectory ?? ""));
         }
+        public Task<SessionLaunchResult> LaunchNewAsync(string? workingDirectory = null, CancellationToken cancellationToken = default)
+            => Task.FromResult(new SessionLaunchResult(100, "pwsh.exe", "copilot", workingDirectory ?? ""));
     }
 
     private sealed class FixedTimeProvider : TimeProvider

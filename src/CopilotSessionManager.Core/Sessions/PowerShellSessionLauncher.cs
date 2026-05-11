@@ -105,6 +105,26 @@ public sealed class PowerShellSessionLauncher : ISessionLauncher
         var safeId = sessionId.Replace("'", "''", StringComparison.Ordinal);
         var command = $"copilot --resume '{safeId}'";
 
+        return RunAsync(pwsh, command, cwd, sessionId);
+    }
+
+    public Task<SessionLaunchResult> LaunchNewAsync(
+        string? workingDirectory = null,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var pwsh = _hostResolver.Resolve()
+            ?? throw new InvalidOperationException("Could not locate pwsh.exe or powershell.exe on PATH.");
+
+        var cwd = ResolveWorkingDirectory(workingDirectory);
+        const string command = "copilot";
+
+        return RunAsync(pwsh, command, cwd, sessionId: null);
+    }
+
+    private Task<SessionLaunchResult> RunAsync(string pwsh, string command, string cwd, string? sessionId)
+    {
         var args = new[]
         {
             "-NoExit",
@@ -121,14 +141,30 @@ public sealed class PowerShellSessionLauncher : ISessionLauncher
         try
         {
             var pid = _processLauncher.Start(request);
-            _logger.LogInformation(
-                "Launched PowerShell session {SessionId} pid={Pid} cwd={Cwd}",
-                sessionId, pid, cwd);
+            if (sessionId is null)
+            {
+                _logger.LogInformation(
+                    "Launched fresh PowerShell Copilot session pid={Pid} cwd={Cwd}",
+                    pid, cwd);
+            }
+            else
+            {
+                _logger.LogInformation(
+                    "Launched PowerShell session {SessionId} pid={Pid} cwd={Cwd}",
+                    sessionId, pid, cwd);
+            }
             return Task.FromResult(new SessionLaunchResult(pid, pwsh, command, cwd));
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to launch PowerShell for session {SessionId}.", sessionId);
+            if (sessionId is null)
+            {
+                _logger.LogError(ex, "Failed to launch fresh PowerShell Copilot session.");
+            }
+            else
+            {
+                _logger.LogError(ex, "Failed to launch PowerShell for session {SessionId}.", sessionId);
+            }
             throw;
         }
     }

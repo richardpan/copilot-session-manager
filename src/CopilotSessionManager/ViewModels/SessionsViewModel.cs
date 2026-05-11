@@ -496,6 +496,57 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
     private bool CanCleanAllStaleLocks() => _lockCleanup is not null;
 
     /// <summary>
+    /// V1.2 (#108): launches a fresh PowerShell window running <c>copilot</c>
+    /// with no <c>--resume</c>, so the CLI mints a brand-new session id.
+    /// We don't know that id at launch time, so we defer a refresh ~3s
+    /// later to surface the new card without waiting for the discovery
+    /// FileSystemWatcher debounce. Disabled when no launcher is wired
+    /// (test ctors).
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(CanNewSession))]
+    public async Task NewSessionAsync(CancellationToken cancellationToken = default)
+    {
+        if (_sessionLauncher is null)
+        {
+            return;
+        }
+        try
+        {
+            StatusMessage = "Launching new Copilot session…";
+            var result = await _sessionLauncher.LaunchNewAsync(workingDirectory: null, cancellationToken)
+                .ConfigureAwait(false);
+            StatusMessage = result.ProcessId is int pid
+                ? $"Launched new Copilot session (pid {pid}). Refreshing…"
+                : "Launched new Copilot session. Refreshing…";
+            // Defer the rescan: the CLI needs a moment to write the new
+            // session-state directory before discovery can pick it up.
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(3), cancellationToken).ConfigureAwait(false);
+                    await RefreshAsync(cancellationToken).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
+                    // Cancelled — nothing to do.
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Post-launch refresh failed.");
+                }
+            }, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to launch new Copilot session.");
+            StatusMessage = $"Could not launch new session: {ex.Message}";
+        }
+    }
+
+    private bool CanNewSession() => _sessionLauncher is not null;
+
+    /// <summary>
     /// Persists <paramref name="type"/> as the user-assigned label for
     /// <paramref name="card"/>. The store will raise <see cref="ISessionLabelStore.LabelChanged"/>,
     /// which updates the matching card on the UI thread.
