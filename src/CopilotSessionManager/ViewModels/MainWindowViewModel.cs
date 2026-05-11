@@ -220,6 +220,31 @@ public sealed partial class MainWindowViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// Loads user settings and runs all per-launch startup tasks for the
+    /// shell — currently the initial session scan and (when opted in via
+    /// <see cref="AppSettings.AutoCleanStaleLocksOnStartup"/>) a one-shot
+    /// stale-lock sweep. Called from <c>MainWindow.OnLoadedAsync</c> once
+    /// XAML has measured + arranged.
+    /// </summary>
+    public async Task RunStartupTasksAsync(CancellationToken cancellationToken = default)
+    {
+        var autoClean = false;
+        try
+        {
+            var settings = await _settingsStore.LoadAsync(cancellationToken).ConfigureAwait(false);
+            autoClean = settings.AutoCleanStaleLocksOnStartup;
+        }
+        catch (Exception ex)
+        {
+            // Failing to load settings must not block the dashboard from
+            // loading. Default to the historical no-op behaviour.
+            _logger.LogWarning(ex, "Could not load settings before startup tasks; defaulting to no auto-clean.");
+        }
+
+        await Sessions.InitializeAsync(autoClean, cancellationToken).ConfigureAwait(false);
+    }
+
     private void OnAvailabilityChanged(object? sender, GitHubAvailabilityState state)
     {
         if (_dispatcher is null)

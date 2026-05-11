@@ -27,7 +27,9 @@ public partial class MainWindow : Window
     {
         // Kick off the initial scan once XAML has measured + arranged so the
         // very first SessionsChanged tick has a real UI to update.
-        await _viewModel.Sessions.InitializeAsync();
+        // RunStartupTasksAsync also performs the V1.8 (#74) opt-in stale-lock
+        // sweep when AppSettings.AutoCleanStaleLocksOnStartup is true.
+        await _viewModel.RunStartupTasksAsync();
     }
 
     private async void OnLabelMenuItemClicked(object sender, RoutedEventArgs e)

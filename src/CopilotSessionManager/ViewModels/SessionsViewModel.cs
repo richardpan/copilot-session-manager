@@ -474,15 +474,23 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
 
     /// <summary>
     /// Performs the initial scan and starts the watcher. Subsequent calls
-    /// return immediately.
+    /// return immediately. When <paramref name="autoCleanStaleLocksOnStartup"/>
+    /// is <c>true</c>, the equivalent of the toolbar
+    /// <c>🧹 Clean stale locks</c> command runs once after the first scan
+    /// succeeds — useful for users who never want to think about lingering
+    /// <c>inuse.&lt;pid&gt;.lock</c> files after a CLI crash.
     /// </summary>
-    public async Task InitializeAsync(CancellationToken cancellationToken = default)
+    public async Task InitializeAsync(
+        bool autoCleanStaleLocksOnStartup = false,
+        CancellationToken cancellationToken = default)
     {
         if (_started)
         {
             return;
         }
         _started = true;
+
+        var initialScanSucceeded = false;
 
         try
         {
@@ -497,6 +505,7 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
             // CurrentSessions; mirror it now so the UI has data immediately.
             await ApplySnapshotAsync(_discovery.CurrentSessions, cancellationToken)
                 .ConfigureAwait(false);
+            initialScanSucceeded = true;
         }
         catch (Exception ex)
         {
@@ -506,6 +515,18 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
         finally
         {
             IsLoading = false;
+        }
+
+        // V1.8 (#74): opt-in startup sweep of stale locks. Runs only after a
+        // successful initial scan so the user never sees a "Cleaning…" status
+        // before the first session list has even rendered. Failures inside
+        // CleanAllStaleLocksAsync are already swallowed and surfaced via
+        // StatusMessage there, so we don't double-handle.
+        if (initialScanSucceeded
+            && autoCleanStaleLocksOnStartup
+            && _lockCleanup is not null)
+        {
+            await CleanAllStaleLocksAsync(cancellationToken).ConfigureAwait(false);
         }
     }
 
