@@ -285,28 +285,67 @@
                             Foreground="#11111B"
                             BorderBrush="#74A0E0"
                             FontWeight="SemiBold"
-                            ToolTip="Launch a fresh PowerShell window running `copilot` (no --resume). The new session appears in the list within a few seconds."
+                            ToolTipService.ShowDuration="25000"
                             AutomationProperties.Name="New Copilot session"
                             AutomationProperties.HelpText="Launches a fresh PowerShell window running copilot so the CLI mints a new session id."
-                            Command="{Binding Sessions.NewSessionCommand}" />
+                            Command="{Binding Sessions.NewSessionCommand}">
+                        <Button.ToolTip>
+                            <ToolTip MaxWidth="380">
+                                <StackPanel>
+                                    <TextBlock FontWeight="SemiBold" Text="Start a new Copilot session" />
+                                    <TextBlock TextWrapping="Wrap" Margin="0,4,0,0"
+                                               Text="Launches a fresh PowerShell window in your user home and runs `copilot` (no --resume), so the CLI mints a brand-new session id." />
+                                    <TextBlock TextWrapping="Wrap" Margin="0,6,0,0" FontStyle="Italic" Foreground="#A6ADC8"
+                                               Text="The new session appears in the dashboard within a few seconds — there's no need to refresh." />
+                                </StackPanel>
+                            </ToolTip>
+                        </Button.ToolTip>
+                    </Button>
                     <Button Content="🧹 Clean stale locks"
                             Padding="12,6"
                             Margin="0,0,8,0"
                             Background="#313244"
                             Foreground="#CDD6F4"
                             BorderBrush="#45475A"
-                            ToolTip="Sweep ~/.copilot/session-state and delete inuse.*.lock files whose owning process is no longer running"
+                            ToolTipService.ShowDuration="30000"
                             AutomationProperties.Name="Clean all stale locks"
                             AutomationProperties.HelpText="Sweeps the Copilot session-state folder and deletes inuse lock files left behind by dead processes."
-                            Command="{Binding Sessions.CleanAllStaleLocksCommand}" />
+                            Command="{Binding Sessions.CleanAllStaleLocksCommand}">
+                        <Button.ToolTip>
+                            <ToolTip MaxWidth="420">
+                                <StackPanel>
+                                    <TextBlock FontWeight="SemiBold" Text="Clean stale locks (all sessions)" />
+                                    <TextBlock TextWrapping="Wrap" Margin="0,4,0,0"
+                                               Text="The Copilot CLI writes a small file named inuse.&lt;pid&gt;.lock when a session starts and deletes it on a clean exit. If the CLI crashes, is force-killed, or the machine power-cycles, the lock can be left behind pointing at a process that is no longer running — Copilot then refuses to attach to that session." />
+                                    <TextBlock TextWrapping="Wrap" Margin="0,6,0,0"
+                                               Text="This button sweeps every session under ~/.copilot/session-state, checks each lock's PID, and deletes only the orphaned ones. Locks owned by a still-running process are never touched, so it is always safe to click — even with active sessions in other windows." />
+                                    <TextBlock TextWrapping="Wrap" Margin="0,6,0,0" FontStyle="Italic" Foreground="#A6ADC8"
+                                               Text="Per-session cleanup is also available via the 🧹 button on a crashed row, and ▶ Resume runs this same cleanup automatically before relaunching." />
+                                </StackPanel>
+                            </ToolTip>
+                        </Button.ToolTip>
+                    </Button>
                     <Button Content="↻ Refresh"
                             Padding="12,6"
                             Background="#313244"
                             Foreground="#CDD6F4"
                             BorderBrush="#45475A"
+                            ToolTipService.ShowDuration="20000"
                             AutomationProperties.Name="Refresh sessions"
                             AutomationProperties.HelpText="Re-scans the local Copilot session folder for new and updated sessions."
-                            Command="{Binding Sessions.RefreshCommand}" />
+                            Command="{Binding Sessions.RefreshCommand}">
+                        <Button.ToolTip>
+                            <ToolTip MaxWidth="360">
+                                <StackPanel>
+                                    <TextBlock FontWeight="SemiBold" Text="Refresh" />
+                                    <TextBlock TextWrapping="Wrap" Margin="0,4,0,0"
+                                               Text="Re-scans ~/.copilot/session-state for new and updated sessions and rebuilds the dashboard." />
+                                    <TextBlock TextWrapping="Wrap" Margin="0,6,0,0" FontStyle="Italic" Foreground="#A6ADC8"
+                                               Text="The dashboard already updates automatically as sessions change on disk. Use this to force an immediate re-scan if a card looks out of sync." />
+                                </StackPanel>
+                            </ToolTip>
+                        </Button.ToolTip>
+                    </Button>
                 </StackPanel>
             </Grid>
         </Border>
@@ -521,10 +560,22 @@
                                         Foreground="#11111B"
                                         BorderBrush="#74A0E0"
                                         BorderThickness="1"
-                                        ToolTip="Open session documentation (SESSION-DOCS.html) in your browser."
+                                        ToolTipService.ShowDuration="25000"
                                         Command="{Binding DataContext.Sessions.OpenDocsCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                                         CommandParameter="{Binding}"
-                                        AutomationProperties.Name="Open session documentation" />
+                                        AutomationProperties.Name="Open session documentation">
+                                    <Button.ToolTip>
+                                        <ToolTip MaxWidth="380">
+                                            <StackPanel>
+                                                <TextBlock FontWeight="SemiBold" Text="Open session documentation" />
+                                                <TextBlock TextWrapping="Wrap" Margin="0,4,0,0"
+                                                           Text="Opens SESSION-DOCS.html for this session in your default browser. The page contains your hand-curated notes (Overview, Decisions, Features, Mockups, …) plus auto-derived indexes of files, plan, and checkpoints." />
+                                                <TextBlock TextWrapping="Wrap" Margin="0,6,0,0" FontStyle="Italic" Foreground="#A6ADC8"
+                                                           Text="On first click, csm scaffolds an empty SESSION-DOCS.md in the session folder for you (or your agent) to fill in. csm never overwrites your edits." />
+                                            </StackPanel>
+                                        </ToolTip>
+                                    </Button.ToolTip>
+                                </Button>
                                 <Button Content="▶"
                                         Padding="6,0"
                                         FontSize="11"
@@ -532,9 +583,21 @@
                                         Background="Transparent"
                                         Foreground="#A6E3A1"
                                         BorderThickness="0"
-                                        ToolTip="Open this session in PowerShell. If a window for this session is already open, it is brought to the foreground."
+                                        ToolTipService.ShowDuration="20000"
                                         Command="{Binding OpenCommand}"
-                                        AutomationProperties.Name="Open this session in PowerShell" />
+                                        AutomationProperties.Name="Open this session in PowerShell">
+                                    <Button.ToolTip>
+                                        <ToolTip MaxWidth="360">
+                                            <StackPanel>
+                                                <TextBlock FontWeight="SemiBold" Text="Open in PowerShell" />
+                                                <TextBlock TextWrapping="Wrap" Margin="0,4,0,0"
+                                                           Text="Launches a new PowerShell window in the session's working directory and runs `copilot --resume &lt;id&gt;`." />
+                                                <TextBlock TextWrapping="Wrap" Margin="0,6,0,0" FontStyle="Italic" Foreground="#A6ADC8"
+                                                           Text="If a window for this session is already open, csm brings it to the foreground instead of launching a duplicate." />
+                                            </StackPanel>
+                                        </ToolTip>
+                                    </Button.ToolTip>
+                                </Button>
                                 <Button Content="✎"
                                         Padding="5,0"
                                         FontSize="11"
@@ -542,9 +605,21 @@
                                         Background="Transparent"
                                         Foreground="#CDD6F4"
                                         BorderThickness="0"
-                                        ToolTip="Rename this session"
+                                        ToolTipService.ShowDuration="20000"
                                         Command="{Binding BeginRenameCommand}"
-                                        AutomationProperties.Name="Rename" />
+                                        AutomationProperties.Name="Rename">
+                                    <Button.ToolTip>
+                                        <ToolTip MaxWidth="360">
+                                            <StackPanel>
+                                                <TextBlock FontWeight="SemiBold" Text="Rename session" />
+                                                <TextBlock TextWrapping="Wrap" Margin="0,4,0,0"
+                                                           Text="Sets a custom display name for this session in csm. Press Enter to save, Esc to cancel; clearing the field restores the original Copilot-generated title." />
+                                                <TextBlock TextWrapping="Wrap" Margin="0,6,0,0" FontStyle="Italic" Foreground="#A6ADC8"
+                                                           Text="Renames are stored locally by csm and never modify the Copilot session itself, so the agent's own context is unaffected." />
+                                            </StackPanel>
+                                        </ToolTip>
+                                    </Button.ToolTip>
+                                </Button>
                                 <Button Content="🧹"
                                         Padding="5,0"
                                         FontSize="11"
@@ -552,10 +627,24 @@
                                         Background="Transparent"
                                         Foreground="#CDD6F4"
                                         BorderThickness="0"
-                                        ToolTip="Delete stale inuse.*.lock files for this crashed session"
+                                        ToolTipService.ShowDuration="30000"
                                         Visibility="{Binding IsCrashed, Converter={StaticResource BoolToVisibility}}"
                                         Command="{Binding CleanupStaleLocksCommand}"
-                                        AutomationProperties.Name="Clean stale lock files" />
+                                        AutomationProperties.Name="Clean stale lock files">
+                                    <Button.ToolTip>
+                                        <ToolTip MaxWidth="420">
+                                            <StackPanel>
+                                                <TextBlock FontWeight="SemiBold" Text="Clean stale locks" />
+                                                <TextBlock TextWrapping="Wrap" Margin="0,4,0,0"
+                                                           Text="The Copilot CLI writes a small file named inuse.&lt;pid&gt;.lock when a session starts and deletes it on a clean exit. If the CLI crashes, is force-killed, or the machine power-cycles, the lock can be left behind pointing at a process that is no longer running — Copilot then refuses to attach to the session and the row is flagged as Crashed." />
+                                                <TextBlock TextWrapping="Wrap" Margin="0,6,0,0"
+                                                           Text="This button walks every inuse.*.lock file in this session's folder, checks whether each owning PID is still alive, and deletes only the orphaned ones. Live locks are never touched, so it is always safe to click — even if you also have an active window for this session open elsewhere." />
+                                                <TextBlock TextWrapping="Wrap" Margin="0,6,0,0" FontStyle="Italic" Foreground="#A6ADC8"
+                                                           Text="The button only appears on Crashed rows. ▶ Resume runs this same cleanup automatically before relaunching, so most of the time you can skip straight to Resume." />
+                                            </StackPanel>
+                                        </ToolTip>
+                                    </Button.ToolTip>
+                                </Button>
                                 <Button Content="▶ Resume"
                                         Padding="6,0"
                                         FontSize="11"
@@ -564,19 +653,45 @@
                                         Foreground="#11111B"
                                         BorderBrush="#94D396"
                                         BorderThickness="1"
-                                        ToolTip="Launch a new PowerShell window and resume this Copilot session (cleans up stale lock files first)"
+                                        ToolTipService.ShowDuration="25000"
                                         Visibility="{Binding IsCrashed, Converter={StaticResource BoolToVisibility}}"
                                         Command="{Binding ResumeCommand}"
-                                        AutomationProperties.Name="Resume crashed session" />
+                                        AutomationProperties.Name="Resume crashed session">
+                                    <Button.ToolTip>
+                                        <ToolTip MaxWidth="380">
+                                            <StackPanel>
+                                                <TextBlock FontWeight="SemiBold" Text="Resume crashed session" />
+                                                <TextBlock TextWrapping="Wrap" Margin="0,4,0,0"
+                                                           Text="Cleans up any stale inuse.*.lock files (locks owned by a process that is no longer running), then launches a fresh PowerShell window and reattaches to this session via `copilot --resume &lt;id&gt;`." />
+                                                <TextBlock TextWrapping="Wrap" Margin="0,6,0,0" FontStyle="Italic" Foreground="#A6ADC8"
+                                                           Text="A session is marked Crashed when csm finds an inuse lock pointing at a dead PID — usually after a CLI crash, force-kill, or power-loss." />
+                                            </StackPanel>
+                                        </ToolTip>
+                                    </Button.ToolTip>
+                                </Button>
                                 <Button Content="🗑"
                                         Padding="5,0"
                                         FontSize="11"
                                         Background="Transparent"
                                         Foreground="#F38BA8"
                                         BorderThickness="0"
-                                        ToolTip="Delete this session from disk (with confirmation)"
+                                        ToolTipService.ShowDuration="25000"
                                         Command="{Binding DeleteCommand}"
-                                        AutomationProperties.Name="Delete session from disk" />
+                                        AutomationProperties.Name="Delete session from disk">
+                                    <Button.ToolTip>
+                                        <ToolTip MaxWidth="380">
+                                            <StackPanel>
+                                                <TextBlock FontWeight="SemiBold" Foreground="#F38BA8" Text="Delete session from disk" />
+                                                <TextBlock TextWrapping="Wrap" Margin="0,4,0,0"
+                                                           Text="Permanently removes the session folder under ~/.copilot/session-state/&lt;id&gt;/ — including events, plan, checkpoints, and any files you've put under files/." />
+                                                <TextBlock TextWrapping="Wrap" Margin="0,6,0,0"
+                                                           Text="csm also clears its own local overrides for this session (rename, star, GitHub link, README cache, generated SESSION-DOCS.html)." />
+                                                <TextBlock TextWrapping="Wrap" Margin="0,6,0,0" FontStyle="Italic" Foreground="#F38BA8"
+                                                           Text="This cannot be undone. csm asks for confirmation before deleting." />
+                                            </StackPanel>
+                                        </ToolTip>
+                                    </Button.ToolTip>
+                                </Button>
                             </StackPanel>
                         </DataTemplate>
                     </DataGridTemplateColumn.CellTemplate>
