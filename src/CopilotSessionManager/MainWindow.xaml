@@ -66,6 +66,11 @@
                       Command="{Binding DataContext.Sessions.OpenReadmeCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                       CommandParameter="{Binding}"
                       AutomationProperties.Name="Open SESSION-README" />
+            <MenuItem Header="Open SESSION-DOCS (browser)"
+                      Command="{Binding DataContext.Sessions.OpenDocsCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                      CommandParameter="{Binding}"
+                      AutomationProperties.Name="Open SESSION-DOCS in browser"
+                      AutomationProperties.HelpText="Generates SESSION-DOCS.html from the user-curated SESSION-DOCS.md (scaffolding it on first use) and opens it in your default browser." />
             <Separator />
             <MenuItem Header="Star (pin to top)"
                       Command="{Binding ToggleStarCommand}"
@@ -497,6 +502,86 @@
                     </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
 
+                <!-- V1.6 (#118): Actions moved left of Name and made always-visible.
+                     Primary action is the prominent 📚 Docs button (text + accent
+                     fill) which scaffolds + opens the per-session SESSION-DOCS.html
+                     in the OS default browser. Other actions are icon-only. -->
+                <DataGridTemplateColumn Header="" Width="220" CanUserSort="False">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <StackPanel Orientation="Horizontal"
+                                        HorizontalAlignment="Left"
+                                        VerticalAlignment="Center">
+                                <Button Content="📚 Docs"
+                                        Padding="10,4"
+                                        FontSize="11"
+                                        FontWeight="SemiBold"
+                                        Margin="0,0,4,0"
+                                        Background="#89B4FA"
+                                        Foreground="#11111B"
+                                        BorderBrush="#74A0E0"
+                                        BorderThickness="1"
+                                        ToolTip="Open session documentation (SESSION-DOCS.html) in your browser."
+                                        Command="{Binding DataContext.Sessions.OpenDocsCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                        CommandParameter="{Binding}"
+                                        AutomationProperties.Name="Open session documentation" />
+                                <Button Content="▶"
+                                        Padding="6,0"
+                                        FontSize="11"
+                                        Margin="0,0,3,0"
+                                        Background="Transparent"
+                                        Foreground="#A6E3A1"
+                                        BorderThickness="0"
+                                        ToolTip="Open this session in PowerShell. If a window for this session is already open, it is brought to the foreground."
+                                        Command="{Binding OpenCommand}"
+                                        AutomationProperties.Name="Open this session in PowerShell" />
+                                <Button Content="✎"
+                                        Padding="5,0"
+                                        FontSize="11"
+                                        Margin="0,0,3,0"
+                                        Background="Transparent"
+                                        Foreground="#CDD6F4"
+                                        BorderThickness="0"
+                                        ToolTip="Rename this session"
+                                        Command="{Binding BeginRenameCommand}"
+                                        AutomationProperties.Name="Rename" />
+                                <Button Content="🧹"
+                                        Padding="5,0"
+                                        FontSize="11"
+                                        Margin="0,0,3,0"
+                                        Background="Transparent"
+                                        Foreground="#CDD6F4"
+                                        BorderThickness="0"
+                                        ToolTip="Delete stale inuse.*.lock files for this crashed session"
+                                        Visibility="{Binding IsCrashed, Converter={StaticResource BoolToVisibility}}"
+                                        Command="{Binding CleanupStaleLocksCommand}"
+                                        AutomationProperties.Name="Clean stale lock files" />
+                                <Button Content="▶ Resume"
+                                        Padding="6,0"
+                                        FontSize="11"
+                                        Margin="0,0,3,0"
+                                        Background="#A6E3A1"
+                                        Foreground="#11111B"
+                                        BorderBrush="#94D396"
+                                        BorderThickness="1"
+                                        ToolTip="Launch a new PowerShell window and resume this Copilot session (cleans up stale lock files first)"
+                                        Visibility="{Binding IsCrashed, Converter={StaticResource BoolToVisibility}}"
+                                        Command="{Binding ResumeCommand}"
+                                        AutomationProperties.Name="Resume crashed session" />
+                                <Button Content="🗑"
+                                        Padding="5,0"
+                                        FontSize="11"
+                                        Background="Transparent"
+                                        Foreground="#F38BA8"
+                                        BorderThickness="0"
+                                        ToolTip="Delete this session from disk (with confirmation)"
+                                        Command="{Binding DeleteCommand}"
+                                        AutomationProperties.Name="Delete session from disk" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+
                 <!-- Name + repo·branch + label chip. Click name to inline-edit. -->
                 <DataGridTemplateColumn Header="Name" Width="*" SortMemberPath="DisplayName">
                     <DataGridTemplateColumn.CellTemplate>
@@ -717,98 +802,6 @@
                     </DataGridTextColumn.ElementStyle>
                 </DataGridTextColumn>
 
-                <!-- Actions: hover-revealed icon row. Crashed-only Resume + Cleanup
-                     stay visible whenever IsCrashed is true. -->
-                <DataGridTemplateColumn Header="" Width="180" CanUserSort="False">
-                    <DataGridTemplateColumn.CellTemplate>
-                        <DataTemplate>
-                            <StackPanel Orientation="Horizontal"
-                                        HorizontalAlignment="Right"
-                                        VerticalAlignment="Center">
-                                <StackPanel.Style>
-                                    <Style TargetType="StackPanel">
-                                        <Setter Property="Opacity" Value="0.0" />
-                                        <Style.Triggers>
-                                            <DataTrigger Binding="{Binding RelativeSource={RelativeSource AncestorType=DataGridRow}, Path=IsMouseOver}" Value="True">
-                                                <Setter Property="Opacity" Value="1.0" />
-                                            </DataTrigger>
-                                            <DataTrigger Binding="{Binding RelativeSource={RelativeSource AncestorType=DataGridRow}, Path=IsSelected}" Value="True">
-                                                <Setter Property="Opacity" Value="1.0" />
-                                            </DataTrigger>
-                                            <DataTrigger Binding="{Binding IsCrashed}" Value="True">
-                                                <Setter Property="Opacity" Value="1.0" />
-                                            </DataTrigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </StackPanel.Style>
-                                <Button Content="✎"
-                                        Padding="5,0"
-                                        FontSize="11"
-                                        Margin="0,0,3,0"
-                                        Background="Transparent"
-                                        Foreground="#CDD6F4"
-                                        BorderThickness="0"
-                                        ToolTip="Rename this session"
-                                        Command="{Binding BeginRenameCommand}"
-                                        AutomationProperties.Name="Rename" />
-                                <Button Content="📄"
-                                        Padding="5,0"
-                                        FontSize="11"
-                                        Margin="0,0,3,0"
-                                        Background="Transparent"
-                                        Foreground="#CDD6F4"
-                                        BorderThickness="0"
-                                        ToolTip="Open the auto-generated SESSION-README.md for this session"
-                                        Command="{Binding DataContext.Sessions.OpenReadmeCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                        CommandParameter="{Binding}"
-                                        AutomationProperties.Name="Open SESSION-README" />
-                                <Button Content="🧹"
-                                        Padding="5,0"
-                                        FontSize="11"
-                                        Margin="0,0,3,0"
-                                        Background="Transparent"
-                                        Foreground="#CDD6F4"
-                                        BorderThickness="0"
-                                        ToolTip="Delete stale inuse.*.lock files for this crashed session"
-                                        Visibility="{Binding IsCrashed, Converter={StaticResource BoolToVisibility}}"
-                                        Command="{Binding CleanupStaleLocksCommand}"
-                                        AutomationProperties.Name="Clean stale lock files" />
-                                <Button Content="▶ Resume"
-                                        Padding="6,0"
-                                        FontSize="11"
-                                        Margin="0,0,3,0"
-                                        Background="#A6E3A1"
-                                        Foreground="#11111B"
-                                        BorderBrush="#94D396"
-                                        BorderThickness="1"
-                                        ToolTip="Launch a new PowerShell window and resume this Copilot session (cleans up stale lock files first)"
-                                        Visibility="{Binding IsCrashed, Converter={StaticResource BoolToVisibility}}"
-                                        Command="{Binding ResumeCommand}"
-                                        AutomationProperties.Name="Resume crashed session" />
-                                <Button Content="▶ Open"
-                                        Padding="6,0"
-                                        FontSize="11"
-                                        Margin="0,0,3,0"
-                                        Background="#89B4FA"
-                                        Foreground="#11111B"
-                                        BorderBrush="#74A0E0"
-                                        BorderThickness="1"
-                                        ToolTip="Open this session in PowerShell. If a window for this session is already open, it is brought to the foreground."
-                                        Command="{Binding OpenCommand}"
-                                        AutomationProperties.Name="Open this session in PowerShell" />
-                                <Button Content="🗑"
-                                        Padding="5,0"
-                                        FontSize="11"
-                                        Background="Transparent"
-                                        Foreground="#F38BA8"
-                                        BorderThickness="0"
-                                        ToolTip="Delete this session from disk (with confirmation)"
-                                        Command="{Binding DeleteCommand}"
-                                        AutomationProperties.Name="Delete session from disk" />
-                            </StackPanel>
-                        </DataTemplate>
-                    </DataGridTemplateColumn.CellTemplate>
-                </DataGridTemplateColumn>
             </DataGrid.Columns>
         </DataGrid>
 

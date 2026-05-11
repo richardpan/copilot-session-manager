@@ -59,6 +59,10 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
     private readonly Func<SessionDeletionPrompt, bool>? _confirmDelete;
     #endregion
 
+    // V1.6 (#118): generated HTML session docs. Settable post-construction
+    // via SetDocsService so we don't churn the canonical ctor chain.
+    private ISessionDocsService? _docsService;
+
     private readonly Dictionary<string, SessionCardViewModel> _byId =
         new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<SessionType> _hiddenLabels = new();
@@ -663,6 +667,50 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
         {
             _logger.LogError(ex, "Failed to open README for session {Id}.", card.Id);
             StatusMessage = $"Could not open README: {ex.Message}";
+        }
+    }
+
+    /// <summary>
+    /// V1.6 (#118): Wires the docs service that V1.6 ships. Called once
+    /// from <c>App.OnStartup</c> after the host has built. Optional so
+    /// existing test fixtures and older constructor chains keep working.
+    /// </summary>
+    public void SetDocsService(ISessionDocsService? docsService)
+    {
+        _docsService = docsService;
+    }
+
+    /// <summary>
+    /// V1.6 (#118): Ensures <c>SESSION-DOCS.md</c> is scaffolded for
+    /// <paramref name="card"/>'s session, regenerates
+    /// <c>SESSION-DOCS.html</c> if anything has changed, and launches the
+    /// HTML in the user's default browser. No-op if the docs service has
+    /// not been wired (e.g. legacy test fixtures).
+    /// </summary>
+    [RelayCommand]
+    public async Task OpenDocsAsync(SessionCardViewModel? card, CancellationToken cancellationToken = default)
+    {
+        if (card is null)
+        {
+            return;
+        }
+
+        if (_docsService is null)
+        {
+            StatusMessage = "Docs service is not available.";
+            return;
+        }
+
+        try
+        {
+            var htmlPath = await _docsService.EnsureAsync(card.Model, cancellationToken).ConfigureAwait(false);
+            await _fileLauncher.OpenAsync(htmlPath, cancellationToken).ConfigureAwait(false);
+            StatusMessage = $"Opened docs for {card.ShortId} in your browser.";
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to open docs for session {Id}.", card.Id);
+            StatusMessage = $"Could not open session docs: {ex.Message}";
         }
     }
 
