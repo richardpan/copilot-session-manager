@@ -84,6 +84,7 @@ public static class CoreServiceCollectionExtensions
         services.TryAddSingleton<IRunningSessionRegistry, InMemoryRunningSessionRegistry>();
         services.TryAddSingleton<ISessionFolderReader, SessionFolderReader>();
         services.AddSessionDisplayNames();
+        services.AddSessionStars();
         services.TryAddSingleton<ISessionDeletionService, SessionDeletionService>();
 
         return services;
@@ -106,6 +107,29 @@ public static class CoreServiceCollectionExtensions
                 JsonSessionDisplayNameStore.DefaultFileName);
             var logger = sp.GetRequiredService<ILogger<JsonSessionDisplayNameStore>>();
             return new JsonSessionDisplayNameStore(path, logger);
+        });
+
+        return services;
+    }
+
+    /// <summary>
+    /// Registers <see cref="ISessionStarStore"/> backed by
+    /// <see cref="JsonSessionStarStore"/> at
+    /// <c>%LOCALAPPDATA%\CopilotSessionManager\stars.json</c> for the
+    /// per-session star / pin-to-top feature (#112). Safe to call multiple
+    /// times.
+    /// </summary>
+    public static IServiceCollection AddSessionStars(this IServiceCollection services)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        services.TryAddSingleton<ISessionStarStore>(sp =>
+        {
+            var path = System.IO.Path.Combine(
+                AppPaths.LocalAppDataDirectory,
+                JsonSessionStarStore.DefaultFileName);
+            var logger = sp.GetRequiredService<ILogger<JsonSessionStarStore>>();
+            return new JsonSessionStarStore(path, logger);
         });
 
         return services;

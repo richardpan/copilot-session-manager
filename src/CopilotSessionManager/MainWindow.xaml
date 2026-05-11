@@ -39,6 +39,16 @@
                       AutomationProperties.HelpText="Toggle visibility of sessions running models in this tier." />
         </DataTemplate>
 
+        <DataTemplate x:Key="ProducerFilterTemplate" DataType="{x:Type vm:ProducerFilterChip}">
+            <CheckBox Content="{Binding Label}"
+                      IsChecked="{Binding IsVisible, Mode=TwoWay}"
+                      Foreground="#CDD6F4"
+                      Margin="0,0,12,0"
+                      VerticalAlignment="Center"
+                      AutomationProperties.Name="{Binding Label}"
+                      AutomationProperties.HelpText="Toggle visibility of sessions started by this Copilot client (e.g. agency, copilot-agent)." />
+        </DataTemplate>
+
         <DataTemplate x:Key="SessionCardTemplate" DataType="{x:Type vm:SessionCardViewModel}">
             <Border Margin="0,0,0,6"
                     Padding="10,8"
@@ -309,10 +319,32 @@
                                        Foreground="#7F849C"
                                        FontSize="11" />
                         </StackPanel>
-                        <!-- Action row: README + Open side-by-side. -->
+                        <!-- Action row: Star + README + Open side-by-side. -->
                         <StackPanel Orientation="Horizontal"
                                     HorizontalAlignment="Right"
                                     Margin="0,4,0,0">
+                            <Button Padding="6,2"
+                                    FontSize="13"
+                                    Margin="0,0,4,0"
+                                    Background="#313244"
+                                    BorderBrush="#45475A"
+                                    ToolTip="{Binding StarTooltip}"
+                                    AutomationProperties.Name="Toggle star"
+                                    AutomationProperties.HelpText="Star this session to pin it to the top of the dashboard."
+                                    Command="{Binding ToggleStarCommand}">
+                                <Button.Style>
+                                    <Style TargetType="Button">
+                                        <Setter Property="Content" Value="☆" />
+                                        <Setter Property="Foreground" Value="#7F849C" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsStarred}" Value="True">
+                                                <Setter Property="Content" Value="★" />
+                                                <Setter Property="Foreground" Value="#F9E2AF" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Button.Style>
+                            </Button>
                             <Button Content="📄"
                                     Padding="6,2"
                                     FontSize="11"
@@ -613,6 +645,20 @@
                            Margin="0,2,8,2" />
                 <ItemsControl ItemsSource="{Binding Sessions.TierFilters}"
                               ItemTemplate="{StaticResource TierFilterTemplate}"
+                              VerticalAlignment="Center"
+                              Margin="0,2,8,2">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <WrapPanel Orientation="Horizontal" />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                </ItemsControl>
+                <TextBlock Text="Producers:"
+                           Foreground="#7F849C"
+                           VerticalAlignment="Center"
+                           Margin="0,2,8,2" />
+                <ItemsControl ItemsSource="{Binding Sessions.ProducerFilters}"
+                              ItemTemplate="{StaticResource ProducerFilterTemplate}"
                               VerticalAlignment="Center"
                               Margin="0,2,0,2">
                     <ItemsControl.ItemsPanel>

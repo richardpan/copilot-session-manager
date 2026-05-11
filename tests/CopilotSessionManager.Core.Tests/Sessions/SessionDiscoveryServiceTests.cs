@@ -269,6 +269,56 @@ public class SessionDiscoveryServiceTests : IAsyncDisposable, IDisposable
         sessions[0].GitHubLinks!.RepositoryUrl.Should().Be("https://github.com/user/repo");
     }
 
+    [Fact]
+    public async Task ScanAsync_reads_producer_from_first_session_start_event()
+    {
+        var id = "00000000-0000-0000-0000-000000000099";
+        var sessionDir = Path.Combine(_stateDir, id);
+        Directory.CreateDirectory(sessionDir);
+        File.WriteAllText(Path.Combine(sessionDir, "workspace.yaml"),
+            $"id: {id}\ncwd: C:\\ws\\demo\nrepository: github/demo\nhost_type: github\nbranch: main\nsummary: s\ncreated_at: 2026-05-08T12:00:00.000Z\nupdated_at: 2026-05-08T12:30:00.000Z\n");
+        var startEvent =
+            $$"""{"data":{"copilotVersion":"1.0.43","sessionId":"{{id}}","producer":"copilot-agent","startTime":"2026-05-08T12:00:00.000Z","version":1},"id":"e1","parentId":null,"timestamp":"2026-05-08T12:00:00.000Z","type":"session.start"}""";
+        File.WriteAllText(Path.Combine(sessionDir, "events.jsonl"), startEvent + Environment.NewLine);
+
+        var service = CreateService(records: Array.Empty<SessionStoreRecord>());
+        var sessions = await service.ScanAsync();
+
+        sessions.Should().ContainSingle();
+        sessions[0].Producer.Should().Be("copilot-agent");
+    }
+
+    [Fact]
+    public async Task ScanAsync_returns_null_producer_when_field_missing()
+    {
+        var id = "00000000-0000-0000-0000-000000000098";
+        // WriteSessionFiles already produces a session.start without "producer".
+        WriteSessionFiles(id, copilotVersion: "1.0.43", repository: "github/demo", branch: "main");
+
+        var service = CreateService(records: Array.Empty<SessionStoreRecord>());
+        var sessions = await service.ScanAsync();
+
+        sessions.Should().ContainSingle();
+        sessions[0].Producer.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task ScanAsync_returns_null_producer_when_events_file_is_corrupt()
+    {
+        var id = "00000000-0000-0000-0000-000000000097";
+        var sessionDir = Path.Combine(_stateDir, id);
+        Directory.CreateDirectory(sessionDir);
+        File.WriteAllText(Path.Combine(sessionDir, "workspace.yaml"),
+            $"id: {id}\ncwd: C:\\ws\\demo\nrepository: github/demo\nhost_type: github\nbranch: main\nsummary: s\ncreated_at: 2026-05-08T12:00:00.000Z\nupdated_at: 2026-05-08T12:30:00.000Z\n");
+        File.WriteAllText(Path.Combine(sessionDir, "events.jsonl"), "{ this is not json" + Environment.NewLine);
+
+        var service = CreateService(records: Array.Empty<SessionStoreRecord>());
+        var sessions = await service.ScanAsync();
+
+        sessions.Should().ContainSingle();
+        sessions[0].Producer.Should().BeNull();
+    }
+
     private SessionDiscoveryService CreateService(
         IReadOnlyList<SessionStoreRecord> records,
         Func<int, bool>? isAlive = null,
