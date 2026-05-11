@@ -142,5 +142,22 @@ public partial class MainWindow : Window
             card.CommitRenameCommand.Execute(null);
         }
     }
+
+    /// <summary>
+    /// V1.3 (#110): Esc clears the search box (returning to match-all).
+    /// All other keys pass through unchanged so typing filters live.
+    /// </summary>
+    private void OnSearchBoxKeyDown(object sender, KeyEventArgs e)
+    {
+        if (sender is not TextBox box)
+        {
+            return;
+        }
+        if (e.Key == Key.Escape && box.Text.Length > 0)
+        {
+            box.Clear();
+            e.Handled = true;
+        }
+    }
 }
 

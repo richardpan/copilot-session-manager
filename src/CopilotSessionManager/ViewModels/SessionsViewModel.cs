@@ -74,6 +74,17 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
     [ObservableProperty]
     private string _statusMessage = "Ready.";
 
+    /// <summary>
+    /// V1.3 (#110): free-text filter applied on top of label/tier/inactive
+    /// filters. Whitespace-separated tokens are AND-matched (each token
+    /// must hit) case-insensitively against the card's DisplayName or its
+    /// original Copilot Title, so renamed sessions still surface for
+    /// searches against the original summary. Empty/whitespace value is a
+    /// match-all (preserves the prior behaviour).
+    /// </summary>
+    [ObservableProperty]
+    private string _searchText = string.Empty;
+
     public SessionsViewModel(
         ISessionDiscoveryService discovery,
         ISessionLabelStore labelStore,
@@ -597,6 +608,8 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
 
     partial void OnShowInactiveChanged(bool value) => RebuildVisible();
 
+    partial void OnSearchTextChanged(string value) => RebuildVisible();
+
     private void OnSessionsChanged(object? sender, SessionsChangedEventArgs e)
     {
         // Marshal to the UI thread so ObservableCollection mutations are safe.
@@ -874,15 +887,55 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
     private void RebuildVisible()
     {
         VisibleSessions.Clear();
+        var tokens = TokenizeSearch(SearchText);
         foreach (var card in Sessions)
         {
             if ((ShowInactive || IsActive(card.Status))
                 && !_hiddenLabels.Contains(card.Label)
-                && !_hiddenTiers.Contains(card.ModelTier))
+                && !_hiddenTiers.Contains(card.ModelTier)
+                && MatchesSearch(card, tokens))
             {
                 VisibleSessions.Add(card);
             }
         }
+    }
+
+    private static string[] TokenizeSearch(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return Array.Empty<string>();
+        }
+        return text.Split(
+            new[] { ' ', '\t' },
+            StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+    }
+
+    private static bool MatchesSearch(SessionCardViewModel card, string[] tokens)
+    {
+        if (tokens.Length == 0)
+        {
+            return true;
+        }
+        // Search both the user-visible DisplayName *and* the original Copilot
+        // Title so renamed sessions still match queries against their original
+        // summary. Both fields are short; we don't bother allocating a single
+        // combined string.
+        var display = card.DisplayName ?? string.Empty;
+        var title = card.Title ?? string.Empty;
+        foreach (var token in tokens)
+        {
+            if (display.Contains(token, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+            if (title.Contains(token, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+            return false;
+        }
+        return true;
     }
 
     /// <summary>
