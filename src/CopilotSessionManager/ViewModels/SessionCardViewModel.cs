@@ -550,6 +550,76 @@ public sealed partial class SessionCardViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// Total tokens consumed across all models in this session, formatted
+    /// for at-a-glance display. Returns "—" when no usage data is available
+    /// (active sessions before shutdown, or sessions without model events).
+    /// Format: ``999`` (raw) → ``1.2k`` (1k–9.9k) → ``12k`` (10k–999k) → ``1.2M`` (≥ 1M).
+    /// </summary>
+    public string TokensDisplay
+    {
+        get
+        {
+            var total = TotalTokensRaw;
+            if (total <= 0)
+            {
+                return "—";
+            }
+            if (total < 1000)
+            {
+                return total.ToString(CultureInfo.InvariantCulture);
+            }
+            if (total < 10_000)
+            {
+                return (total / 1000.0).ToString("0.0", CultureInfo.InvariantCulture) + "k";
+            }
+            if (total < 1_000_000)
+            {
+                return (total / 1000).ToString(CultureInfo.InvariantCulture) + "k";
+            }
+            return (total / 1_000_000.0).ToString("0.0", CultureInfo.InvariantCulture) + "M";
+        }
+    }
+
+    /// <summary>Absolute token count for the session, summed across all models.</summary>
+    public long TotalTokensRaw
+    {
+        get
+        {
+            var info = _model.ModelInfo;
+            if (info?.UsageByModel is null || info.UsageByModel.Count == 0)
+            {
+                return 0;
+            }
+            long sum = 0;
+            foreach (var usage in info.UsageByModel.Values)
+            {
+                sum += usage.TotalTokens;
+            }
+            return sum;
+        }
+    }
+
+    /// <summary>Tooltip on the Tokens column — exact number + provenance hint.</summary>
+    public string TokensTooltip
+    {
+        get
+        {
+            var info = _model.ModelInfo;
+            if (info?.UsageByModel is null || info.UsageByModel.Count == 0 || TotalTokensRaw == 0)
+            {
+                return "Tokens not yet recorded — only available after the session ends.";
+            }
+            var formatted = TotalTokensRaw.ToString("N0", CultureInfo.GetCultureInfo("en-US"));
+            var modelCount = info.UsageByModel.Count;
+            var noun = modelCount == 1 ? "model" : "models";
+            var sourceLine = info.IsFromShutdown
+                ? "Source: session shutdown record (final)."
+                : "Source: live snapshot — total may grow.";
+            return $"{formatted} tokens consumed across {modelCount} {noun}.\n{sourceLine}";
+        }
+    }
+
     /// <summary>Tooltip shown on the model badge.</summary>
     public string ModelTooltip
     {
@@ -1171,6 +1241,9 @@ public sealed partial class SessionCardViewModel : ObservableObject
         OnPropertyChanged(nameof(ModelTier));
         OnPropertyChanged(nameof(ModelTierBrush));
         OnPropertyChanged(nameof(CostDisplay));
+        OnPropertyChanged(nameof(TokensDisplay));
+        OnPropertyChanged(nameof(TotalTokensRaw));
+        OnPropertyChanged(nameof(TokensTooltip));
         OnPropertyChanged(nameof(ModelTooltip));
         OnPropertyChanged(nameof(RepositoryUrl));
         OnPropertyChanged(nameof(BranchUrl));
