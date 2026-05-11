@@ -140,6 +140,12 @@ public partial class App : Application
             {
                 var sessionsForMerge = _host.Services.GetRequiredService<SessionsViewModel>();
                 sessionsForMerge.SetMergeWizardLauncher(source => OpenMergeWizard(source, sessionsForMerge));
+
+                // V1.6 (#118): wire the docs HTML generator into the same VM
+                // so the "📚 Docs" button on each row can scaffold + open the
+                // generated SESSION-DOCS.html.
+                var docsService = _host.Services.GetService<CopilotSessionManager.Core.Sessions.ISessionDocsService>();
+                sessionsForMerge.SetDocsService(docsService);
             }
             catch (Exception mex)
             {

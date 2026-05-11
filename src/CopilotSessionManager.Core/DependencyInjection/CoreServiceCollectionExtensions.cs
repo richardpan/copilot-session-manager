@@ -55,6 +55,7 @@ public static class CoreServiceCollectionExtensions
         services.AddStatusDetection();
         services.AddSessionLabels();
         services.AddSessionReadme();
+        services.AddSessionDocs();
         services.AddGitHubLinks();
         services.AddGitHubLinkStorage();
         services.AddSessionLifecycle();
@@ -307,6 +308,24 @@ public static class CoreServiceCollectionExtensions
         services.TryAddSingleton<ISessionReadmeRenderer>(_ => new TemplatedSessionReadmeRenderer());
         services.TryAddSingleton<ISessionReadmeStore, FileSessionReadmeStore>();
         services.TryAddSingleton<ISessionReadmeService, SessionReadmeService>();
+
+        return services;
+    }
+
+    /// <summary>
+    /// V1.6 (#118): Registers the brand-new csm-owned <c>SESSION-DOCS.md</c>
+    /// scaffold + <c>SESSION-DOCS.html</c> generator. Distinct from
+    /// <see cref="AddSessionReadme"/> — csm never overwrites SESSION-DOCS.md
+    /// after first scaffold; users and agents own the file's content.
+    /// Safe to call multiple times.
+    /// </summary>
+    public static IServiceCollection AddSessionDocs(this IServiceCollection services)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        services.TryAddSingleton<ICopilotPaths, DefaultCopilotPaths>();
+        services.TryAddSingleton<ISessionFolderReader, SessionFolderReader>();
+        services.TryAddSingleton<ISessionDocsService, SessionDocsService>();
 
         return services;
     }

@@ -339,6 +339,70 @@ public class SessionsViewModelTests
         await vm.DisposeAsync();
     }
 
+    // ─────────────────────────────────────────────────────────────────────
+    //  V1.6 (#118) — OpenDocsAsync wiring
+    // ─────────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task OpenDocsAsync_NullCard_DoesNothing()
+    {
+        var (vm, _, _, _, launcher) = CreateSut();
+        var docs = new FakeDocsService();
+        vm.SetDocsService(docs);
+
+        await vm.OpenDocsAsync(null);
+
+        docs.EnsureCalls.Should().Be(0);
+        launcher.Calls.Should().BeEmpty();
+        await vm.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task OpenDocsAsync_WhenDocsServiceNotWired_SurfacesFriendlyMessage()
+    {
+        var (vm, _, _, _, launcher) = CreateSut(new[] { Build("a", SessionStatus.Idle) });
+        // Intentionally NOT calling SetDocsService — emulate the legacy/test code path.
+        var card = vm.Sessions[0];
+
+        await vm.OpenDocsAsync(card);
+
+        launcher.Calls.Should().BeEmpty();
+        vm.StatusMessage.Should().Contain("Docs service is not available");
+        await vm.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task OpenDocsAsync_EnsuresThenLaunchesReturnedHtmlPath()
+    {
+        var (vm, _, _, _, launcher) = CreateSut(new[] { Build("a", SessionStatus.Idle) });
+        var docs = new FakeDocsService { ReturnedPath = @"C:\ws\fake\SESSION-DOCS.html" };
+        vm.SetDocsService(docs);
+        var card = vm.Sessions[0];
+
+        await vm.OpenDocsAsync(card);
+
+        docs.EnsureCalls.Should().Be(1);
+        docs.LastSession?.Id.Should().Be("a");
+        launcher.Calls.Should().ContainSingle().Which.Should().Be(@"C:\ws\fake\SESSION-DOCS.html");
+        vm.StatusMessage.Should().Contain("Opened docs");
+        await vm.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task OpenDocsAsync_DocsServiceFailure_SurfacesFriendlyMessage_AndDoesNotLaunch()
+    {
+        var (vm, _, _, _, launcher) = CreateSut(new[] { Build("a", SessionStatus.Idle) });
+        var docs = new FakeDocsService { ThrowOnEnsure = true };
+        vm.SetDocsService(docs);
+        var card = vm.Sessions[0];
+
+        await vm.OpenDocsAsync(card);
+
+        launcher.Calls.Should().BeEmpty();
+        vm.StatusMessage.Should().Contain("Could not open session docs");
+        await vm.DisposeAsync();
+    }
+
     public sealed class FakeReadmeService : ISessionReadmeService
     {
         public int EnsureCalls { get; private set; }
@@ -371,6 +435,29 @@ public class SessionsViewModelTests
         {
             Calls.Add(path);
             return Task.CompletedTask;
+        }
+    }
+
+    public sealed class FakeDocsService : ISessionDocsService
+    {
+        public int EnsureCalls { get; private set; }
+        public Session? LastSession { get; private set; }
+        public bool ThrowOnEnsure { get; set; }
+        public string ReturnedPath { get; set; } = "/sessions/fake/SESSION-DOCS.html";
+
+        public string GetDocsMarkdownPath(string sessionId) => $"/sessions/{sessionId}/SESSION-DOCS.md";
+
+        public string GetDocsHtmlPath(string sessionId) => $"/sessions/{sessionId}/SESSION-DOCS.html";
+
+        public Task<string> EnsureAsync(Session session, CancellationToken cancellationToken = default)
+        {
+            EnsureCalls++;
+            LastSession = session;
+            if (ThrowOnEnsure)
+            {
+                throw new InvalidOperationException("disk full");
+            }
+            return Task.FromResult(ReturnedPath);
         }
     }
 
