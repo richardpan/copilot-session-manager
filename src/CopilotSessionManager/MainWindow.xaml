@@ -529,9 +529,54 @@
 
         <!-- Single combined filter strip (V1.2 #108): show-inactive toggle,
              counts, label chips, and tier chips on one wrapping row instead
-             of the prior 3-row stack. Tab order is left-to-right. -->
+             of the prior 3-row stack. Tab order is left-to-right.
+             V1.3 (#110): search box prepended for live name filtering. -->
         <Border Grid.Row="3" Padding="16,6" Background="#11111B" BorderBrush="#181825" BorderThickness="0,1,0,0">
             <WrapPanel Orientation="Horizontal">
+                <Border Background="#1E1E2E"
+                        BorderBrush="#313244"
+                        BorderThickness="1"
+                        CornerRadius="3"
+                        Padding="6,2"
+                        Margin="0,2,16,2"
+                        VerticalAlignment="Center">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="🔍"
+                                   FontSize="11"
+                                   Foreground="#7F849C"
+                                   VerticalAlignment="Center"
+                                   Margin="0,0,4,0" />
+                        <Grid Width="200" VerticalAlignment="Center">
+                            <TextBlock Text="Search by name…"
+                                       Foreground="#6C7086"
+                                       FontSize="12"
+                                       VerticalAlignment="Center"
+                                       IsHitTestVisible="False">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding Sessions.SearchText}" Value="">
+                                                <Setter Property="Visibility" Value="Visible" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                            <TextBox x:Name="SearchBox"
+                                     Text="{Binding Sessions.SearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                     Background="Transparent"
+                                     Foreground="#CDD6F4"
+                                     FontSize="12"
+                                     BorderThickness="0"
+                                     CaretBrush="#CDD6F4"
+                                     KeyDown="OnSearchBoxKeyDown"
+                                     ToolTip="Filter sessions by keywords in the name. Multiple words must all match. Esc clears."
+                                     AutomationProperties.Name="Search sessions by name"
+                                     AutomationProperties.HelpText="Type one or more keywords to filter the visible sessions by their display name. Multiple words are AND-matched. Press Esc to clear." />
+                        </Grid>
+                    </StackPanel>
+                </Border>
                 <CheckBox Content="Show inactive"
                           IsChecked="{Binding Sessions.ShowInactive}"
                           Foreground="#CDD6F4"
