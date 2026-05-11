@@ -17,6 +17,7 @@
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
         <conv:NullToVisibilityConverter x:Key="NullToVisibility" />
+        <conv:InverseBooleanToVisibilityConverter x:Key="InverseBoolToVisibility" />
 
         <DataTemplate x:Key="LabelFilterTemplate" DataType="{x:Type vm:LabelFilterChip}">
             <CheckBox Content="{Binding Label}"
@@ -50,10 +51,25 @@
                     KeyboardNavigation.TabNavigation="Local">
                 <Border.ContextMenu>
                     <ContextMenu>
+                        <MenuItem Header="Open in PowerShell"
+                                  Command="{Binding OpenCommand}"
+                                  AutomationProperties.Name="Open this session in a PowerShell window"
+                                  AutomationProperties.HelpText="Activates the existing PowerShell window for this session if one is open, otherwise launches a new one." />
+                        <MenuItem Header="Rename…"
+                                  Command="{Binding BeginRenameCommand}"
+                                  AutomationProperties.Name="Rename this session"
+                                  AutomationProperties.HelpText="Edits the display name shown for this session. Press Enter to save, Esc to cancel." />
+                        <Separator />
                         <MenuItem Header="Merge into…"
                                   Command="{Binding MergeIntoCommand}"
                                   AutomationProperties.Name="Merge this session into another"
                                   AutomationProperties.HelpText="Opens the merge wizard to export this session via copilot --share and append it to a target session." />
+                        <Separator />
+                        <MenuItem Header="Delete from disk…"
+                                  Command="{Binding DeleteCommand}"
+                                  Foreground="#F38BA8"
+                                  AutomationProperties.Name="Delete session from disk"
+                                  AutomationProperties.HelpText="Permanently removes this session and all of its files. Shows a confirmation dialog first." />
                     </ContextMenu>
                 </Border.ContextMenu>
                 <Grid>
@@ -70,12 +86,36 @@
 
                     <StackPanel Grid.Column="1">
                         <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="{Binding Title}"
-                                       Foreground="#CDD6F4"
-                                       FontSize="14"
-                                       FontWeight="SemiBold"
-                                       TextTrimming="CharacterEllipsis"
-                                       MaxWidth="540" />
+                            <Grid MaxWidth="540">
+                                <TextBlock x:Name="CardTitleText"
+                                           Text="{Binding DisplayName}"
+                                           Foreground="#CDD6F4"
+                                           FontSize="14"
+                                           FontWeight="SemiBold"
+                                           TextTrimming="CharacterEllipsis"
+                                           ToolTip="{Binding TitleTooltip}"
+                                           Cursor="IBeam"
+                                           MouseLeftButtonDown="OnCardTitleClicked"
+                                           Visibility="{Binding IsEditingTitle, Converter={StaticResource InverseBoolToVisibility}}"
+                                           AutomationProperties.Name="{Binding DisplayName}"
+                                           AutomationProperties.HelpText="Click to rename this session." />
+                                <TextBox x:Name="CardTitleEditor"
+                                         Text="{Binding EditableTitle, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                         Foreground="#11111B"
+                                         Background="#F9E2AF"
+                                         FontSize="14"
+                                         FontWeight="SemiBold"
+                                         BorderThickness="1"
+                                         BorderBrush="#F9E2AF"
+                                         Padding="2,0"
+                                         MinWidth="180"
+                                         Visibility="{Binding IsEditingTitle, Converter={StaticResource BoolToVisibility}}"
+                                         IsVisibleChanged="OnCardTitleEditorVisibilityChanged"
+                                         KeyDown="OnCardTitleEditorKeyDown"
+                                         LostKeyboardFocus="OnCardTitleEditorLostFocus"
+                                         AutomationProperties.Name="Edit session name"
+                                         AutomationProperties.HelpText="Press Enter to save the new name. Press Esc to cancel without saving." />
+                            </Grid>
                             <Border Background="{Binding StatusBrush}"
                                     CornerRadius="3"
                                     Padding="6,1"
@@ -277,6 +317,18 @@
                                 HorizontalAlignment="Right"
                                 Command="{Binding DataContext.Sessions.OpenReadmeCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                                 CommandParameter="{Binding}" />
+                        <Button Content="▶ Open"
+                                Padding="8,3"
+                                FontSize="11"
+                                Margin="0,6,0,0"
+                                HorizontalAlignment="Right"
+                                Background="#89B4FA"
+                                Foreground="#11111B"
+                                BorderBrush="#74A0E0"
+                                ToolTip="Open this session in PowerShell. If a window for this session is already open, it is brought to the foreground."
+                                AutomationProperties.Name="Open this session in PowerShell"
+                                AutomationProperties.HelpText="Activates the existing PowerShell window for this session if one is open, otherwise launches a new one."
+                                Command="{Binding OpenCommand}" />
                         <StackPanel Orientation="Horizontal"
                                     HorizontalAlignment="Right"
                                     Margin="0,6,0,0"

@@ -331,6 +331,33 @@ public partial class App : Application
         services.AddGitHubIssues();
         CoreServiceCollectionExtensions.AddLogging(services);
 
+        // V1.1 polish: window activator for #104.
+        services.AddSingleton<Native.IWindowActivator, Native.ProcessWindowActivator>();
+
+        // V1.1 polish: hard-delete confirm dialog (#106).
+        services.AddSingleton<Func<ViewModels.SessionDeletionPrompt, bool>>(_ => prompt =>
+        {
+            var result = false;
+            Current.Dispatcher.Invoke(() =>
+            {
+                var owner = Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
+                            ?? Current.MainWindow;
+                var msg = $"Permanently delete session '{prompt.DisplayName}'?\n\n"
+                          + $"Session id: {prompt.SessionId}\n\n"
+                          + "This removes ~/.copilot/session-state/<id>/ and CSM's "
+                          + "saved overrides for this session. This cannot be undone.";
+                var choice = MessageBox.Show(
+                    owner,
+                    msg,
+                    "Delete session",
+                    MessageBoxButton.OKCancel,
+                    MessageBoxImage.Warning,
+                    MessageBoxResult.Cancel);
+                result = choice == MessageBoxResult.OK;
+            });
+            return result;
+        });
+
         // UI infrastructure — the dispatcher must wrap the WPF UI thread.
         services.AddSingleton<IUiDispatcher>(_ => new WpfDispatcher(Current.Dispatcher));
         services.AddSingleton(TimeProvider.System);
