@@ -31,4 +31,19 @@ public interface ISessionLauncher
         string sessionId,
         string? workingDirectory = null,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Spawns an external PowerShell window running a fresh <c>copilot</c>
+    /// invocation (no <c>--resume</c>) so the CLI generates a brand-new
+    /// session. The new session id is not known until the discovery service
+    /// next scans <c>~/.copilot/session-state</c>; callers should refresh
+    /// shortly after the launch returns.
+    /// </summary>
+    /// <param name="workingDirectory">
+    /// Optional working directory for the new PowerShell window. Defaults to
+    /// the user's profile when null/empty/missing on disk.
+    /// </param>
+    Task<SessionLaunchResult> LaunchNewAsync(
+        string? workingDirectory = null,
+        CancellationToken cancellationToken = default);
 }
