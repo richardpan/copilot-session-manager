@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Copilot Session Manager 1.0.0 — README screenshot mockup</title>
+<style>
+  /* ---------- Reset + global ---------- */
+  * { box-sizing: border-box; margin: 0; padding: 0; font-family: "Segoe UI", "Segoe UI Variable", system-ui, sans-serif; }
+  html, body { background: #0e1014; }
+  body { width: 1600px; }
+
+  /* ---------- Window chrome (Win11 dark) ---------- */
+  .window {
+    background: #1f1f1f;
+    border: 1px solid #3a3a3a;
+    border-radius: 8px;
+    overflow: hidden;
+    margin: 0;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.45);
+  }
+  .titlebar {
+    height: 32px;
+    background: #1f1f1f;
+    color: #cfcfcf;
+    display: flex;
+    align-items: center;
+    padding-left: 10px;
+    font-size: 12px;
+    border-bottom: 1px solid #2a2a2a;
+  }
+  .titlebar .icon {
+    width: 14px; height: 14px;
+    margin-right: 8px;
+    background: linear-gradient(135deg, #4ec9b0 0%, #2e8c79 100%);
+    border-radius: 2px;
+    display: inline-block;
+  }
+  .titlebar .controls {
+    margin-left: auto;
+    display: flex;
+  }
+  .titlebar .controls span {
+    width: 46px; height: 32px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #cfcfcf;
+    font-family: "Segoe MDL2 Assets", "Segoe Fluent Icons", monospace;
+    font-size: 11px;
+  }
+  .menubar {
+    height: 28px;
+    background: #1f1f1f;
+    border-bottom: 1px solid #2a2a2a;
+    display: flex;
+    align-items: center;
+    padding-left: 8px;
+    color: #cfcfcf;
+    font-size: 12px;
+  }
+  .menubar span { padding: 0 10px; }
+
+  /* ---------- App body ---------- */
+  .app {
+    background: #0e1014;
+    color: #d6d6d6;
+    padding: 18px 22px 0 22px;
+    font-size: 13.5px;
+  }
+  .header {
+    display: flex;
+    align-items: center;
+    margin-bottom: 14px;
+  }
+  .header h1 {
+    font-size: 22px;
+    font-weight: 600;
+    color: #e8e8e8;
+  }
+  .toolbar {
+    margin-left: auto;
+    display: flex;
+    gap: 10px;
+  }
+  .btn {
+    padding: 9px 18px;
+    border-radius: 4px;
+    font-size: 13px;
+    border: 1px solid #3a3f4b;
+    background: #20242c;
+    color: #d6d6d6;
+    cursor: default;
+  }
+  .btn.primary {
+    background: #2563eb;
+    border-color: #2563eb;
+    color: #ffffff;
+    font-weight: 500;
+  }
+
+  /* ---------- Filter bar ---------- */
+  .filter-row {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+    color: #b8b8b8;
+    font-size: 12.5px;
+  }
+  .search {
+    width: 280px;
+    height: 32px;
+    background: #15171c;
+    border: 1px solid #2c303a;
+    border-radius: 3px;
+    color: #b0b0b0;
+    padding-left: 30px;
+    font-size: 12.5px;
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+  }
+  .search::before {
+    content: "🔍";
+    position: absolute;
+    left: 8px;
+    font-size: 11px;
+    opacity: 0.55;
+  }
+  .search-text { color: #6c6f78; padding-left: 30px; }
+  .check { display: inline-flex; align-items: center; gap: 6px; }
+  .check .box {
+    width: 13px; height: 13px;
+    border: 1px solid #5a5f6b;
+    background: #15171c;
+    border-radius: 2px;
+    display: inline-block;
+    position: relative;
+  }
+  .check.on .box {
+    background: #2563eb;
+    border-color: #2563eb;
+  }
+  .check.on .box::after {
+    content: "✓";
+    position: absolute;
+    color: white;
+    font-size: 10px;
+    left: 1px;
+    top: -2px;
+    line-height: 13px;
+  }
+  .count { color: #d6d6d6; }
+  .count strong { color: #4caf50; font-weight: 600; }
+  .label { color: #888; font-weight: 500; margin-right: 4px; }
+
+  /* ---------- Table ---------- */
+  table {
+    width: 100%;
+    margin-top: 10px;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+  thead th {
+    text-align: left;
+    color: #8a8d96;
+    font-weight: 500;
+    font-size: 12px;
+    padding: 10px 8px;
+    border-bottom: 1px solid #232730;
+  }
+  th.num, td.num { text-align: right; }
+  td {
+    padding: 14px 8px;
+    border-bottom: 1px solid #1c1f27;
+    vertical-align: middle;
+    color: #d0d0d0;
+  }
+  tr.row { background: rgba(255,255,255,0.02); }
+  tr.row.alt { background: transparent; }
+
+  /* Status pill */
+  .pill {
+    display: inline-block;
+    padding: 3px 10px;
+    font-size: 12px;
+    border-radius: 4px;
+    font-weight: 500;
+    line-height: 1.4;
+  }
+  .pill.working { background: #2e7d32; color: #d6f5d6; }
+  .pill.working::before { content: "▶ "; }
+  .pill.idle { background: #424651; color: #c4c8d0; }
+  .pill.idle::before { content: "○ "; }
+  .pill.waiting { background: #c97417; color: #ffe8cc; }
+  .pill.waiting::before { content: "⏸ "; }
+
+  /* Star */
+  .star { width: 18px; display: inline-block; text-align: center; font-size: 16px; }
+  .star.on { color: #f5b400; }
+  .star.off { color: #4a4d55; }
+
+  /* Action buttons */
+  .actions { white-space: nowrap; }
+  .docs-btn {
+    background: #2563eb;
+    color: white;
+    padding: 4px 10px;
+    border-radius: 3px;
+    font-size: 12px;
+    margin-right: 4px;
+    border: 1px solid #2563eb;
+  }
+  .docs-btn::before { content: "📑 "; }
+  .icon-btn {
+    display: inline-block;
+    width: 22px;
+    text-align: center;
+    margin: 0 1px;
+    font-size: 13px;
+  }
+  .icon-btn.play { color: #4caf50; }
+  .icon-btn.edit { color: #b0b3bb; }
+  .icon-btn.del { color: #e44d3a; }
+
+  /* Name + label chip */
+  .name { color: #f0f0f0; font-weight: 600; font-size: 13.5px; }
+  .meta {
+    margin-top: 4px;
+    font-size: 12px;
+    color: #7c8089;
+  }
+  .meta a { color: #5e9bff; text-decoration: none; }
+  .meta a:hover { text-decoration: underline; }
+  .chip {
+    display: inline-block;
+    padding: 2px 8px;
+    font-size: 10.5px;
+    border-radius: 3px;
+    margin-right: 6px;
+    font-weight: 600;
+    text-transform: capitalize;
+    letter-spacing: 0.2px;
+    vertical-align: middle;
+  }
+  .chip.exploratory { background: #6b46c1; color: #efe6ff; }
+  .chip.feature     { background: #2563eb; color: #e2ecff; }
+  .chip.bug         { background: #b03333; color: #ffd9d9; }
+  .chip.refactor    { background: #c97417; color: #ffe8cc; }
+  .chip.docs        { background: #1d8b6f; color: #d4f5ea; }
+  .chip.research    { background: #1f78a8; color: #d6ecf8; }
+  .chip.infra       { background: #4a5568; color: #e2e8f0; }
+
+  /* Tier chip */
+  .tier { display: inline-block; padding: 3px 10px; border-radius: 4px; font-size: 11.5px; font-weight: 500; }
+  .tier.opus    { background: #f7c2c2; color: #6b1f1f; }
+  .tier.claude  { background: #2c303a; color: #cfd2da; border: 1px solid #3a3f4b; }
+  .tier.sonnet  { background: #c8d4f0; color: #1a2c5e; }
+  .tier.gpt     { background: #c4e8d4; color: #155724; }
+
+  /* Producer text */
+  .producer { color: #b0b3bb; font-size: 12.5px; }
+
+  /* Numeric columns */
+  .turns { color: #f0f0f0; font-weight: 600; font-size: 13px; }
+  .tokens-bar { color: #6c6f78; font-size: 13px; }
+  .updated { color: #b0b3bb; font-size: 12px; }
+
+  /* Status bar */
+  .statusbar {
+    margin-top: 12px;
+    padding: 10px 22px;
+    font-size: 12px;
+    color: #8a8d96;
+    border-top: 1px solid #1c1f27;
+  }
+</style>
+</head>
+<body>
+<div class="window">
+  <div class="titlebar">
+    <span class="icon"></span>
+    <span>Copilot Session Manager 1.0.0</span>
+    <div class="controls"><span>—</span><span>▢</span><span>✕</span></div>
+  </div>
+  <div class="menubar"><span>Help</span></div>
+  <div class="app">
+    <div class="header">
+      <h1>Copilot Session Manager</h1>
+      <div class="toolbar">
+        <button class="btn primary">+ New session</button>
+        <button class="btn">🧹 Clean stale locks</button>
+        <button class="btn">↻ Refresh</button>
+      </div>
+    </div>
+
+    <div class="filter-row">
+      <div class="search"><span class="search-text">Search by name…</span></div>
+      <div class="check"><span class="box"></span> Show inactive</div>
+      <div class="count"><strong>5 active</strong> of 24 total</div>
+      <span class="label">Labels:</span>
+      <div class="check on"><span class="box"></span> Exploratory</div>
+      <div class="check on"><span class="box"></span> Research</div>
+      <div class="check on"><span class="box"></span> Feature</div>
+      <div class="check on"><span class="box"></span> Bug</div>
+      <div class="check on"><span class="box"></span> Refactor</div>
+      <div class="check on"><span class="box"></span> Docs</div>
+      <div class="check on"><span class="box"></span> Infra</div>
+      <div class="check on"><span class="box"></span> Experiment</div>
+      <span class="label" style="margin-left:8px;">Tiers:</span>
+      <div class="check on"><span class="box"></span> Unknown</div>
+      <div class="check on"><span class="box"></span> Fast</div>
+      <div class="check on"><span class="box"></span> Standard</div>
+      <div class="check on"><span class="box"></span> Premium</div>
+    </div>
+    <div class="filter-row">
+      <span class="label">Producers:</span>
+      <div class="check on"><span class="box"></span> agency</div>
+      <div class="check on"><span class="box"></span> copilot-agent</div>
+      <div class="check on"><span class="box"></span> (unknown)</div>
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th></th>
+          <th>Status</th>
+          <th></th>
+          <th>Name</th>
+          <th>Producer</th>
+          <th>Tier</th>
+          <th class="num">Turns</th>
+          <th class="num">Tokens</th>
+          <th>Updated</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr class="row">
+          <td><span class="star on">★</span></td>
+          <td><span class="pill working">Working</span></td>
+          <td class="actions">
+            <span class="docs-btn">Docs</span><span class="icon-btn play">▶</span><span class="icon-btn edit">✎</span><span class="icon-btn del">🗑</span>
+          </td>
+          <td>
+            <div class="name">Refactor auth middleware to drop session affinity</div>
+            <div class="meta"><span class="chip refactor">Refactor</span><a>acme/api-server</a> · <span>feature/jwt-auth</span></div>
+          </td>
+          <td class="producer">agency</td>
+          <td><span class="tier opus">Opus 4.7</span></td>
+          <td class="num turns">91</td>
+          <td class="num tokens-bar">412k</td>
+          <td class="updated">— 14 min ago</td>
+        </tr>
+        <tr class="row alt">
+          <td><span class="star on">★</span></td>
+          <td><span class="pill working">Working</span></td>
+          <td class="actions">
+            <span class="docs-btn">Docs</span><span class="icon-btn play">▶</span><span class="icon-btn edit">✎</span><span class="icon-btn del">🗑</span>
+          </td>
+          <td>
+            <div class="name">REST API reference documentation pass</div>
+            <div class="meta"><span class="chip docs">Docs</span><a>acme/api-server</a> · <span>docs/openapi-3</span></div>
+          </td>
+          <td class="producer">agency</td>
+          <td><span class="tier sonnet">Sonnet 4.6</span></td>
+          <td class="num turns">47</td>
+          <td class="num tokens-bar">186k</td>
+          <td class="updated">— 1 hr ago</td>
+        </tr>
+        <tr class="row">
+          <td><span class="star off">☆</span></td>
+          <td><span class="pill waiting">Awaiting input</span></td>
+          <td class="actions">
+            <span class="docs-btn">Docs</span><span class="icon-btn play">▶</span><span class="icon-btn edit">✎</span><span class="icon-btn del">🗑</span>
+          </td>
+          <td>
+            <div class="name">Spike: GraphQL schema for catalog service</div>
+            <div class="meta"><span class="chip research">Research</span><span style="color:#6c6f78;">no repo</span></div>
+          </td>
+          <td class="producer">copilot-agent</td>
+          <td><span class="tier gpt">GPT-5.4</span></td>
+          <td class="num turns">6</td>
+          <td class="num tokens-bar">28k</td>
+          <td class="updated">— 3 hr ago</td>
+        </tr>
+        <tr class="row alt">
+          <td><span class="star off">☆</span></td>
+          <td><span class="pill idle">Idle</span></td>
+          <td class="actions">
+            <span class="docs-btn">Docs</span><span class="icon-btn play">▶</span><span class="icon-btn edit">✎</span><span class="icon-btn del">🗑</span>
+          </td>
+          <td>
+            <div class="name">Pagination off-by-one bug on /v1/orders</div>
+            <div class="meta"><span class="chip bug">Bug</span><a>acme/web-app</a> · <span>fix/orders-pagination</span> · <a>#318</a></div>
+          </td>
+          <td class="producer">copilot-agent</td>
+          <td><span class="tier opus">Opus 4.7</span></td>
+          <td class="num turns">12</td>
+          <td class="num tokens-bar">54k</td>
+          <td class="updated">— 8 hr ago</td>
+        </tr>
+        <tr class="row">
+          <td><span class="star on">★</span></td>
+          <td><span class="pill working">Working</span></td>
+          <td class="actions">
+            <span class="docs-btn">Docs</span><span class="icon-btn play">▶</span><span class="icon-btn edit">✎</span><span class="icon-btn del">🗑</span>
+          </td>
+          <td>
+            <div class="name">Migrate Console.WriteLine logging to Serilog</div>
+            <div class="meta"><span class="chip refactor">Refactor</span><a>acme/web-app</a> · <span>chore/serilog-migration</span></div>
+          </td>
+          <td class="producer">agency</td>
+          <td><span class="tier claude">Claude Opus 4.7</span></td>
+          <td class="num turns">28</td>
+          <td class="num tokens-bar">94k</td>
+          <td class="updated">— 1 d ago</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="statusbar">5 active / 24 total at 7:42 PM.</div>
+  </div>
+</div>
+</body>
+</html>
