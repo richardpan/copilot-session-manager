@@ -61,7 +61,15 @@ public static class CoreServiceCollectionExtensions
         services.AddSessionLifecycle();
         services.TryAddSingleton<ICopilotPaths, DefaultCopilotPaths>();
         services.TryAddSingleton<ISessionStore, SessionStore>();
-        services.TryAddSingleton<ISessionDiscoveryService, SessionDiscoveryService>();
+        services.TryAddSingleton<ISessionDiscoveryService>(sp =>
+        {
+            // We construct the concrete type so we can wire the optional
+            // tombstone registry post-construction (#125) without
+            // exploding the SessionDiscoveryService constructor surface.
+            var concrete = ActivatorUtilities.CreateInstance<SessionDiscoveryService>(sp);
+            concrete.SetDeletedSessionRegistry(sp.GetService<IDeletedSessionRegistry>());
+            return concrete;
+        });
 
         return services;
     }
@@ -86,7 +94,32 @@ public static class CoreServiceCollectionExtensions
         services.TryAddSingleton<ISessionFolderReader, SessionFolderReader>();
         services.AddSessionDisplayNames();
         services.AddSessionStars();
+        services.AddDeletedSessionRegistry();
         services.TryAddSingleton<ISessionDeletionService, SessionDeletionService>();
+
+        return services;
+    }
+
+    /// <summary>
+    /// Registers <see cref="IDeletedSessionRegistry"/> backed by
+    /// <see cref="JsonDeletedSessionRegistry"/> at
+    /// <c>%LOCALAPPDATA%\CopilotSessionManager\deleted-sessions.json</c> so
+    /// hard-deleted sessions (#106) stay deleted across rescans (#125)
+    /// without csm having to write into Copilot CLI's
+    /// <c>session-store.db</c> (ADR-002). Safe to call multiple times.
+    /// </summary>
+    public static IServiceCollection AddDeletedSessionRegistry(this IServiceCollection services)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        services.TryAddSingleton<IDeletedSessionRegistry>(sp =>
+        {
+            var path = System.IO.Path.Combine(
+                AppPaths.LocalAppDataDirectory,
+                JsonDeletedSessionRegistry.DefaultFileName);
+            var logger = sp.GetRequiredService<ILogger<JsonDeletedSessionRegistry>>();
+            return new JsonDeletedSessionRegistry(path, logger);
+        });
 
         return services;
     }

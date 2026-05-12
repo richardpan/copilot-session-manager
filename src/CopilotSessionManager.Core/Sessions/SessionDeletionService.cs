@@ -15,6 +15,7 @@ public sealed class SessionDeletionService : ISessionDeletionService
     private readonly ISessionLabelStore? _labels;
     private readonly ISessionGitHubLinksStore? _githubLinks;
     private readonly IRunningSessionRegistry? _registry;
+    private readonly IDeletedSessionRegistry? _tombstones;
     private readonly ILogger<SessionDeletionService> _logger;
 
     public SessionDeletionService(
@@ -31,6 +32,18 @@ public sealed class SessionDeletionService : ISessionDeletionService
         ISessionGitHubLinksStore? githubLinks,
         IRunningSessionRegistry? registry,
         ILogger<SessionDeletionService> logger)
+        : this(folders, displayNames, labels, githubLinks, registry, tombstones: null, logger)
+    {
+    }
+
+    public SessionDeletionService(
+        ISessionFolderReader folders,
+        ISessionDisplayNameStore? displayNames,
+        ISessionLabelStore? labels,
+        ISessionGitHubLinksStore? githubLinks,
+        IRunningSessionRegistry? registry,
+        IDeletedSessionRegistry? tombstones,
+        ILogger<SessionDeletionService> logger)
     {
         ArgumentNullException.ThrowIfNull(folders);
         ArgumentNullException.ThrowIfNull(logger);
@@ -40,6 +53,7 @@ public sealed class SessionDeletionService : ISessionDeletionService
         _labels = labels;
         _githubLinks = githubLinks;
         _registry = registry;
+        _tombstones = tombstones;
         _logger = logger;
     }
 
@@ -140,6 +154,25 @@ public sealed class SessionDeletionService : ISessionDeletionService
         catch (Exception ex)
         {
             _logger.LogDebug(ex, "Could not unregister running PID for {Id}.", sessionId);
+        }
+
+        // Tombstone the id LAST so the discovery service won't resurrect
+        // the card from the dangling Copilot CLI session-store.db row
+        // (#125). We honor ADR-002 and never touch the CLI's DB ourselves;
+        // the tombstone is csm-side only.
+        if (_tombstones is not null)
+        {
+            try
+            {
+                await _tombstones.RecordAsync(sessionId, cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "Could not write tombstone for {Id}; the session may reappear on the next rescan.",
+                    sessionId);
+            }
         }
     }
 
