@@ -23,6 +23,7 @@ public class SessionDeletionServiceTests : IDisposable
     private readonly Mock<ISessionLabelStore> _labels = new();
     private readonly Mock<CopilotSessionManager.Core.GitHub.Storage.ISessionGitHubLinksStore> _github = new();
     private readonly InMemoryRunningSessionRegistry _registry = new();
+    private readonly Mock<IDeletedSessionRegistry> _tombstones = new();
 
     public SessionDeletionServiceTests()
     {
@@ -48,6 +49,7 @@ public class SessionDeletionServiceTests : IDisposable
         _labels.Object,
         _github.Object,
         _registry,
+        _tombstones.Object,
         NullLogger<SessionDeletionService>.Instance);
 
     private string CreateSessionFolder(string sessionId, bool withChildren = true)
@@ -172,5 +174,70 @@ public class SessionDeletionServiceTests : IDisposable
         result.Success.Should().BeFalse();
         result.ErrorMessage.Should().NotBeNull();
         Directory.Exists(path).Should().BeTrue("delete should leave the folder intact when it cannot remove it");
+    }
+
+    [Fact]
+    public async Task DeleteAsync_TombstonesSessionAfterSuccessfulDelete()
+    {
+        CreateSessionFolder("abc");
+
+        await CreateSut().DeleteAsync("abc");
+
+        // #125: the on-disk row in Copilot CLI's session-store.db is left
+        // behind by design (ADR-002). Without the tombstone the next
+        // discovery rescan would re-emit a "DB-only" session card and the
+        // UI would resurrect what the user just deleted.
+        _tombstones.Verify(
+            t => t.RecordAsync("abc", It.IsAny<System.Threading.CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task DeleteAsync_TombstonesEvenWhenFolderIsAlreadyGone()
+    {
+        // "Already gone" still returns success — and we still need to
+        // tombstone, otherwise the user sees the same ghost card on every
+        // rescan until they restart Copilot CLI.
+        _folders.Setup(f => f.GetSessionFolderPath("ghost"))
+            .Returns(Path.Combine(_root, "ghost-not-here"));
+
+        var result = await CreateSut().DeleteAsync("ghost");
+
+        result.Success.Should().BeTrue();
+        _tombstones.Verify(
+            t => t.RecordAsync("ghost", It.IsAny<System.Threading.CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task DeleteAsync_TombstoneFailureDoesNotPoisonResult()
+    {
+        CreateSessionFolder("abc");
+        _tombstones.Setup(t => t.RecordAsync("abc", It.IsAny<System.Threading.CancellationToken>()))
+            .ThrowsAsync(new IOException("disk full"));
+
+        var result = await CreateSut().DeleteAsync("abc");
+
+        result.Success.Should().BeTrue(
+            "the folder is gone — failing the delete because the tombstone could not be written would leave the user stuck");
+    }
+
+    [Fact]
+    public async Task DeleteAsync_FolderInUse_DoesNotTombstone()
+    {
+        // We must not tombstone when the folder is still on disk —
+        // otherwise the next rescan would suppress a session that is
+        // still genuinely there.
+        var path = CreateSessionFolder("abc");
+        var lockedFile = Path.Combine(path, "locked.bin");
+        File.WriteAllText(lockedFile, "x");
+        await using var hold = new FileStream(
+            lockedFile, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+
+        await CreateSut().DeleteAsync("abc");
+
+        _tombstones.Verify(
+            t => t.RecordAsync(It.IsAny<string>(), It.IsAny<System.Threading.CancellationToken>()),
+            Times.Never);
     }
 }

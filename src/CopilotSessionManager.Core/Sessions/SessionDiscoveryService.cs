@@ -33,6 +33,7 @@ public sealed class SessionDiscoveryService : ISessionDiscoveryService
     private FileSystemWatcher? _stateContentsWatcher;
     private CancellationTokenSource? _debounceCts;
     private volatile IReadOnlyList<Session> _currentSessions = Array.Empty<Session>();
+    private volatile IDeletedSessionRegistry? _tombstones;
     private bool _disposed;
 
     public SessionDiscoveryService(
@@ -129,6 +130,18 @@ public sealed class SessionDiscoveryService : ISessionDiscoveryService
     public IReadOnlyList<Session> CurrentSessions => _currentSessions;
 
     public event EventHandler<SessionsChangedEventArgs>? SessionsChanged;
+
+    /// <summary>
+    /// V1.x (#125): wires the optional tombstone registry post-construction
+    /// so we can avoid churning the existing constructor chain. When set,
+    /// <see cref="ScanAsync"/> skips DB rows for ids that have been
+    /// hard-deleted via <see cref="ISessionDeletionService"/> and whose
+    /// on-disk folder is gone.
+    /// </summary>
+    public void SetDeletedSessionRegistry(IDeletedSessionRegistry? tombstones)
+    {
+        _tombstones = tombstones;
+    }
 
     public async Task<IReadOnlyList<Session>> ScanAsync(CancellationToken cancellationToken = default)
     {
@@ -387,6 +400,47 @@ public sealed class SessionDiscoveryService : ISessionDiscoveryService
 
         var sessionDir = Path.Combine(_paths.SessionStateDirectory, id);
         var hasStateDir = Directory.Exists(sessionDir);
+
+        // #125: tombstone short-circuit. When csm hard-deletes a session
+        // via ISessionDeletionService we never touch Copilot CLI's
+        // session-store.db (ADR-002). Without this guard the dangling DB
+        // row would resurrect the card on the very next rescan that the
+        // delete itself triggers via the FileSystemWatcher.
+        var tombstones = _tombstones;
+        if (tombstones is not null)
+        {
+            var isTombstoned = await tombstones
+                .IsDeletedAsync(id, cancellationToken)
+                .ConfigureAwait(false);
+            if (isTombstoned)
+            {
+                if (!hasStateDir)
+                {
+                    _logger.LogDebug(
+                        "Session {SessionId} has a tombstone and no state dir; suppressing from scan results.",
+                        id);
+                    return null;
+                }
+
+                // Folder reappeared (re-imported, CLI re-issued the id, or
+                // the user manually restored it). Self-heal by clearing
+                // the tombstone so the card surfaces again.
+                try
+                {
+                    await tombstones.ForgetAsync(id, cancellationToken).ConfigureAwait(false);
+                    _logger.LogInformation(
+                        "Tombstone for {SessionId} cleared because the session folder reappeared.",
+                        id);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    _logger.LogWarning(
+                        ex,
+                        "Could not clear stale tombstone for {SessionId}; will retry on the next scan.",
+                        id);
+                }
+            }
+        }
 
         var version = await TryReadCopilotVersionAsync(sessionDir, hasStateDir, cancellationToken)
             .ConfigureAwait(false);

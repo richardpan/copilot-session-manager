@@ -83,6 +83,54 @@ public class SessionDiscoveryServiceTests : IAsyncDisposable, IDisposable
     }
 
     [Fact]
+    public async Task ScanAsync_skips_tombstoned_sessions_when_state_dir_is_missing()
+    {
+        // Repro for #125: csm hard-deletes a session, removes the on-disk
+        // folder, but ADR-002 forbids touching Copilot CLI's session-store.db.
+        // Without the tombstone short-circuit the dangling DB row would
+        // resurrect the session card on the very next rescan.
+        var id = "00000000-0000-0000-0000-0000000000d1";
+        var tombstones = new InMemoryTombstones();
+        await tombstones.RecordAsync(id);
+
+        var service = CreateService(
+            records: new[]
+            {
+                new SessionStoreRecord(id, @"C:\ws\dead", "github/dead", "main", "DB ghost",
+                    "github", DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, TurnCount: 1),
+            },
+            tombstones: tombstones);
+
+        var sessions = await service.ScanAsync();
+
+        sessions.Should().BeEmpty(
+            "the tombstone must suppress the dangling DB row that Copilot CLI has not yet pruned");
+    }
+
+    [Fact]
+    public async Task ScanAsync_self_heals_tombstone_when_state_dir_reappears()
+    {
+        // Edge case: an id that was tombstoned but whose folder later
+        // shows up again (re-import, CLI re-issued the id, manual restore).
+        // The tombstone should be cleared so the session is visible again.
+        var id = "00000000-0000-0000-0000-0000000000d2";
+        WriteSessionFiles(id, copilotVersion: "1.0.43", repository: "github/back", branch: "main");
+        var tombstones = new InMemoryTombstones();
+        await tombstones.RecordAsync(id);
+
+        var service = CreateService(
+            records: Array.Empty<SessionStoreRecord>(),
+            tombstones: tombstones);
+
+        var sessions = await service.ScanAsync();
+
+        sessions.Should().ContainSingle();
+        sessions[0].Id.Should().Be(id);
+        (await tombstones.IsDeletedAsync(id)).Should().BeFalse(
+            "tombstone must self-heal once the folder reappears, otherwise we'd suppress a real session forever");
+    }
+
+    [Fact]
     public async Task ScanAsync_orders_sessions_by_updated_at_descending()
     {
         var older = "00000000-0000-0000-0000-000000000010";
@@ -323,7 +371,8 @@ public class SessionDiscoveryServiceTests : IAsyncDisposable, IDisposable
         IReadOnlyList<SessionStoreRecord> records,
         Func<int, bool>? isAlive = null,
         TimeProvider? timeProvider = null,
-        ISessionGitHubLinksStore? overridesStore = null)
+        ISessionGitHubLinksStore? overridesStore = null,
+        IDeletedSessionRegistry? tombstones = null)
     {
         var paths = new TestPaths(_dbPath, _stateDir);
         var store = new FakeStore(records);
@@ -347,6 +396,7 @@ public class SessionDiscoveryServiceTests : IAsyncDisposable, IDisposable
             githubLinksOverrideStore: overridesStore,
             timeProvider ?? TimeProvider.System,
             NullLogger<SessionDiscoveryService>.Instance);
+        _service.SetDeletedSessionRegistry(tombstones);
         return _service;
     }
 
@@ -441,6 +491,40 @@ public class SessionDiscoveryServiceTests : IAsyncDisposable, IDisposable
         private readonly DateTimeOffset _now;
         public FakeTimeProvider(DateTimeOffset now) => _now = now;
         public override DateTimeOffset GetUtcNow() => _now;
+    }
+
+    private sealed class InMemoryTombstones : IDeletedSessionRegistry
+    {
+        private readonly HashSet<string> _ids = new(StringComparer.OrdinalIgnoreCase);
+
+        public Task RecordAsync(string sessionId, CancellationToken cancellationToken = default)
+        {
+            lock (_ids)
+                _ids.Add(sessionId);
+            return Task.CompletedTask;
+        }
+
+        public Task ForgetAsync(string sessionId, CancellationToken cancellationToken = default)
+        {
+            lock (_ids)
+                _ids.Remove(sessionId);
+            return Task.CompletedTask;
+        }
+
+        public Task<bool> IsDeletedAsync(string sessionId, CancellationToken cancellationToken = default)
+        {
+            lock (_ids)
+                return Task.FromResult(_ids.Contains(sessionId));
+        }
+
+        public Task<IReadOnlySet<string>> GetAllAsync(CancellationToken cancellationToken = default)
+        {
+            lock (_ids)
+            {
+                IReadOnlySet<string> snapshot = new HashSet<string>(_ids, StringComparer.OrdinalIgnoreCase);
+                return Task.FromResult(snapshot);
+            }
+        }
     }
 
     private sealed class InMemoryGitHubLinksStore : ISessionGitHubLinksStore
