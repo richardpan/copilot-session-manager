@@ -466,6 +466,15 @@
             the StatusBadgeText pill in the Status column. Hover-revealed
             actions live in the Actions column. Right-click opens the same
             menu the cards used to expose.
+
+            Keyboard navigation (#96): DataGrid supports Up/Down arrow row
+            navigation natively (SelectionMode=Single + SelectionUnit=FullRow).
+            The original #96 spec was written against the pre-V1.5
+            ItemsControl-of-cards layout and is largely satisfied by the
+            DataGrid migration. We add KeyboardNavigation.DirectionalNavigation
+            ="Cycle" so Up at the first row wraps to the last and vice versa,
+            matching the wrap-around behavior the original ListBox proposal
+            would have given via the ListBox default.
         -->
         <DataGrid Grid.Row="4"
                   ItemsSource="{Binding Sessions.VisibleSessions}"
@@ -479,6 +488,7 @@
                   GridLinesVisibility="None"
                   SelectionMode="Single"
                   SelectionUnit="FullRow"
+                  KeyboardNavigation.DirectionalNavigation="Cycle"
                   EnableRowVirtualization="True"
                   Background="{DynamicResource SurfaceBrush}"
                   BorderThickness="0"
@@ -490,7 +500,7 @@
                   HorizontalScrollBarVisibility="Auto"
                   VerticalScrollBarVisibility="Auto"
                   AutomationProperties.Name="Sessions table"
-                  AutomationProperties.HelpText="Click any column header to sort. Right-click a row for actions. Hover a row to reveal inline actions.">
+                  AutomationProperties.HelpText="Click any column header to sort. Right-click a row for actions. Hover a row to reveal inline actions. Use Up and Down arrow keys to move between rows; navigation cycles at the top and bottom.">
             <DataGrid.Columns>
                 <!-- Star toggle. Sort by IsStarred desc puts starred first. -->
                 <DataGridTemplateColumn Header="" Width="32" SortMemberPath="IsStarred" CanUserSort="True">

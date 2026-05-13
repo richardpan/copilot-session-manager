@@ -29,11 +29,10 @@ This checklist verifies that:
 
 This checklist explicitly does **NOT** verify:
 
-- Full Windows high-contrast theme support — tracked under [#95] (refactor
-  inline-hex brushes to named brushes). OUT of scope here.
-- Arrow-key navigation between dashboard cards — tracked under [#96].
-  Currently only `Tab` / `Shift+Tab` traversal is expected to work between
-  cards; note that explicitly when running the keyboard section.
+- Full Windows high-contrast theme exhaustive testing across all five
+  built-in themes (Black, White, Aquatic, Desert, Dusk) — that is the
+  charter of [#97]. The brush plumbing is in place after [#95] / [#128];
+  this checklist confirms the default Catppuccin theme.
 
 ## Pre-conditions
 
@@ -137,9 +136,10 @@ Unplug the mouse (or commit to not touching it) for the entire run.
 - [ ] **Esc** cancels every dialog (Add Issue, Merge wizard, etc.).
 - [ ] No keyboard traps: from any control you can `Tab` away without
       using the mouse.
-- [ ] **Known limitation:** arrow keys do NOT navigate card-to-card on
-      the dashboard yet — only `Tab` works. Tracked under [#96].
-      Confirm this matches expectation; do not file a duplicate bug.
+- [ ] **Up / Down arrow keys** move focus between rows in the sessions
+      `DataGrid`. Navigation **cycles** at the top and bottom (Up at the
+      first row wraps to the last, Down at the last row wraps to the
+      first). Originally tracked under [#96], shipped under V1.1.
 
 ## 4. Accessibility Insights for Windows
 
@@ -208,10 +208,9 @@ When the checklist run is complete:
 
 - PR [#98] — accessibility audit pass (the work this checklist verifies).
 - Issue [#45] — original accessibility tracking issue (closed by #98).
-- Open follow-ups (OUT of scope here):
-  - [#95] — refactor inline-hex brushes to named brushes
-    (blocks high-contrast theme).
-  - [#96] — arrow-key navigation between dashboard cards.
+- V1.1 follow-ups (now shipped):
+  - [#95] / PR [#128] — named brushes + Windows high-contrast theme.
+  - [#96] — arrow-key navigation between dashboard rows (DataGrid `Cycle`).
 - WCAG 2.1 quick reference (filter to AA):
   <https://www.w3.org/WAI/WCAG21/quickref/?levels=a%2Caa>
 - Microsoft accessibility guidance for WPF / UI Automation:
