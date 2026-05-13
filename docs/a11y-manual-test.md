@@ -161,14 +161,39 @@ Install Accessibility Insights from <https://accessibilityinsights.io/>.
 
 ## 5. Color contrast verification
 
-Use Accessibility Insights' Color Contrast inspector (or the TPGi tool) to
-sample foreground/background pairs.
+The repository ships an **automated** WCAG 2.1 AA contrast check at
+[`scripts/contrast-check.py`](../scripts/contrast-check.py). It linearises
+every named brush in the Catppuccin Mocha palette, computes contrast
+ratios against every plausible pairing (text on every neutral surface,
+badge text on every coloured pill, focus outline + status pill on every
+background), and prints any pair that falls below the WCAG 2.1 AA
+threshold (4.5:1 for body text, 3.0:1 for non-text UI components).
 
+Run it any time the palette changes:
+
+```powershell
+python scripts/contrast-check.py
+```
+
+After [#133] (V1.2) the only remaining failures are the two `Border on
+Background` / `Border on Surface` pairs (1.80:1 and 1.92:1). These are
+purely decorative separators and are exempt under WCAG 2.1 SC 1.4.11
+("Pure decoration, used only for visual formatting … has no information
+or functionality"). They do not gate the checklist.
+
+In addition, use Accessibility Insights' Color Contrast inspector (or the
+TPGi tool) to spot-sample real rendered foreground/background pairs in
+the running app:
+
+- [ ] Run `python scripts/contrast-check.py` from the repo root and
+      confirm the only failures listed are the two `Border on
+      Background` / `Border on Surface` decorative-border pairs.
 - [ ] Verify text-on-background pairs in the dashboard meet WCAG 2.1 AA:
       **4.5:1** for normal text, **3:1** for large text (18pt+ or 14pt
       bold) and for non-text UI components / focus indicators.
-- [ ] Verify the `#7F849C` separator/secondary-text color holds its
-      expected ratio (~6:1 against the default surface) in practice.
+- [ ] Verify the inactive / neutral pill (now `#9399B2` after #133)
+      keeps the dark badge text legible (≥ 4.5:1 — automated check
+      reports 6.18:1).
 - [ ] **Note:** full Windows high-contrast theme support is tracked under
       [#95] and is OUT of scope for this checklist. Do not file
       high-contrast bugs against this run; add notes there instead.

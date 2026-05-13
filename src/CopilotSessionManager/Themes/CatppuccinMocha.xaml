@@ -10,8 +10,10 @@
 
     <SolidColorBrush x:Key="TextPrimaryBrush"><SolidColorBrush.Color><Color A="255" R="205" G="214" B="244" /></SolidColorBrush.Color></SolidColorBrush>
     <SolidColorBrush x:Key="TextSecondaryBrush"><SolidColorBrush.Color><Color A="255" R="166" G="173" B="200" /></SolidColorBrush.Color></SolidColorBrush>
-    <SolidColorBrush x:Key="TextMutedBrush"><SolidColorBrush.Color><Color A="255" R="127" G="132" B="156" /></SolidColorBrush.Color></SolidColorBrush>
-    <SolidColorBrush x:Key="TextPlaceholderBrush"><SolidColorBrush.Color><Color A="255" R="108" G="112" B="134" /></SolidColorBrush.Color></SolidColorBrush>
+    <!-- #133 (V1.2): bumped from #7F849C (overlay2) to #BAC2DE (subtext0) so muted text reaches WCAG 2.1 AA 4.5:1 against every neutral surface (Background, Surface, SurfaceAlt, SurfaceHover, Overlay). -->
+    <SolidColorBrush x:Key="TextMutedBrush"><SolidColorBrush.Color><Color A="255" R="186" G="194" B="222" /></SolidColorBrush.Color></SolidColorBrush>
+    <!-- #133 (V1.2): bumped from #6C7086 (overlay0) to #9399B2 (subtext1) so placeholder text reaches WCAG 2.1 AA 4.5:1 against Background and Surface. -->
+    <SolidColorBrush x:Key="TextPlaceholderBrush"><SolidColorBrush.Color><Color A="255" R="147" G="153" B="178" /></SolidColorBrush.Color></SolidColorBrush>
     <SolidColorBrush x:Key="TextOnAccentBrush"><SolidColorBrush.Color><Color A="255" R="17" G="17" B="27" /></SolidColorBrush.Color></SolidColorBrush>
     <SolidColorBrush x:Key="BadgeTextBrush"><SolidColorBrush.Color><Color A="255" R="17" G="17" B="27" /></SolidColorBrush.Color></SolidColorBrush>
 
@@ -33,14 +35,16 @@
     <SolidColorBrush x:Key="StatusAwaitingBrush"><SolidColorBrush.Color><Color A="255" R="249" G="226" B="175" /></SolidColorBrush.Color></SolidColorBrush>
     <SolidColorBrush x:Key="StatusInputBrush"><SolidColorBrush.Color><Color A="255" R="137" G="180" B="250" /></SolidColorBrush.Color></SolidColorBrush>
     <SolidColorBrush x:Key="StatusIdleBrush"><SolidColorBrush.Color><Color A="255" R="127" G="132" B="156" /></SolidColorBrush.Color></SolidColorBrush>
-    <SolidColorBrush x:Key="StatusInactiveBrush"><SolidColorBrush.Color><Color A="255" R="108" G="112" B="134" /></SolidColorBrush.Color></SolidColorBrush>
+    <!-- #133 (V1.2): bumped from #6C7086 (overlay0) to #9399B2 (subtext1) so dark BadgeText sits at 6.2:1 on this pill (was 3.84:1) and the pill is still visible against Background at 4.85:1. -->
+    <SolidColorBrush x:Key="StatusInactiveBrush"><SolidColorBrush.Color><Color A="255" R="147" G="153" B="178" /></SolidColorBrush.Color></SolidColorBrush>
     <SolidColorBrush x:Key="StatusCrashedBrush"><SolidColorBrush.Color><Color A="255" R="243" G="139" B="168" /></SolidColorBrush.Color></SolidColorBrush>
 
     <SolidColorBrush x:Key="BadgeOpenBrush"><SolidColorBrush.Color><Color A="255" R="166" G="227" B="161" /></SolidColorBrush.Color></SolidColorBrush>
     <SolidColorBrush x:Key="BadgeClosedBrush"><SolidColorBrush.Color><Color A="255" R="203" G="166" B="247" /></SolidColorBrush.Color></SolidColorBrush>
     <SolidColorBrush x:Key="BadgeMergedBrush"><SolidColorBrush.Color><Color A="255" R="203" G="166" B="247" /></SolidColorBrush.Color></SolidColorBrush>
     <SolidColorBrush x:Key="BadgeDraftBrush"><SolidColorBrush.Color><Color A="255" R="127" G="132" B="156" /></SolidColorBrush.Color></SolidColorBrush>
-    <SolidColorBrush x:Key="BadgeNeutralBrush"><SolidColorBrush.Color><Color A="255" R="108" G="112" B="134" /></SolidColorBrush.Color></SolidColorBrush>
+    <!-- #133 (V1.2): bumped from #6C7086 (overlay0) to #9399B2 (subtext1) so dark BadgeText sits at 6.2:1 on this pill (was 3.84:1). -->
+    <SolidColorBrush x:Key="BadgeNeutralBrush"><SolidColorBrush.Color><Color A="255" R="147" G="153" B="178" /></SolidColorBrush.Color></SolidColorBrush>
     <SolidColorBrush x:Key="BadgeFailureBrush"><SolidColorBrush.Color><Color A="255" R="243" G="139" B="168" /></SolidColorBrush.Color></SolidColorBrush>
     <SolidColorBrush x:Key="BadgePendingBrush"><SolidColorBrush.Color><Color A="255" R="249" G="226" B="175" /></SolidColorBrush.Color></SolidColorBrush>
 
