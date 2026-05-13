@@ -170,6 +170,39 @@ public sealed class SubagentScanServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task RealCopilotCliEventShape_IsParsed()
+    {
+        // Regression for #138: real Copilot CLI events.jsonl carries `agentId`
+        // at the TOP LEVEL of the event (sibling of `data`) and `toolCallId`
+        // inside `data`. The scanner must join on `data.toolCallId`. We assert
+        // the scanner happily ignores the extra top-level `agentId` and uses
+        // the in-data `toolCallId` as documented.
+        const string toolCallId = "toolu_vrtx_01DnbZnNg8sJsMr7Mi2pZJ5y";
+        var realToolStart =
+            $"{{\"type\":\"tool.execution_start\",\"data\":{{\"toolCallId\":\"{toolCallId}\",\"toolName\":\"task\",\"arguments\":{{\"name\":\"adr-002-direct-storage\",\"agent_type\":\"general-purpose\",\"description\":\"d\"}},\"turnId\":\"1\"}},\"id\":\"e1\",\"timestamp\":\"2026-05-09T16:43:11.124Z\",\"parentId\":\"p1\"}}\n";
+        var realStarted =
+            $"{{\"type\":\"subagent.started\",\"data\":{{\"toolCallId\":\"{toolCallId}\",\"agentName\":\"general-purpose\",\"agentDisplayName\":\"General Purpose Agent\",\"agentDescription\":\"d\"}},\"id\":\"e2\",\"timestamp\":\"2026-05-09T16:43:11.139Z\",\"parentId\":\"p2\",\"agentId\":\"{toolCallId}\"}}\n";
+        var realCompleted =
+            $"{{\"type\":\"subagent.completed\",\"data\":{{\"toolCallId\":\"{toolCallId}\",\"agentName\":\"general-purpose\",\"agentDisplayName\":\"General Purpose Agent\",\"model\":\"claude-opus-4.7-high\",\"totalToolCalls\":62,\"totalTokens\":5230935,\"durationMs\":744840}},\"id\":\"e3\",\"timestamp\":\"2026-05-09T16:55:35.967Z\",\"parentId\":\"p3\",\"agentId\":\"{toolCallId}\"}}\n";
+
+        WriteEvents(realToolStart + realStarted + realCompleted);
+
+        var result = await _sut.ScanAsync(SessionId);
+
+        result.Should().ContainSingle();
+        var summary = result[0];
+        summary.ToolCallId.Should().Be(toolCallId);
+        summary.Name.Should().Be("adr-002-direct-storage");
+        summary.AgentType.Should().Be("general-purpose");
+        summary.AgentDisplayName.Should().Be("General Purpose Agent");
+        summary.Model.Should().Be("claude-opus-4.7-high");
+        summary.TokensTotal.Should().Be(5_230_935);
+        summary.ToolCallsTotal.Should().Be(62);
+        summary.Duration.Should().Be(TimeSpan.FromMilliseconds(744_840));
+        summary.Status.Should().Be(SubagentStatus.Completed);
+    }
+
+    [Fact]
     public async Task StartedWithoutToolExecutionStart_IsSkipped()
     {
         WriteEvents(Started("call-1", "Orphan", "2026-05-01T00:00:01Z"));
@@ -185,7 +218,7 @@ public sealed class SubagentScanServiceTests : IDisposable
         WriteEvents(
             ToolStart("call-1", "cancelled", "task", "2026-05-01T00:00:00Z") +
             Started("call-1", "Cancelled", "2026-05-01T00:00:01Z") +
-            Event("subagent.completed", "2026-05-01T00:00:03Z", "\"agentId\":\"call-1\",\"totalTokens\":10,\"totalToolCalls\":1,\"durationMs\":100,\"model\":\"m1\",\"status\":\"cancelled\""));
+            Event("subagent.completed", "2026-05-01T00:00:03Z", "\"toolCallId\":\"call-1\",\"totalTokens\":10,\"totalToolCalls\":1,\"durationMs\":100,\"model\":\"m1\",\"status\":\"cancelled\""));
 
         var result = await _sut.ScanAsync(SessionId);
 
@@ -234,10 +267,10 @@ public sealed class SubagentScanServiceTests : IDisposable
         Event("tool.execution_start", timestamp, $"\"toolName\":\"task\",\"toolCallId\":\"{id}\",\"arguments\":{{\"name\":\"{name}\",\"agent_type\":\"{agentType}\",\"description\":\"desc\"}}");
 
     private static string Started(string id, string displayName, string timestamp) =>
-        Event("subagent.started", timestamp, $"\"agentId\":\"{id}\",\"agentName\":\"{displayName}\",\"agentDisplayName\":\"{displayName}\",\"agentDescription\":\"desc\"");
+        Event("subagent.started", timestamp, $"\"toolCallId\":\"{id}\",\"agentName\":\"{displayName}\",\"agentDisplayName\":\"{displayName}\",\"agentDescription\":\"desc\"");
 
     private static string Completed(string id, long tokens, int tools, int durationMs, string model, string timestamp) =>
-        Event("subagent.completed", timestamp, $"\"agentId\":\"{id}\",\"totalTokens\":{tokens},\"totalToolCalls\":{tools},\"durationMs\":{durationMs},\"model\":\"{model}\"");
+        Event("subagent.completed", timestamp, $"\"toolCallId\":\"{id}\",\"totalTokens\":{tokens},\"totalToolCalls\":{tools},\"durationMs\":{durationMs},\"model\":\"{model}\"");
 
     private static string Event(string type, string timestamp, string data) =>
         $"{{\"id\":\"{Guid.NewGuid():N}\",\"type\":\"{type}\",\"timestamp\":\"{timestamp}\",\"data\":{{{data}}}}}\n";

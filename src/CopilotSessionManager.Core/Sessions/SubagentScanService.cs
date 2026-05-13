@@ -130,16 +130,20 @@ public sealed class SubagentScanService : ISubagentScanService
 
     private void ReadSubagentStarted(SessionEvent ev, JsonElement data, Dictionary<string, Builder> builders)
     {
-        var agentId = ReadString(data, "agentId");
-        if (string.IsNullOrWhiteSpace(agentId))
+        // Real Copilot CLI events.jsonl carries the join key as `data.toolCallId`
+        // (the top-level `agentId` is its sibling and has the same value, but is
+        // outside `data`). Read `toolCallId` from `data` so we match the same key
+        // we set in ReadToolExecutionStart.
+        var toolCallId = ReadString(data, "toolCallId");
+        if (string.IsNullOrWhiteSpace(toolCallId))
         {
-            _logger.LogDebug("Skipping subagent.started without agentId.");
+            _logger.LogDebug("Skipping subagent.started without data.toolCallId.");
             return;
         }
 
-        if (!builders.TryGetValue(agentId, out var builder))
+        if (!builders.TryGetValue(toolCallId, out var builder))
         {
-            _logger.LogDebug("Skipping subagent.started for unknown task tool call {ToolCallId}.", agentId);
+            _logger.LogDebug("Skipping subagent.started for unknown task tool call {ToolCallId}.", toolCallId);
             return;
         }
 
@@ -150,16 +154,16 @@ public sealed class SubagentScanService : ISubagentScanService
 
     private void ReadSubagentCompleted(SessionEvent ev, JsonElement data, Dictionary<string, Builder> builders)
     {
-        var agentId = ReadString(data, "agentId");
-        if (string.IsNullOrWhiteSpace(agentId))
+        var toolCallId = ReadString(data, "toolCallId");
+        if (string.IsNullOrWhiteSpace(toolCallId))
         {
-            _logger.LogDebug("Skipping subagent.completed without agentId.");
+            _logger.LogDebug("Skipping subagent.completed without data.toolCallId.");
             return;
         }
 
-        if (!builders.TryGetValue(agentId, out var builder))
+        if (!builders.TryGetValue(toolCallId, out var builder))
         {
-            _logger.LogDebug("Skipping subagent.completed for unknown task tool call {ToolCallId}.", agentId);
+            _logger.LogDebug("Skipping subagent.completed for unknown task tool call {ToolCallId}.", toolCallId);
             return;
         }
 
