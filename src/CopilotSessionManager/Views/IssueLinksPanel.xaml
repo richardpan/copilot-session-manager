@@ -28,9 +28,9 @@
         </Style>
 
         <Style x:Key="AddIssueButton" TargetType="Button">
-            <Setter Property="Background" Value="#313244" />
-            <Setter Property="Foreground" Value="#CDD6F4" />
-            <Setter Property="BorderBrush" Value="#45475A" />
+            <Setter Property="Background" Value="{DynamicResource OverlayBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
             <Setter Property="BorderThickness" Value="1" />
             <Setter Property="Padding" Value="8,2" />
             <Setter Property="Margin" Value="4,2,0,2" />
@@ -74,12 +74,12 @@
                                 with a non-colour glyph (●/○) for colour-blind safety.
                             -->
                             <TextBlock Text="{Binding BadgeGlyph}"
-                                       Foreground="#11111B"
+                                       Foreground="{DynamicResource TextOnAccentBrush}"
                                        FontWeight="SemiBold"
                                        FontSize="11"
                                        Padding="8,2,2,2" />
                             <TextBlock Text="{Binding Display}"
-                                       Foreground="#11111B"
+                                       Foreground="{DynamicResource TextOnAccentBrush}"
                                        FontWeight="SemiBold"
                                        FontSize="11"
                                        Padding="0,2,8,2" />
@@ -97,3 +97,4 @@
                 AutomationProperties.HelpText="Opens a dialog to link a new GitHub issue to this session." />
     </WrapPanel>
 </UserControl>
+

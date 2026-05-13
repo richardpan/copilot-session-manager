@@ -33,6 +33,7 @@ public partial class App : Application
     private ITrayIconService? _trayIcon;
     private TrayCoordinator? _trayCoordinator;
     private bool _userRequestedQuit;
+    private const string HighContrastThemeSource = "Themes/HighContrast.xaml";
 
     /// <summary>
     /// Gets the application's <see cref="IServiceProvider"/>. Available after
@@ -45,6 +46,9 @@ public partial class App : Application
     protected override async void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+
+        SystemParameters.StaticPropertyChanged += OnSystemParametersStaticPropertyChanged;
+        ApplyHighContrastTheme();
 
         var logDirectory = AppPaths.LogsDirectory;
         Directory.CreateDirectory(logDirectory);
@@ -192,6 +196,8 @@ public partial class App : Application
 
     protected override async void OnExit(ExitEventArgs e)
     {
+        SystemParameters.StaticPropertyChanged -= OnSystemParametersStaticPropertyChanged;
+
         Log.Information("Shutting down.");
 
         _trayCoordinator?.Dispose();
@@ -214,6 +220,52 @@ public partial class App : Application
 
         await Log.CloseAndFlushAsync();
         base.OnExit(e);
+    }
+
+    private void OnSystemParametersStaticPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(SystemParameters.HighContrast))
+        {
+            if (Dispatcher.CheckAccess())
+            {
+                ApplyHighContrastTheme();
+            }
+            else
+            {
+                Dispatcher.Invoke(ApplyHighContrastTheme);
+            }
+        }
+    }
+
+    private void ApplyHighContrastTheme()
+    {
+        Dispatcher.VerifyAccess();
+
+        var dictionaries = Resources.MergedDictionaries;
+        var existing = dictionaries.FirstOrDefault(IsHighContrastTheme);
+
+        if (SystemParameters.HighContrast)
+        {
+            if (existing is null)
+            {
+                dictionaries.Add(new ResourceDictionary
+                {
+                    Source = new Uri(HighContrastThemeSource, UriKind.Relative),
+                });
+            }
+        }
+        else if (existing is not null)
+        {
+            dictionaries.Remove(existing);
+        }
+    }
+
+    private static bool IsHighContrastTheme(ResourceDictionary dictionary)
+    {
+        return string.Equals(
+            dictionary.Source?.OriginalString,
+            HighContrastThemeSource,
+            StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>

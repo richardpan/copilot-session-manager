@@ -86,15 +86,16 @@ public class MainWindowOfflineBannerTests
     }
 
     [Fact]
-    public void MainWindow_TodoCommentReferencesNamedBrushFollowUp()
+    public void MainWindow_BannerUsesNamedThemeBrushes()
     {
         var content = ReadMainWindowXaml();
 
-        // The banner uses inline hex colours pending the named-brush
-        // refactor tracked in #95. A TODO breadcrumb makes the cleanup
-        // discoverable later.
-        content.Should().Contain("#95",
-            "an inline hex banner should leave a TODO referencing the named-brush refactor (#95)");
+        content.Should().Contain("WarningSurfaceBrush",
+            "the offline banner should consume the named warning surface brush");
+        content.Should().Contain("DangerSurfaceBrush",
+            "the unauthenticated banner should consume the named danger surface brush");
+        content.Should().NotMatchRegex("#[0-9A-Fa-f]{6,8}",
+            "view XAML should not keep inline hex colour literals after the named-brush refactor");
     }
 
     private static string ReadMainWindowXaml()

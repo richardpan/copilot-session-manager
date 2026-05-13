@@ -13,7 +13,7 @@
         Height="720"
         Width="1200"
         WindowStartupLocation="CenterScreen"
-        Background="#1E1E2E">
+        Background="{DynamicResource BackgroundBrush}">
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
         <conv:NullToVisibilityConverter x:Key="NullToVisibility" />
@@ -22,7 +22,7 @@
         <DataTemplate x:Key="LabelFilterTemplate" DataType="{x:Type vm:LabelFilterChip}">
             <CheckBox Content="{Binding Label}"
                       IsChecked="{Binding IsVisible, Mode=TwoWay}"
-                      Foreground="#CDD6F4"
+                      Foreground="{DynamicResource TextPrimaryBrush}"
                       Margin="0,0,12,0"
                       VerticalAlignment="Center"
                       AutomationProperties.Name="{Binding Label}"
@@ -32,7 +32,7 @@
         <DataTemplate x:Key="TierFilterTemplate" DataType="{x:Type vm:TierFilterChip}">
             <CheckBox Content="{Binding Label}"
                       IsChecked="{Binding IsVisible, Mode=TwoWay}"
-                      Foreground="#CDD6F4"
+                      Foreground="{DynamicResource TextPrimaryBrush}"
                       Margin="0,0,12,0"
                       VerticalAlignment="Center"
                       AutomationProperties.Name="{Binding Label}"
@@ -42,7 +42,7 @@
         <DataTemplate x:Key="ProducerFilterTemplate" DataType="{x:Type vm:ProducerFilterChip}">
             <CheckBox Content="{Binding Label}"
                       IsChecked="{Binding IsVisible, Mode=TwoWay}"
-                      Foreground="#CDD6F4"
+                      Foreground="{DynamicResource TextPrimaryBrush}"
                       Margin="0,0,12,0"
                       VerticalAlignment="Center"
                       AutomationProperties.Name="{Binding Label}"
@@ -93,7 +93,7 @@
             <Separator />
             <MenuItem Header="Delete from disk..."
                       Command="{Binding DeleteCommand}"
-                      Foreground="#F38BA8"
+                      Foreground="{DynamicResource DangerBrush}"
                       AutomationProperties.Name="Delete session from disk"
                       AutomationProperties.HelpText="Permanently removes this session and all of its files. Shows a confirmation dialog first." />
         </ContextMenu>
@@ -105,8 +105,8 @@
             in the Status column.
         -->
         <Style x:Key="SessionRowStyle" TargetType="DataGridRow">
-            <Setter Property="Background" Value="#1E1E2E" />
-            <Setter Property="Foreground" Value="#CDD6F4" />
+            <Setter Property="Background" Value="{DynamicResource BackgroundBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
             <Setter Property="ContextMenu" Value="{StaticResource SessionRowContextMenu}" />
             <Setter Property="AutomationProperties.Name" Value="{Binding AutomationName}" />
             <Setter Property="BorderThickness" Value="4,0,0,0" />
@@ -114,10 +114,10 @@
             <Setter Property="MinHeight" Value="36" />
             <Style.Triggers>
                 <Trigger Property="IsMouseOver" Value="True">
-                    <Setter Property="Background" Value="#252537" />
+                    <Setter Property="Background" Value="{DynamicResource SurfaceHoverBrush}" />
                 </Trigger>
                 <Trigger Property="IsSelected" Value="True">
-                    <Setter Property="Background" Value="#313244" />
+                    <Setter Property="Background" Value="{DynamicResource OverlayBrush}" />
                 </Trigger>
             </Style.Triggers>
         </Style>
@@ -127,7 +127,7 @@
             <Setter Property="BorderThickness" Value="0" />
             <Setter Property="Padding" Value="6,4" />
             <Setter Property="VerticalAlignment" Value="Center" />
-            <Setter Property="Foreground" Value="#CDD6F4" />
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
             <Setter Property="FocusVisualStyle" Value="{x:Null}" />
             <Setter Property="Template">
                 <Setter.Value>
@@ -142,12 +142,12 @@
         </Style>
 
         <Style x:Key="SessionHeaderStyle" TargetType="DataGridColumnHeader">
-            <Setter Property="Background" Value="#11111B" />
-            <Setter Property="Foreground" Value="#7F849C" />
+            <Setter Property="Background" Value="{DynamicResource SurfaceAltBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}" />
             <Setter Property="FontSize" Value="11" />
             <Setter Property="FontWeight" Value="SemiBold" />
             <Setter Property="Padding" Value="8,6" />
-            <Setter Property="BorderBrush" Value="#181825" />
+            <Setter Property="BorderBrush" Value="{DynamicResource SurfaceBrush}" />
             <Setter Property="BorderThickness" Value="0,0,1,1" />
             <Setter Property="HorizontalContentAlignment" Value="Left" />
         </Style>
@@ -164,8 +164,8 @@
         </Grid.RowDefinitions>
 
         <!-- Top menu bar (Help → Onboarding…) -->
-        <Menu Grid.Row="0" Background="#11111B" Foreground="#CDD6F4" Padding="4,2">
-            <MenuItem Header="_Help" Foreground="#CDD6F4" AutomationProperties.Name="Help menu">
+        <Menu Grid.Row="0" Background="{DynamicResource SurfaceAltBrush}" Foreground="{DynamicResource TextPrimaryBrush}" Padding="4,2">
+            <MenuItem Header="_Help" Foreground="{DynamicResource TextPrimaryBrush}" AutomationProperties.Name="Help menu">
                 <MenuItem Header="_Onboarding…"
                           Command="{Binding OpenOnboardingCommand}"
                           ToolTip="Re-run the welcome flow and prerequisite checks."
@@ -196,17 +196,15 @@
         <!--
             GitHub availability banner (#84). Two stacked banners keep the
             visibility binding trivial (no multi-converter) and let each state
-            carry its own colour palette + AutomationProperties text. Inline
-            hex colours below — TODO: replace with named brushes once #95
-            (palette extraction to App.xaml resources) lands.
+            carry its own colour palette + AutomationProperties text. Theme resources below keep the warning/error palettes centralized.
         -->
         <StackPanel Grid.Row="1"
                     Orientation="Vertical"
                     Visibility="{Binding ShowGitHubBanner, Converter={StaticResource BoolToVisibility}}">
             <Border Padding="16,8"
                     MinHeight="32"
-                    Background="#3D2C0E"
-                    BorderBrush="#F9E2AF"
+                    Background="{DynamicResource WarningSurfaceBrush}"
+                    BorderBrush="{DynamicResource AccentBrush}"
                     BorderThickness="0,0,0,2"
                     Visibility="{Binding IsGitHubOffline, Converter={StaticResource BoolToVisibility}}"
                     AutomationProperties.LiveSetting="Polite"
@@ -214,13 +212,13 @@
                     AutomationProperties.HelpText="Indicates the GitHub CLI cannot reach github.com. PR and issue enrichment are paused until connectivity returns.">
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                     <TextBlock Text="⚠"
-                               Foreground="#F9E2AF"
+                               Foreground="{DynamicResource AccentBrush}"
                                FontSize="14"
                                FontWeight="SemiBold"
                                VerticalAlignment="Center"
                                Margin="0,0,8,0" />
                     <TextBlock Text="{Binding GitHubStatusMessage}"
-                               Foreground="#F9E2AF"
+                               Foreground="{DynamicResource AccentBrush}"
                                FontSize="12"
                                VerticalAlignment="Center"
                                TextWrapping="Wrap" />
@@ -228,8 +226,8 @@
             </Border>
             <Border Padding="16,8"
                     MinHeight="32"
-                    Background="#3D1F26"
-                    BorderBrush="#F38BA8"
+                    Background="{DynamicResource DangerSurfaceBrush}"
+                    BorderBrush="{DynamicResource DangerBrush}"
                     BorderThickness="0,0,0,2"
                     Visibility="{Binding IsGitHubUnauthenticated, Converter={StaticResource BoolToVisibility}}"
                     AutomationProperties.LiveSetting="Polite"
@@ -237,35 +235,35 @@
                     AutomationProperties.HelpText="Indicates the GitHub CLI is installed but not authenticated. Run gh auth login in PowerShell to enable PR and issue enrichment.">
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                     <TextBlock Text="🔒"
-                               Foreground="#F38BA8"
+                               Foreground="{DynamicResource DangerBrush}"
                                FontSize="14"
                                FontWeight="SemiBold"
                                VerticalAlignment="Center"
                                Margin="0,0,8,0" />
                     <TextBlock Text="{Binding GitHubStatusMessage}"
-                               Foreground="#F38BA8"
+                               Foreground="{DynamicResource DangerBrush}"
                                FontSize="12"
                                VerticalAlignment="Center"
                                TextWrapping="Wrap" />
                     <TextBlock Text=" — Run "
-                               Foreground="#F38BA8"
+                               Foreground="{DynamicResource DangerBrush}"
                                FontSize="12"
                                VerticalAlignment="Center" />
                     <TextBlock Text="gh auth login"
-                               Foreground="#F38BA8"
+                               Foreground="{DynamicResource DangerBrush}"
                                FontFamily="Consolas"
                                FontSize="12"
                                FontWeight="SemiBold"
                                VerticalAlignment="Center" />
                     <TextBlock Text=" in PowerShell."
-                               Foreground="#F38BA8"
+                               Foreground="{DynamicResource DangerBrush}"
                                FontSize="12"
                                VerticalAlignment="Center" />
                 </StackPanel>
             </Border>
         </StackPanel>
 
-        <Border Grid.Row="2" Padding="16,8" Background="#181825">
+        <Border Grid.Row="2" Padding="16,8" Background="{DynamicResource SurfaceBrush}">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
@@ -273,7 +271,7 @@
                 </Grid.ColumnDefinitions>
                 <TextBlock Grid.Column="0"
                            Text="{Binding HeaderText}"
-                           Foreground="#CDD6F4"
+                           Foreground="{DynamicResource TextPrimaryBrush}"
                            FontSize="16"
                            FontWeight="SemiBold"
                            VerticalAlignment="Center" />
@@ -281,9 +279,9 @@
                     <Button Content="＋ New session"
                             Padding="14,6"
                             Margin="0,0,8,0"
-                            Background="#89B4FA"
-                            Foreground="#11111B"
-                            BorderBrush="#74A0E0"
+                            Background="{DynamicResource PrimaryActionBrush}"
+                            Foreground="{DynamicResource TextOnAccentBrush}"
+                            BorderBrush="{DynamicResource PrimaryActionBorderBrush}"
                             FontWeight="SemiBold"
                             ToolTipService.ShowDuration="25000"
                             AutomationProperties.Name="New Copilot session"
@@ -295,7 +293,7 @@
                                     <TextBlock FontWeight="SemiBold" Text="Start a new Copilot session" />
                                     <TextBlock TextWrapping="Wrap" Margin="0,4,0,0"
                                                Text="Launches a fresh PowerShell window in your user home and runs `copilot` (no --resume), so the CLI mints a brand-new session id." />
-                                    <TextBlock TextWrapping="Wrap" Margin="0,6,0,0" FontStyle="Italic" Foreground="#A6ADC8"
+                                    <TextBlock TextWrapping="Wrap" Margin="0,6,0,0" FontStyle="Italic" Foreground="{DynamicResource TextSecondaryBrush}"
                                                Text="The new session appears in the dashboard within a few seconds — there's no need to refresh." />
                                 </StackPanel>
                             </ToolTip>
@@ -304,9 +302,9 @@
                     <Button Content="🧹 Clean stale locks"
                             Padding="12,6"
                             Margin="0,0,8,0"
-                            Background="#313244"
-                            Foreground="#CDD6F4"
-                            BorderBrush="#45475A"
+                            Background="{DynamicResource OverlayBrush}"
+                            Foreground="{DynamicResource TextPrimaryBrush}"
+                            BorderBrush="{DynamicResource BorderBrush}"
                             ToolTipService.ShowDuration="30000"
                             AutomationProperties.Name="Clean all stale locks"
                             AutomationProperties.HelpText="Sweeps the Copilot session-state folder and deletes inuse lock files left behind by dead processes."
@@ -319,7 +317,7 @@
                                                Text="The Copilot CLI writes a small file named inuse.&lt;pid&gt;.lock when a session starts and deletes it on a clean exit. If the CLI crashes, is force-killed, or the machine power-cycles, the lock can be left behind pointing at a process that is no longer running — Copilot then refuses to attach to that session." />
                                     <TextBlock TextWrapping="Wrap" Margin="0,6,0,0"
                                                Text="This button sweeps every session under ~/.copilot/session-state, checks each lock's PID, and deletes only the orphaned ones. Locks owned by a still-running process are never touched, so it is always safe to click — even with active sessions in other windows." />
-                                    <TextBlock TextWrapping="Wrap" Margin="0,6,0,0" FontStyle="Italic" Foreground="#A6ADC8"
+                                    <TextBlock TextWrapping="Wrap" Margin="0,6,0,0" FontStyle="Italic" Foreground="{DynamicResource TextSecondaryBrush}"
                                                Text="Per-session cleanup is also available via the 🧹 button on a crashed row, and ▶ Resume runs this same cleanup automatically before relaunching." />
                                 </StackPanel>
                             </ToolTip>
@@ -327,9 +325,9 @@
                     </Button>
                     <Button Content="↻ Refresh"
                             Padding="12,6"
-                            Background="#313244"
-                            Foreground="#CDD6F4"
-                            BorderBrush="#45475A"
+                            Background="{DynamicResource OverlayBrush}"
+                            Foreground="{DynamicResource TextPrimaryBrush}"
+                            BorderBrush="{DynamicResource BorderBrush}"
                             ToolTipService.ShowDuration="20000"
                             AutomationProperties.Name="Refresh sessions"
                             AutomationProperties.HelpText="Re-scans the local Copilot session folder for new and updated sessions."
@@ -340,7 +338,7 @@
                                     <TextBlock FontWeight="SemiBold" Text="Refresh" />
                                     <TextBlock TextWrapping="Wrap" Margin="0,4,0,0"
                                                Text="Re-scans ~/.copilot/session-state for new and updated sessions and rebuilds the dashboard." />
-                                    <TextBlock TextWrapping="Wrap" Margin="0,6,0,0" FontStyle="Italic" Foreground="#A6ADC8"
+                                    <TextBlock TextWrapping="Wrap" Margin="0,6,0,0" FontStyle="Italic" Foreground="{DynamicResource TextSecondaryBrush}"
                                                Text="The dashboard already updates automatically as sessions change on disk. Use this to force an immediate re-scan if a card looks out of sync." />
                                 </StackPanel>
                             </ToolTip>
@@ -354,10 +352,10 @@
              counts, label chips, and tier chips on one wrapping row instead
              of the prior 3-row stack. Tab order is left-to-right.
              V1.3 (#110): search box prepended for live name filtering. -->
-        <Border Grid.Row="3" Padding="16,6" Background="#11111B" BorderBrush="#181825" BorderThickness="0,1,0,0">
+        <Border Grid.Row="3" Padding="16,6" Background="{DynamicResource SurfaceAltBrush}" BorderBrush="{DynamicResource SurfaceBrush}" BorderThickness="0,1,0,0">
             <WrapPanel Orientation="Horizontal">
-                <Border Background="#1E1E2E"
-                        BorderBrush="#313244"
+                <Border Background="{DynamicResource BackgroundBrush}"
+                        BorderBrush="{DynamicResource OverlayBrush}"
                         BorderThickness="1"
                         CornerRadius="3"
                         Padding="6,2"
@@ -366,12 +364,12 @@
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Text="🔍"
                                    FontSize="11"
-                                   Foreground="#7F849C"
+                                   Foreground="{DynamicResource TextMutedBrush}"
                                    VerticalAlignment="Center"
                                    Margin="0,0,4,0" />
                         <Grid Width="200" VerticalAlignment="Center">
                             <TextBlock Text="Search by name…"
-                                       Foreground="#6C7086"
+                                       Foreground="{DynamicResource TextPlaceholderBrush}"
                                        FontSize="12"
                                        VerticalAlignment="Center"
                                        IsHitTestVisible="False">
@@ -389,10 +387,10 @@
                             <TextBox x:Name="SearchBox"
                                      Text="{Binding Sessions.SearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                      Background="Transparent"
-                                     Foreground="#CDD6F4"
+                                     Foreground="{DynamicResource TextPrimaryBrush}"
                                      FontSize="12"
                                      BorderThickness="0"
-                                     CaretBrush="#CDD6F4"
+                                     CaretBrush="{DynamicResource TextPrimaryBrush}"
                                      KeyDown="OnSearchBoxKeyDown"
                                      ToolTip="Filter sessions by keywords in the name. Multiple words must all match. Esc clears."
                                      AutomationProperties.Name="Search sessions by name"
@@ -402,22 +400,22 @@
                 </Border>
                 <CheckBox Content="Show inactive"
                           IsChecked="{Binding Sessions.ShowInactive}"
-                          Foreground="#CDD6F4"
+                          Foreground="{DynamicResource TextPrimaryBrush}"
                           VerticalAlignment="Center"
                           Margin="0,2,16,2"
                           AutomationProperties.Name="Show inactive sessions"
                           AutomationProperties.HelpText="When checked, the dashboard also lists sessions whose process is no longer running." />
                 <TextBlock Text="{Binding Sessions.ActiveCount, StringFormat='{}{0} active'}"
-                           Foreground="#A6E3A1"
+                           Foreground="{DynamicResource SuccessBrush}"
                            VerticalAlignment="Center"
                            Margin="0,2,6,2"
                            FontWeight="SemiBold" />
                 <TextBlock Text="{Binding Sessions.TotalCount, StringFormat='of {0} total'}"
-                           Foreground="#7F849C"
+                           Foreground="{DynamicResource TextMutedBrush}"
                            VerticalAlignment="Center"
                            Margin="0,2,16,2" />
                 <TextBlock Text="Labels:"
-                           Foreground="#7F849C"
+                           Foreground="{DynamicResource TextMutedBrush}"
                            VerticalAlignment="Center"
                            Margin="0,2,8,2" />
                 <ItemsControl ItemsSource="{Binding Sessions.LabelFilters}"
@@ -431,7 +429,7 @@
                     </ItemsControl.ItemsPanel>
                 </ItemsControl>
                 <TextBlock Text="Tiers:"
-                           Foreground="#7F849C"
+                           Foreground="{DynamicResource TextMutedBrush}"
                            VerticalAlignment="Center"
                            Margin="0,2,8,2" />
                 <ItemsControl ItemsSource="{Binding Sessions.TierFilters}"
@@ -445,7 +443,7 @@
                     </ItemsControl.ItemsPanel>
                 </ItemsControl>
                 <TextBlock Text="Producers:"
-                           Foreground="#7F849C"
+                           Foreground="{DynamicResource TextMutedBrush}"
                            VerticalAlignment="Center"
                            Margin="0,2,8,2" />
                 <ItemsControl ItemsSource="{Binding Sessions.ProducerFilters}"
@@ -482,9 +480,9 @@
                   SelectionMode="Single"
                   SelectionUnit="FullRow"
                   EnableRowVirtualization="True"
-                  Background="#181825"
+                  Background="{DynamicResource SurfaceBrush}"
                   BorderThickness="0"
-                  Foreground="#CDD6F4"
+                  Foreground="{DynamicResource TextPrimaryBrush}"
                   RowHeight="40"
                   RowStyle="{StaticResource SessionRowStyle}"
                   CellStyle="{StaticResource SessionCellStyle}"
@@ -509,11 +507,11 @@
                                 <Button.Style>
                                     <Style TargetType="Button">
                                         <Setter Property="Content" Value="☆" />
-                                        <Setter Property="Foreground" Value="#7F849C" />
+                                        <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}" />
                                         <Style.Triggers>
                                             <DataTrigger Binding="{Binding IsStarred}" Value="True">
                                                 <Setter Property="Content" Value="★" />
-                                                <Setter Property="Foreground" Value="#F9E2AF" />
+                                                <Setter Property="Foreground" Value="{DynamicResource AccentBrush}" />
                                             </DataTrigger>
                                         </Style.Triggers>
                                     </Style>
@@ -533,7 +531,7 @@
                                     HorizontalAlignment="Left"
                                     AutomationProperties.Name="{Binding StatusBadgeText}">
                                 <TextBlock Text="{Binding StatusBadgeText}"
-                                           Foreground="#11111B"
+                                           Foreground="{DynamicResource TextOnAccentBrush}"
                                            FontSize="10"
                                            FontWeight="SemiBold" />
                             </Border>
@@ -556,9 +554,9 @@
                                         FontSize="11"
                                         FontWeight="SemiBold"
                                         Margin="0,0,4,0"
-                                        Background="#89B4FA"
-                                        Foreground="#11111B"
-                                        BorderBrush="#74A0E0"
+                                        Background="{DynamicResource PrimaryActionBrush}"
+                                        Foreground="{DynamicResource TextOnAccentBrush}"
+                                        BorderBrush="{DynamicResource PrimaryActionBorderBrush}"
                                         BorderThickness="1"
                                         ToolTipService.ShowDuration="25000"
                                         Command="{Binding DataContext.Sessions.OpenDocsCommand, RelativeSource={RelativeSource AncestorType=Window}}"
@@ -570,7 +568,7 @@
                                                 <TextBlock FontWeight="SemiBold" Text="Open session documentation" />
                                                 <TextBlock TextWrapping="Wrap" Margin="0,4,0,0"
                                                            Text="Opens SESSION-DOCS.html for this session in your default browser. The page contains your hand-curated notes (Overview, Decisions, Features, Mockups, …) plus auto-derived indexes of files, plan, and checkpoints." />
-                                                <TextBlock TextWrapping="Wrap" Margin="0,6,0,0" FontStyle="Italic" Foreground="#A6ADC8"
+                                                <TextBlock TextWrapping="Wrap" Margin="0,6,0,0" FontStyle="Italic" Foreground="{DynamicResource TextSecondaryBrush}"
                                                            Text="On first click, csm scaffolds an empty SESSION-DOCS.md in the session folder for you (or your agent) to fill in. csm never overwrites your edits." />
                                             </StackPanel>
                                         </ToolTip>
@@ -581,7 +579,7 @@
                                         FontSize="11"
                                         Margin="0,0,3,0"
                                         Background="Transparent"
-                                        Foreground="#A6E3A1"
+                                        Foreground="{DynamicResource SuccessBrush}"
                                         BorderThickness="0"
                                         ToolTipService.ShowDuration="20000"
                                         Command="{Binding OpenCommand}"
@@ -592,7 +590,7 @@
                                                 <TextBlock FontWeight="SemiBold" Text="Open in PowerShell" />
                                                 <TextBlock TextWrapping="Wrap" Margin="0,4,0,0"
                                                            Text="Launches a new PowerShell window in the session's working directory and runs `copilot --resume &lt;id&gt;`." />
-                                                <TextBlock TextWrapping="Wrap" Margin="0,6,0,0" FontStyle="Italic" Foreground="#A6ADC8"
+                                                <TextBlock TextWrapping="Wrap" Margin="0,6,0,0" FontStyle="Italic" Foreground="{DynamicResource TextSecondaryBrush}"
                                                            Text="If a window for this session is already open, csm brings it to the foreground instead of launching a duplicate." />
                                             </StackPanel>
                                         </ToolTip>
@@ -603,7 +601,7 @@
                                         FontSize="11"
                                         Margin="0,0,3,0"
                                         Background="Transparent"
-                                        Foreground="#CDD6F4"
+                                        Foreground="{DynamicResource TextPrimaryBrush}"
                                         BorderThickness="0"
                                         ToolTipService.ShowDuration="20000"
                                         Command="{Binding BeginRenameCommand}"
@@ -614,7 +612,7 @@
                                                 <TextBlock FontWeight="SemiBold" Text="Rename session" />
                                                 <TextBlock TextWrapping="Wrap" Margin="0,4,0,0"
                                                            Text="Sets a custom display name for this session in csm. Press Enter to save, Esc to cancel; clearing the field restores the original Copilot-generated title." />
-                                                <TextBlock TextWrapping="Wrap" Margin="0,6,0,0" FontStyle="Italic" Foreground="#A6ADC8"
+                                                <TextBlock TextWrapping="Wrap" Margin="0,6,0,0" FontStyle="Italic" Foreground="{DynamicResource TextSecondaryBrush}"
                                                            Text="Renames are stored locally by csm and never modify the Copilot session itself, so the agent's own context is unaffected." />
                                             </StackPanel>
                                         </ToolTip>
@@ -625,7 +623,7 @@
                                         FontSize="11"
                                         Margin="0,0,3,0"
                                         Background="Transparent"
-                                        Foreground="#CDD6F4"
+                                        Foreground="{DynamicResource TextPrimaryBrush}"
                                         BorderThickness="0"
                                         ToolTipService.ShowDuration="30000"
                                         Visibility="{Binding IsCrashed, Converter={StaticResource BoolToVisibility}}"
@@ -639,7 +637,7 @@
                                                            Text="The Copilot CLI writes a small file named inuse.&lt;pid&gt;.lock when a session starts and deletes it on a clean exit. If the CLI crashes, is force-killed, or the machine power-cycles, the lock can be left behind pointing at a process that is no longer running — Copilot then refuses to attach to the session and the row is flagged as Crashed." />
                                                 <TextBlock TextWrapping="Wrap" Margin="0,6,0,0"
                                                            Text="This button walks every inuse.*.lock file in this session's folder, checks whether each owning PID is still alive, and deletes only the orphaned ones. Live locks are never touched, so it is always safe to click — even if you also have an active window for this session open elsewhere." />
-                                                <TextBlock TextWrapping="Wrap" Margin="0,6,0,0" FontStyle="Italic" Foreground="#A6ADC8"
+                                                <TextBlock TextWrapping="Wrap" Margin="0,6,0,0" FontStyle="Italic" Foreground="{DynamicResource TextSecondaryBrush}"
                                                            Text="The button only appears on Crashed rows. ▶ Resume runs this same cleanup automatically before relaunching, so most of the time you can skip straight to Resume." />
                                             </StackPanel>
                                         </ToolTip>
@@ -649,9 +647,9 @@
                                         Padding="6,0"
                                         FontSize="11"
                                         Margin="0,0,3,0"
-                                        Background="#A6E3A1"
-                                        Foreground="#11111B"
-                                        BorderBrush="#94D396"
+                                        Background="{DynamicResource SuccessBrush}"
+                                        Foreground="{DynamicResource TextOnAccentBrush}"
+                                        BorderBrush="{DynamicResource SuccessBorderBrush}"
                                         BorderThickness="1"
                                         ToolTipService.ShowDuration="25000"
                                         Visibility="{Binding IsCrashed, Converter={StaticResource BoolToVisibility}}"
@@ -663,7 +661,7 @@
                                                 <TextBlock FontWeight="SemiBold" Text="Resume crashed session" />
                                                 <TextBlock TextWrapping="Wrap" Margin="0,4,0,0"
                                                            Text="Cleans up any stale inuse.*.lock files (locks owned by a process that is no longer running), then launches a fresh PowerShell window and reattaches to this session via `copilot --resume &lt;id&gt;`." />
-                                                <TextBlock TextWrapping="Wrap" Margin="0,6,0,0" FontStyle="Italic" Foreground="#A6ADC8"
+                                                <TextBlock TextWrapping="Wrap" Margin="0,6,0,0" FontStyle="Italic" Foreground="{DynamicResource TextSecondaryBrush}"
                                                            Text="A session is marked Crashed when csm finds an inuse lock pointing at a dead PID — usually after a CLI crash, force-kill, or power-loss." />
                                             </StackPanel>
                                         </ToolTip>
@@ -673,7 +671,7 @@
                                         Padding="5,0"
                                         FontSize="11"
                                         Background="Transparent"
-                                        Foreground="#F38BA8"
+                                        Foreground="{DynamicResource DangerBrush}"
                                         BorderThickness="0"
                                         ToolTipService.ShowDuration="25000"
                                         Command="{Binding DeleteCommand}"
@@ -681,12 +679,12 @@
                                     <Button.ToolTip>
                                         <ToolTip MaxWidth="380">
                                             <StackPanel>
-                                                <TextBlock FontWeight="SemiBold" Foreground="#F38BA8" Text="Delete session from disk" />
+                                                <TextBlock FontWeight="SemiBold" Foreground="{DynamicResource DangerBrush}" Text="Delete session from disk" />
                                                 <TextBlock TextWrapping="Wrap" Margin="0,4,0,0"
                                                            Text="Permanently removes the session folder under ~/.copilot/session-state/&lt;id&gt;/ — including events, plan, checkpoints, and any files you've put under files/." />
                                                 <TextBlock TextWrapping="Wrap" Margin="0,6,0,0"
                                                            Text="csm also clears its own local overrides for this session (rename, star, GitHub link, README cache, generated SESSION-DOCS.html)." />
-                                                <TextBlock TextWrapping="Wrap" Margin="0,6,0,0" FontStyle="Italic" Foreground="#F38BA8"
+                                                <TextBlock TextWrapping="Wrap" Margin="0,6,0,0" FontStyle="Italic" Foreground="{DynamicResource DangerBrush}"
                                                            Text="This cannot be undone. csm asks for confirmation before deleting." />
                                             </StackPanel>
                                         </ToolTip>
@@ -705,7 +703,7 @@
                                 <Grid>
                                     <TextBlock x:Name="CardTitleText"
                                                Text="{Binding DisplayName}"
-                                               Foreground="#CDD6F4"
+                                               Foreground="{DynamicResource TextPrimaryBrush}"
                                                FontSize="13"
                                                FontWeight="SemiBold"
                                                TextTrimming="CharacterEllipsis"
@@ -717,12 +715,12 @@
                                                AutomationProperties.HelpText="Click to rename this session." />
                                     <TextBox x:Name="CardTitleEditor"
                                              Text="{Binding EditableTitle, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                             Foreground="#11111B"
-                                             Background="#F9E2AF"
+                                             Foreground="{DynamicResource TextOnAccentBrush}"
+                                             Background="{DynamicResource AccentBrush}"
                                              FontSize="13"
                                              FontWeight="SemiBold"
                                              BorderThickness="1"
-                                             BorderBrush="#F9E2AF"
+                                             BorderBrush="{DynamicResource AccentBrush}"
                                              Padding="2,0"
                                              MinWidth="180"
                                              Visibility="{Binding IsEditingTitle, Converter={StaticResource BoolToVisibility}}"
@@ -759,8 +757,8 @@
                                                    FontSize="9"
                                                    FontWeight="SemiBold" />
                                     </Border>
-                                    <TextBlock Foreground="#A6ADC8" FontSize="11" VerticalAlignment="Center">
-                                        <Hyperlink Foreground="#89B4FA"
+                                    <TextBlock Foreground="{DynamicResource TextSecondaryBrush}" FontSize="11" VerticalAlignment="Center">
+                                        <Hyperlink Foreground="{DynamicResource PrimaryActionBrush}"
                                                    TextDecorations="None"
                                                    ToolTip="Open repository on GitHub"
                                                    Command="{Binding OpenUrlCommand}"
@@ -768,9 +766,9 @@
                                             <Run Text="{Binding Repository, FallbackValue='no repo', Mode=OneWay}" />
                                         </Hyperlink>
                                     </TextBlock>
-                                    <TextBlock Text=" · " Foreground="#7F849C" FontSize="11" VerticalAlignment="Center" />
-                                    <TextBlock Foreground="#A6ADC8" FontSize="11" VerticalAlignment="Center">
-                                        <Hyperlink Foreground="#89B4FA"
+                                    <TextBlock Text=" · " Foreground="{DynamicResource TextMutedBrush}" FontSize="11" VerticalAlignment="Center" />
+                                    <TextBlock Foreground="{DynamicResource TextSecondaryBrush}" FontSize="11" VerticalAlignment="Center">
+                                        <Hyperlink Foreground="{DynamicResource PrimaryActionBrush}"
                                                    TextDecorations="None"
                                                    ToolTip="Open branch on GitHub"
                                                    Command="{Binding OpenUrlCommand}"
@@ -805,7 +803,7 @@
                                                           CommandParameter="{Binding PullRequestUrl}" />
                                         </Border.InputBindings>
                                         <TextBlock Text="{Binding PullRequestBadgeText}"
-                                                   Foreground="#11111B"
+                                                   Foreground="{DynamicResource TextOnAccentBrush}"
                                                    FontSize="9"
                                                    FontWeight="SemiBold" />
                                     </Border>
@@ -818,7 +816,7 @@
                                             Visibility="{Binding HasChecks, Converter={StaticResource BoolToVisibility}}"
                                             AutomationProperties.Name="{Binding CheckTooltip}">
                                         <TextBlock Text="{Binding CheckBadgeText}"
-                                                   Foreground="#11111B"
+                                                   Foreground="{DynamicResource TextOnAccentBrush}"
                                                    FontSize="9"
                                                    FontWeight="SemiBold" />
                                     </Border>
@@ -836,7 +834,7 @@
                                     IsReadOnly="True">
                     <DataGridTextColumn.ElementStyle>
                         <Style TargetType="TextBlock">
-                            <Setter Property="Foreground" Value="#A6ADC8" />
+                            <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
                             <Setter Property="FontSize" Value="11" />
                             <Setter Property="VerticalAlignment" Value="Center" />
                             <Setter Property="TextTrimming" Value="CharacterEllipsis" />
@@ -857,7 +855,7 @@
                                     AutomationProperties.Name="{Binding ModelDisplay}"
                                     AutomationProperties.HelpText="{Binding ModelTooltip}">
                                 <TextBlock Text="{Binding ModelDisplay}"
-                                           Foreground="#11111B"
+                                           Foreground="{DynamicResource TextOnAccentBrush}"
                                            FontSize="10"
                                            FontWeight="SemiBold"
                                            TextTrimming="CharacterEllipsis"
@@ -875,7 +873,7 @@
                                     IsReadOnly="True">
                     <DataGridTextColumn.ElementStyle>
                         <Style TargetType="TextBlock">
-                            <Setter Property="Foreground" Value="#CDD6F4" />
+                            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
                             <Setter Property="FontSize" Value="11" />
                             <Setter Property="FontWeight" Value="SemiBold" />
                             <Setter Property="HorizontalAlignment" Value="Right" />
@@ -892,7 +890,7 @@
                                     IsReadOnly="True">
                     <DataGridTextColumn.ElementStyle>
                         <Style TargetType="TextBlock">
-                            <Setter Property="Foreground" Value="#F9E2AF" />
+                            <Setter Property="Foreground" Value="{DynamicResource AccentBrush}" />
                             <Setter Property="FontSize" Value="11" />
                             <Setter Property="FontWeight" Value="SemiBold" />
                             <Setter Property="HorizontalAlignment" Value="Right" />
@@ -910,7 +908,7 @@
                                     IsReadOnly="True">
                     <DataGridTextColumn.ElementStyle>
                         <Style TargetType="TextBlock">
-                            <Setter Property="Foreground" Value="#7F849C" />
+                            <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}" />
                             <Setter Property="FontSize" Value="11" />
                             <Setter Property="VerticalAlignment" Value="Center" />
                         </Style>
@@ -920,10 +918,12 @@
             </DataGrid.Columns>
         </DataGrid>
 
-        <Border Grid.Row="5" Padding="16,6" Background="#181825">
+        <Border Grid.Row="5" Padding="16,6" Background="{DynamicResource SurfaceBrush}">
             <TextBlock Text="{Binding Sessions.StatusMessage}"
-                       Foreground="#7F849C"
+                       Foreground="{DynamicResource TextMutedBrush}"
                        FontSize="11" />
         </Border>
     </Grid>
 </Window>
+
+
