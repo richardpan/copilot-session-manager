@@ -11,7 +11,7 @@
         Width="720"
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False"
-        Background="#1E1E2E">
+        Background="{DynamicResource BackgroundBrush}">
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
 
@@ -19,27 +19,27 @@
             <Setter Property="Padding" Value="16,8" />
             <Setter Property="Margin" Value="6,0,0,0" />
             <Setter Property="MinWidth" Value="92" />
-            <Setter Property="Background" Value="#313244" />
-            <Setter Property="Foreground" Value="#CDD6F4" />
-            <Setter Property="BorderBrush" Value="#45475A" />
+            <Setter Property="Background" Value="{DynamicResource OverlayBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
             <Setter Property="FontWeight" Value="SemiBold" />
         </Style>
 
         <Style x:Key="PrimaryButton" TargetType="Button" BasedOn="{StaticResource WizardButton}">
-            <Setter Property="Background" Value="#89B4FA" />
-            <Setter Property="Foreground" Value="#11111B" />
+            <Setter Property="Background" Value="{DynamicResource PrimaryActionBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource TextOnAccentBrush}" />
         </Style>
 
         <Style x:Key="DangerButton" TargetType="Button" BasedOn="{StaticResource WizardButton}">
-            <Setter Property="Background" Value="#F38BA8" />
-            <Setter Property="Foreground" Value="#11111B" />
+            <Setter Property="Background" Value="{DynamicResource DangerBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource TextOnAccentBrush}" />
         </Style>
 
         <DataTemplate x:Key="CandidateTemplate" DataType="{x:Type vm:MergeTargetCandidateViewModel}">
             <Border Margin="0,0,0,4"
                     Padding="10,8"
-                    Background="#181825"
-                    BorderBrush="#313244"
+                    Background="{DynamicResource SurfaceBrush}"
+                    BorderBrush="{DynamicResource OverlayBrush}"
                     BorderThickness="1"
                     CornerRadius="4">
                 <Grid>
@@ -53,27 +53,27 @@
                                  IsChecked="{Binding IsSelected, Mode=TwoWay}"
                                  VerticalAlignment="Center"
                                  Margin="0,0,10,0"
-                                 Foreground="#CDD6F4"
+                                 Foreground="{DynamicResource TextPrimaryBrush}"
                                  AutomationProperties.Name="{Binding Title}"
                                  AutomationProperties.HelpText="Select this session as the merge target." />
                     <StackPanel Grid.Column="1" VerticalAlignment="Center">
                         <TextBlock Text="{Binding Title}"
-                                   Foreground="#CDD6F4"
+                                   Foreground="{DynamicResource TextPrimaryBrush}"
                                    FontWeight="SemiBold"
                                    TextTrimming="CharacterEllipsis" />
                         <TextBlock Text="{Binding Subtitle}"
-                                   Foreground="#A6ADC8"
+                                   Foreground="{DynamicResource TextSecondaryBrush}"
                                    FontSize="11"
                                    Margin="0,2,0,0"
                                    TextTrimming="CharacterEllipsis" />
                     </StackPanel>
                     <StackPanel Grid.Column="2" HorizontalAlignment="Right" VerticalAlignment="Center">
                         <TextBlock Text="{Binding StatusLabel}"
-                                   Foreground="#A6ADC8"
+                                   Foreground="{DynamicResource TextSecondaryBrush}"
                                    FontSize="11"
                                    HorizontalAlignment="Right" />
                         <TextBlock Text="{Binding RecencyDescription}"
-                                   Foreground="#7F849C"
+                                   Foreground="{DynamicResource TextMutedBrush}"
                                    FontSize="10"
                                    FontStyle="Italic"
                                    HorizontalAlignment="Right" />
@@ -93,15 +93,15 @@
         <!-- Header -->
         <StackPanel Grid.Row="0" Margin="0,0,0,12">
             <TextBlock Text="Merge session"
-                       Foreground="#CDD6F4"
+                       Foreground="{DynamicResource TextPrimaryBrush}"
                        FontSize="20"
                        FontWeight="SemiBold" />
-            <TextBlock Foreground="#A6ADC8"
+            <TextBlock Foreground="{DynamicResource TextSecondaryBrush}"
                        FontSize="12"
                        Margin="0,4,0,0"
                        TextWrapping="Wrap">
                 <Run Text="From " />
-                <Run Text="{Binding SourceTitle, Mode=OneWay}" FontWeight="SemiBold" Foreground="#CDD6F4" />
+                <Run Text="{Binding SourceTitle, Mode=OneWay}" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}" />
                 <Run Text=" (" />
                 <Run Text="{Binding SourceShortId, Mode=OneWay}" FontFamily="Consolas" />
                 <Run Text=")" />
@@ -132,7 +132,7 @@
 
                 <TextBlock Grid.Row="0"
                            Text="Pick a target session to merge into:"
-                           Foreground="#CDD6F4"
+                           Foreground="{DynamicResource TextPrimaryBrush}"
                            Margin="0,0,0,8" />
 
                 <Grid Grid.Row="1" Margin="0,0,0,8">
@@ -143,16 +143,16 @@
                     <TextBox Grid.Column="0"
                              x:Name="SearchBox"
                              Text="{Binding SearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                             Background="#181825"
-                             Foreground="#CDD6F4"
-                             BorderBrush="#45475A"
+                             Background="{DynamicResource SurfaceBrush}"
+                             Foreground="{DynamicResource TextPrimaryBrush}"
+                             BorderBrush="{DynamicResource BorderBrush}"
                              Padding="6,4"
                              ToolTip="Search by title, repo, branch, or session id."
                              AutomationProperties.Name="Search target sessions"
                              AutomationProperties.HelpText="Filters the candidate list by title, repository, branch, or session id." />
                     <CheckBox Grid.Column="1"
                               Content="Show inactive"
-                              Foreground="#CDD6F4"
+                              Foreground="{DynamicResource TextPrimaryBrush}"
                               VerticalAlignment="Center"
                               Margin="10,0,0,0"
                               IsChecked="{Binding ShowInactiveTargets, Mode=TwoWay}"
@@ -165,7 +165,7 @@
                         <ItemsControl ItemsSource="{Binding TargetCandidates}"
                                       ItemTemplate="{StaticResource CandidateTemplate}" />
                         <TextBlock Text="No matching sessions. Try clearing the search or showing inactive sessions."
-                                   Foreground="#A6ADC8"
+                                   Foreground="{DynamicResource TextSecondaryBrush}"
                                    FontStyle="Italic"
                                    Margin="0,12,0,0"
                                    TextWrapping="Wrap">
@@ -185,7 +185,7 @@
 
                 <TextBlock Grid.Row="3"
                            Text="The export step calls 'copilot --share' on the source session. This may take a few seconds."
-                           Foreground="#7F849C"
+                           Foreground="{DynamicResource TextMutedBrush}"
                            FontSize="11"
                            FontStyle="Italic"
                            Margin="0,8,0,0"
@@ -211,23 +211,23 @@
                 </Grid.RowDefinitions>
 
                 <Border Grid.Row="0"
-                        Background="#181825"
-                        BorderBrush="#313244"
+                        Background="{DynamicResource SurfaceBrush}"
+                        BorderBrush="{DynamicResource OverlayBrush}"
                         BorderThickness="1"
                         CornerRadius="4"
                         Padding="10,8"
                         Margin="0,0,0,10">
                     <StackPanel>
-                        <TextBlock Foreground="#A6ADC8" FontSize="11">
+                        <TextBlock Foreground="{DynamicResource TextSecondaryBrush}" FontSize="11">
                             <Run Text="Source: " />
-                            <Run Text="{Binding SourceTitle, Mode=OneWay}" Foreground="#CDD6F4" FontWeight="SemiBold" />
+                            <Run Text="{Binding SourceTitle, Mode=OneWay}" Foreground="{DynamicResource TextPrimaryBrush}" FontWeight="SemiBold" />
                             <Run Text=" (" />
                             <Run Text="{Binding SourceShortId, Mode=OneWay}" FontFamily="Consolas" />
                             <Run Text=")" />
                         </TextBlock>
-                        <TextBlock Foreground="#A6ADC8" FontSize="11" Margin="0,2,0,0">
+                        <TextBlock Foreground="{DynamicResource TextSecondaryBrush}" FontSize="11" Margin="0,2,0,0">
                             <Run Text="Target: " />
-                            <Run Text="{Binding TargetTitle, Mode=OneWay}" Foreground="#CDD6F4" FontWeight="SemiBold" />
+                            <Run Text="{Binding TargetTitle, Mode=OneWay}" Foreground="{DynamicResource TextPrimaryBrush}" FontWeight="SemiBold" />
                             <Run Text=" (" />
                             <Run Text="{Binding TargetShortId, Mode=OneWay}" FontFamily="Consolas" />
                             <Run Text=")" />
@@ -237,7 +237,7 @@
 
                 <TextBlock Grid.Row="1"
                            Text="Markdown preview (this will be appended to the target session):"
-                           Foreground="#CDD6F4"
+                           Foreground="{DynamicResource TextPrimaryBrush}"
                            Margin="0,0,0,4" />
 
                 <TextBox Grid.Row="2"
@@ -245,9 +245,9 @@
                          IsReadOnly="True"
                          FontFamily="Consolas"
                          FontSize="12"
-                         Background="#11111B"
-                         Foreground="#CDD6F4"
-                         BorderBrush="#313244"
+                         Background="{DynamicResource SurfaceAltBrush}"
+                         Foreground="{DynamicResource TextPrimaryBrush}"
+                         BorderBrush="{DynamicResource OverlayBrush}"
                          VerticalScrollBarVisibility="Auto"
                          HorizontalScrollBarVisibility="Auto"
                          AcceptsReturn="True"
@@ -269,11 +269,11 @@
                 <ProgressBar IsIndeterminate="True"
                              Height="6"
                              Width="320"
-                             Foreground="#89B4FA"
-                             Background="#313244"
+                             Foreground="{DynamicResource PrimaryActionBrush}"
+                             Background="{DynamicResource OverlayBrush}"
                              BorderThickness="0" />
                 <TextBlock Text="{Binding ProgressMessage}"
-                           Foreground="#CDD6F4"
+                           Foreground="{DynamicResource TextPrimaryBrush}"
                            FontSize="13"
                            HorizontalAlignment="Center"
                            Margin="0,16,0,0" />
@@ -298,18 +298,18 @@
                     <TextBlock.Style>
                         <Style TargetType="TextBlock">
                             <Setter Property="Text" Value="✗" />
-                            <Setter Property="Foreground" Value="#F38BA8" />
+                            <Setter Property="Foreground" Value="{DynamicResource DangerBrush}" />
                             <Style.Triggers>
                                 <DataTrigger Binding="{Binding IsSuccess}" Value="True">
                                     <Setter Property="Text" Value="✓" />
-                                    <Setter Property="Foreground" Value="#A6E3A1" />
+                                    <Setter Property="Foreground" Value="{DynamicResource SuccessBrush}" />
                                 </DataTrigger>
                             </Style.Triggers>
                         </Style>
                     </TextBlock.Style>
                 </TextBlock>
                 <TextBlock Text="{Binding DoneSummary}"
-                           Foreground="#CDD6F4"
+                           Foreground="{DynamicResource TextPrimaryBrush}"
                            FontSize="14"
                            TextAlignment="Center"
                            TextWrapping="Wrap"
@@ -409,3 +409,4 @@
         </Grid>
     </Grid>
 </Window>
+

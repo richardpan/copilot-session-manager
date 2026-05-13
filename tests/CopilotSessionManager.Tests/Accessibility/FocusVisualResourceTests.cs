@@ -20,8 +20,10 @@ public class FocusVisualResourceTests
 
         content.Should().Contain("x:Key=\"A11yFocusVisual\"",
             "the global accessible focus visual must be defined in App.xaml");
-        content.Should().Contain("Stroke=\"#F9E2AF\"",
-            "focus visual should use Catppuccin yellow for high contrast on the dark background");
+        content.Should().Contain("Stroke=\"{DynamicResource FocusOutlineBrush}\"",
+            "focus visual should follow the active named theme brush");
+        content.Should().Contain("Themes/CatppuccinMocha.xaml",
+            "App.xaml should merge the default named brush palette");
     }
 
     [Fact]

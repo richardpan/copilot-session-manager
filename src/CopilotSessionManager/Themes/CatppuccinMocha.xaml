@@ -1,0 +1,53 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- Catppuccin Mocha palette. Component bytes are used instead of hex literals so all colour tokens live behind named resources. -->
+    <SolidColorBrush x:Key="BackgroundBrush"><SolidColorBrush.Color><Color A="255" R="30" G="30" B="46" /></SolidColorBrush.Color></SolidColorBrush>
+    <SolidColorBrush x:Key="SurfaceBrush"><SolidColorBrush.Color><Color A="255" R="24" G="24" B="37" /></SolidColorBrush.Color></SolidColorBrush>
+    <SolidColorBrush x:Key="SurfaceAltBrush"><SolidColorBrush.Color><Color A="255" R="17" G="17" B="27" /></SolidColorBrush.Color></SolidColorBrush>
+    <SolidColorBrush x:Key="SurfaceHoverBrush"><SolidColorBrush.Color><Color A="255" R="37" G="37" B="55" /></SolidColorBrush.Color></SolidColorBrush>
+    <SolidColorBrush x:Key="OverlayBrush"><SolidColorBrush.Color><Color A="255" R="49" G="50" B="68" /></SolidColorBrush.Color></SolidColorBrush>
+    <SolidColorBrush x:Key="BorderBrush"><SolidColorBrush.Color><Color A="255" R="69" G="71" B="90" /></SolidColorBrush.Color></SolidColorBrush>
+
+    <SolidColorBrush x:Key="TextPrimaryBrush"><SolidColorBrush.Color><Color A="255" R="205" G="214" B="244" /></SolidColorBrush.Color></SolidColorBrush>
+    <SolidColorBrush x:Key="TextSecondaryBrush"><SolidColorBrush.Color><Color A="255" R="166" G="173" B="200" /></SolidColorBrush.Color></SolidColorBrush>
+    <SolidColorBrush x:Key="TextMutedBrush"><SolidColorBrush.Color><Color A="255" R="127" G="132" B="156" /></SolidColorBrush.Color></SolidColorBrush>
+    <SolidColorBrush x:Key="TextPlaceholderBrush"><SolidColorBrush.Color><Color A="255" R="108" G="112" B="134" /></SolidColorBrush.Color></SolidColorBrush>
+    <SolidColorBrush x:Key="TextOnAccentBrush"><SolidColorBrush.Color><Color A="255" R="17" G="17" B="27" /></SolidColorBrush.Color></SolidColorBrush>
+    <SolidColorBrush x:Key="BadgeTextBrush"><SolidColorBrush.Color><Color A="255" R="17" G="17" B="27" /></SolidColorBrush.Color></SolidColorBrush>
+
+    <SolidColorBrush x:Key="AccentBrush"><SolidColorBrush.Color><Color A="255" R="249" G="226" B="175" /></SolidColorBrush.Color></SolidColorBrush>
+    <SolidColorBrush x:Key="FocusOutlineBrush"><SolidColorBrush.Color><Color A="255" R="249" G="226" B="175" /></SolidColorBrush.Color></SolidColorBrush>
+    <SolidColorBrush x:Key="PrimaryActionBrush"><SolidColorBrush.Color><Color A="255" R="137" G="180" B="250" /></SolidColorBrush.Color></SolidColorBrush>
+    <SolidColorBrush x:Key="PrimaryActionBorderBrush"><SolidColorBrush.Color><Color A="255" R="116" G="160" B="224" /></SolidColorBrush.Color></SolidColorBrush>
+    <SolidColorBrush x:Key="PrimaryActionAltBorderBrush"><SolidColorBrush.Color><Color A="255" R="116" G="199" B="236" /></SolidColorBrush.Color></SolidColorBrush>
+    <SolidColorBrush x:Key="LinkBrush"><SolidColorBrush.Color><Color A="255" R="137" G="180" B="250" /></SolidColorBrush.Color></SolidColorBrush>
+
+    <SolidColorBrush x:Key="SuccessBrush"><SolidColorBrush.Color><Color A="255" R="166" G="227" B="161" /></SolidColorBrush.Color></SolidColorBrush>
+    <SolidColorBrush x:Key="SuccessBorderBrush"><SolidColorBrush.Color><Color A="255" R="148" G="211" B="150" /></SolidColorBrush.Color></SolidColorBrush>
+    <SolidColorBrush x:Key="DangerBrush"><SolidColorBrush.Color><Color A="255" R="243" G="139" B="168" /></SolidColorBrush.Color></SolidColorBrush>
+    <SolidColorBrush x:Key="ErrorBrush"><SolidColorBrush.Color><Color A="255" R="243" G="139" B="168" /></SolidColorBrush.Color></SolidColorBrush>
+    <SolidColorBrush x:Key="WarningSurfaceBrush"><SolidColorBrush.Color><Color A="255" R="61" G="44" B="14" /></SolidColorBrush.Color></SolidColorBrush>
+    <SolidColorBrush x:Key="DangerSurfaceBrush"><SolidColorBrush.Color><Color A="255" R="61" G="31" B="38" /></SolidColorBrush.Color></SolidColorBrush>
+
+    <SolidColorBrush x:Key="StatusWorkingBrush"><SolidColorBrush.Color><Color A="255" R="166" G="227" B="161" /></SolidColorBrush.Color></SolidColorBrush>
+    <SolidColorBrush x:Key="StatusAwaitingBrush"><SolidColorBrush.Color><Color A="255" R="249" G="226" B="175" /></SolidColorBrush.Color></SolidColorBrush>
+    <SolidColorBrush x:Key="StatusInputBrush"><SolidColorBrush.Color><Color A="255" R="137" G="180" B="250" /></SolidColorBrush.Color></SolidColorBrush>
+    <SolidColorBrush x:Key="StatusIdleBrush"><SolidColorBrush.Color><Color A="255" R="127" G="132" B="156" /></SolidColorBrush.Color></SolidColorBrush>
+    <SolidColorBrush x:Key="StatusInactiveBrush"><SolidColorBrush.Color><Color A="255" R="108" G="112" B="134" /></SolidColorBrush.Color></SolidColorBrush>
+    <SolidColorBrush x:Key="StatusCrashedBrush"><SolidColorBrush.Color><Color A="255" R="243" G="139" B="168" /></SolidColorBrush.Color></SolidColorBrush>
+
+    <SolidColorBrush x:Key="BadgeOpenBrush"><SolidColorBrush.Color><Color A="255" R="166" G="227" B="161" /></SolidColorBrush.Color></SolidColorBrush>
+    <SolidColorBrush x:Key="BadgeClosedBrush"><SolidColorBrush.Color><Color A="255" R="203" G="166" B="247" /></SolidColorBrush.Color></SolidColorBrush>
+    <SolidColorBrush x:Key="BadgeMergedBrush"><SolidColorBrush.Color><Color A="255" R="203" G="166" B="247" /></SolidColorBrush.Color></SolidColorBrush>
+    <SolidColorBrush x:Key="BadgeDraftBrush"><SolidColorBrush.Color><Color A="255" R="127" G="132" B="156" /></SolidColorBrush.Color></SolidColorBrush>
+    <SolidColorBrush x:Key="BadgeNeutralBrush"><SolidColorBrush.Color><Color A="255" R="108" G="112" B="134" /></SolidColorBrush.Color></SolidColorBrush>
+    <SolidColorBrush x:Key="BadgeFailureBrush"><SolidColorBrush.Color><Color A="255" R="243" G="139" B="168" /></SolidColorBrush.Color></SolidColorBrush>
+    <SolidColorBrush x:Key="BadgePendingBrush"><SolidColorBrush.Color><Color A="255" R="249" G="226" B="175" /></SolidColorBrush.Color></SolidColorBrush>
+
+    <SolidColorBrush x:Key="LabelOrangeBrush"><SolidColorBrush.Color><Color A="255" R="250" G="179" B="135" /></SolidColorBrush.Color></SolidColorBrush>
+    <SolidColorBrush x:Key="LabelBlueBrush"><SolidColorBrush.Color><Color A="255" R="137" G="180" B="250" /></SolidColorBrush.Color></SolidColorBrush>
+    <SolidColorBrush x:Key="LabelTealBrush"><SolidColorBrush.Color><Color A="255" R="148" G="226" B="213" /></SolidColorBrush.Color></SolidColorBrush>
+    <SolidColorBrush x:Key="LabelRedBrush"><SolidColorBrush.Color><Color A="255" R="243" G="139" B="168" /></SolidColorBrush.Color></SolidColorBrush>
+    <SolidColorBrush x:Key="LabelPurpleBrush"><SolidColorBrush.Color><Color A="255" R="203" G="166" B="247" /></SolidColorBrush.Color></SolidColorBrush>
+    <SolidColorBrush x:Key="LabelCyanBrush"><SolidColorBrush.Color><Color A="255" R="137" G="220" B="235" /></SolidColorBrush.Color></SolidColorBrush>
+</ResourceDictionary>

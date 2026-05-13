@@ -1,21 +1,25 @@
-﻿<Application x:Class="CopilotSessionManager.App"
+<Application x:Class="CopilotSessionManager.App"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:local="clr-namespace:CopilotSessionManager"
              ShutdownMode="OnExplicitShutdown">
     <Application.Resources>
         <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="Themes/CatppuccinMocha.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+
             <!--
                 A11y focus visual: WPF's default dotted black rectangle is
                 invisible against the Catppuccin Mocha dark theme. This style
-                draws a 2px Catppuccin yellow dashed outline 2px outside the
-                control bounds so keyboard focus is always obvious.
+                draws a 2px themed dashed outline 2px outside the control bounds
+                so keyboard focus is always obvious.
             -->
             <Style x:Key="A11yFocusVisual" TargetType="Control">
                 <Setter Property="Template">
                     <Setter.Value>
                         <ControlTemplate>
-                            <Rectangle Stroke="#F9E2AF"
+                            <Rectangle Stroke="{DynamicResource FocusOutlineBrush}"
                                        StrokeThickness="2"
                                        StrokeDashArray="2,1"
                                        SnapsToDevicePixels="True"
