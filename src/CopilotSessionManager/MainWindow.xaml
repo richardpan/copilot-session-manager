@@ -572,7 +572,9 @@
                 </DockPanel>
             </Border>
 
-            <DataGrid ItemsSource="{Binding Sessions.VisibleSessions}"
+            <DataGrid x:Name="SessionsGrid"
+                  ItemsSource="{Binding Sessions.VisibleSessions}"
+                  PreviewMouseLeftButtonDown="DataGrid_PreviewMouseLeftButtonDown"
                   AutoGenerateColumns="False"
                   CanUserAddRows="False"
                   CanUserDeleteRows="False"
