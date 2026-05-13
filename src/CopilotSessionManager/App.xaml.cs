@@ -387,6 +387,7 @@ public partial class App : Application
         services.AddGitHubLinks();
         services.AddGitHubLinkStorage();
         services.AddGitHubIssues();
+        services.AddCliAvailability();
         CoreServiceCollectionExtensions.AddLogging(services);
 
         // V1.1 polish: window activator for #104.
