@@ -1,6 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Collections.Specialized;
+using System.ComponentModel;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -65,6 +68,7 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
 
     private readonly Dictionary<string, SessionCardViewModel> _byId =
         new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<SessionCardViewModel> _crashBannerObservedCards = new();
     private readonly HashSet<SessionType> _hiddenLabels = new();
     private readonly HashSet<ModelTier> _hiddenTiers = new();
     // V1.4 (#113): producer chip visibility — null is "(unknown)" producer.
@@ -371,6 +375,8 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
 
         Sessions = new ObservableCollection<SessionCardViewModel>();
         VisibleSessions = new ObservableCollection<SessionCardViewModel>();
+        CrashBanner = new CrashBannerViewModel(this);
+        Sessions.CollectionChanged += OnSessionCardsCollectionChanged;
         LabelFilters = new ObservableCollection<LabelFilterChip>();
         foreach (var t in Enum.GetValues<SessionType>())
         {
@@ -401,6 +407,9 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
 
     /// <summary>Sessions after the active-only + label filters have been applied.</summary>
     public ObservableCollection<SessionCardViewModel> VisibleSessions { get; }
+
+    /// <summary>Notification banner shown when crashed sessions need attention.</summary>
+    public CrashBannerViewModel CrashBanner { get; }
 
     /// <summary>One filter chip per <see cref="SessionType"/>.</summary>
     public ObservableCollection<LabelFilterChip> LabelFilters { get; }
@@ -738,6 +747,41 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
     partial void OnShowInactiveChanged(bool value) => RebuildVisible();
 
     partial void OnSearchTextChanged(string value) => RebuildVisible();
+
+    private void OnSessionCardsCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        SyncCrashBannerSubscriptions();
+        CrashBanner.Refresh();
+    }
+
+    private void OnCrashBannerCardPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(SessionCardViewModel.IsCrashed))
+        {
+            CrashBanner.Refresh();
+        }
+    }
+
+    private void SyncCrashBannerSubscriptions()
+    {
+        var currentCards = new HashSet<SessionCardViewModel>(Sessions);
+        foreach (var observed in _crashBannerObservedCards.ToArray())
+        {
+            if (!currentCards.Contains(observed))
+            {
+                observed.PropertyChanged -= OnCrashBannerCardPropertyChanged;
+                _crashBannerObservedCards.Remove(observed);
+            }
+        }
+
+        foreach (var card in Sessions)
+        {
+            if (_crashBannerObservedCards.Add(card))
+            {
+                card.PropertyChanged += OnCrashBannerCardPropertyChanged;
+            }
+        }
+    }
 
     private void OnSessionsChanged(object? sender, SessionsChangedEventArgs e)
     {
@@ -1239,6 +1283,12 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
 
         _discovery.SessionsChanged -= OnSessionsChanged;
         _labelStore.LabelChanged -= OnLabelChangedFromStore;
+        Sessions.CollectionChanged -= OnSessionCardsCollectionChanged;
+        foreach (var card in _crashBannerObservedCards)
+        {
+            card.PropertyChanged -= OnCrashBannerCardPropertyChanged;
+        }
+        _crashBannerObservedCards.Clear();
         if (_displayNameStore is not null)
         {
             _displayNameStore.DisplayNameChanged -= OnDisplayNameStoreChanged;
