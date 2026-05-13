@@ -1,7 +1,9 @@
 using System;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
+using System.Windows.Media;
 using CopilotSessionManager.Core.Models;
 using CopilotSessionManager.Core.Sessions;
 using CopilotSessionManager.ViewModels;
@@ -39,6 +41,46 @@ public partial class MainWindow : Window
         // RunStartupTasksAsync also performs the V1.8 (#74) opt-in stale-lock
         // sweep when AppSettings.AutoCleanStaleLocksOnStartup is true.
         await _viewModel.RunStartupTasksAsync();
+    }
+
+    /// <summary>
+    /// Toggles the row-details (sub-agent breakdown) panel: when a user clicks
+    /// a row whose details are already showing, collapse them by clearing the
+    /// selection. With <c>RowDetailsVisibilityMode="VisibleWhenSelected"</c>
+    /// the details panel is bound to selection, so deselecting the row
+    /// hides the panel — giving us click-to-expand / click-to-collapse.
+    /// </summary>
+    private void DataGrid_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is not DataGrid grid || e.OriginalSource is not DependencyObject source)
+        {
+            return;
+        }
+
+        // Walk up the visual tree from the click target. If we hit an
+        // interactive control (button, textbox) or the details presenter
+        // before we reach a DataGridRow, bail — the click is meant for that
+        // inner control, not for toggling the row.
+        DependencyObject? cursor = source;
+        while (cursor is not null)
+        {
+            switch (cursor)
+            {
+                case ButtonBase:
+                case TextBoxBase:
+                case DataGridDetailsPresenter:
+                    return;
+                case DataGridRow row:
+                    if (ReferenceEquals(row.Item, grid.SelectedItem))
+                    {
+                        grid.SelectedItem = null;
+                        row.IsSelected = false;
+                        e.Handled = true;
+                    }
+                    return;
+            }
+            cursor = VisualTreeHelper.GetParent(cursor);
+        }
     }
 
     // TODO(#131-followup): pre-scan recent sessions for badge counts so the badge appears before row expansion.
