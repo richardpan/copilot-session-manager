@@ -3,7 +3,9 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using CopilotSessionManager.Core.Models;
+using CopilotSessionManager.Core.Sessions;
 using CopilotSessionManager.ViewModels;
+using Microsoft.Extensions.Logging;
 
 namespace CopilotSessionManager;
 
@@ -14,11 +16,18 @@ namespace CopilotSessionManager;
 public partial class MainWindow : Window
 {
     private readonly MainWindowViewModel _viewModel;
+    private readonly ISubagentScanService _subagentScanService;
+    private readonly ILogger<MainWindow> _logger;
 
-    public MainWindow(MainWindowViewModel viewModel)
+    public MainWindow(
+        MainWindowViewModel viewModel,
+        ISubagentScanService subagentScanService,
+        ILogger<MainWindow> logger)
     {
         InitializeComponent();
         _viewModel = viewModel;
+        _subagentScanService = subagentScanService;
+        _logger = logger;
         DataContext = viewModel;
         Loaded += OnLoadedAsync;
     }
@@ -30,6 +39,28 @@ public partial class MainWindow : Window
         // RunStartupTasksAsync also performs the V1.8 (#74) opt-in stale-lock
         // sweep when AppSettings.AutoCleanStaleLocksOnStartup is true.
         await _viewModel.RunStartupTasksAsync();
+    }
+
+    // TODO(#131-followup): pre-scan recent sessions for badge counts so the badge appears before row expansion.
+    private async void DataGrid_LoadingRowDetails(object sender, DataGridRowDetailsEventArgs e)
+    {
+        if (e.Row.Item is not SessionCardViewModel card)
+        {
+            return;
+        }
+
+        try
+        {
+            await card.LoadSubagentsAsync(_subagentScanService);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not load sub-agents for session {SessionId}.", card.Id);
+            _viewModel.Sessions.StatusMessage = $"Could not load sub-agents for {card.ShortId}: {ex.Message}";
+        }
     }
 
     private async void OnLabelMenuItemClicked(object sender, RoutedEventArgs e)

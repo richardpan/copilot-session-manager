@@ -73,6 +73,24 @@ public class CoreServiceCollectionExtensionsTests
     }
 
     [Fact]
+    public async Task AddSubagentScanService_registers_singleton_scanner()
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton<ILoggerFactory>(NullLoggerFactory.Instance);
+        services.AddSingleton(typeof(ILogger<>), typeof(NullLogger<>));
+
+        services.AddSubagentScanService();
+        services.AddSubagentScanService();
+
+        await using var provider = services.BuildServiceProvider();
+
+        var first = provider.GetRequiredService<ISubagentScanService>();
+        var second = provider.GetRequiredService<ISubagentScanService>();
+        first.Should().BeOfType<SubagentScanService>();
+        second.Should().BeSameAs(first);
+    }
+
+    [Fact]
     public async Task AddStatusDetection_honors_options_configurator()
     {
         var services = new ServiceCollection();

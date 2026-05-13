@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using CopilotSessionManager.Core.Models;
+using CopilotSessionManager.Core.Sessions;
 using CopilotSessionManager.ViewModels;
 using FluentAssertions;
 using Xunit;
@@ -63,6 +64,19 @@ public class SessionCardViewModelTokensTests
         CopilotVersion: CopilotVersion.Zero,
         Locks: Array.Empty<SessionLockInfo>(),
         ModelInfo: null);
+
+    private static SubagentSummary Subagent(string id, long tokens) => new(
+        ToolCallId: id,
+        Name: id,
+        AgentType: "task",
+        AgentDisplayName: id,
+        Model: "claude-sonnet-4.6",
+        TokensTotal: tokens,
+        ToolCallsTotal: 2,
+        Duration: TimeSpan.FromSeconds(3),
+        StartedAt: Now.AddMinutes(-1),
+        CompletedAt: Now,
+        Status: SubagentStatus.Completed);
 
     [Fact]
     public void TokensDisplay_NullModelInfo_ReturnsEmDash()
@@ -138,5 +152,136 @@ public class SessionCardViewModelTokensTests
         sut.TokensTooltip.Should().Contain("1,234,667 tokens");
         sut.TokensTooltip.Should().Contain("2 models");
         sut.TokensTooltip.Should().Contain("shutdown record");
+    }
+
+    [Fact]
+    public void TokensDisplay_WithSubagents_AppendsRollupSuffix()
+    {
+        var sut = new SessionCardViewModel(SessionWithUsage(("claude", 1_234_567L)), new FixedTimeProvider(Now));
+
+        sut.SetSubagents(new[] { Subagent("call-1", 5_200_000L) });
+
+        sut.TokensDisplay.Should().Be("1.2M (+5.2M)");
+    }
+
+    [Fact]
+    public void TokensDisplay_WithoutParentTokensButWithSubagents_RendersDashPlusRollup()
+    {
+        var sut = new SessionCardViewModel(SessionWithoutUsage(), new FixedTimeProvider(Now));
+
+        sut.SetSubagents(new[] { Subagent("call-1", 5_200_000L) });
+
+        sut.TokensDisplay.Should().Be("— (+5.2M)");
+    }
+
+    [Fact]
+    public void SubagentDerivedProperties_ReflectAssignedSubagents()
+    {
+        var sut = new SessionCardViewModel(SessionWithUsage(("claude", 100L)), new FixedTimeProvider(Now));
+
+        sut.SetSubagents(new[] { Subagent("a", 1_000L), Subagent("b", 2_000L) });
+
+        sut.HasSubagents.Should().BeTrue();
+        sut.SubagentCount.Should().Be(2);
+        sut.SubagentTokensTotal.Should().Be(3_000L);
+        sut.SubagentTokensDisplay.Should().Be("3.0k");
+    }
+
+    [Fact]
+    public void TotalTokensRaw_IncludesSubagentTokens()
+    {
+        var sut = new SessionCardViewModel(SessionWithUsage(("claude", 1_000L)), new FixedTimeProvider(Now));
+
+        sut.SetSubagents(new[] { Subagent("call-1", 2_500L) });
+
+        sut.TotalTokensRaw.Should().Be(3_500L);
+    }
+
+    [Fact]
+    public void SetSubagents_RaisesDerivedPropertyNotifications()
+    {
+        var sut = new SessionCardViewModel(SessionWithUsage(("claude", 1_000L)), new FixedTimeProvider(Now));
+        var changed = new HashSet<string>();
+        sut.PropertyChanged += (_, e) => changed.Add(e.PropertyName!);
+
+        sut.SetSubagents(new[] { Subagent("call-1", 2_500L) });
+
+        changed.Should().Contain(new[]
+        {
+            nameof(SessionCardViewModel.Subagents),
+            nameof(SessionCardViewModel.HasSubagents),
+            nameof(SessionCardViewModel.SubagentCount),
+            nameof(SessionCardViewModel.SubagentTokensTotal),
+            nameof(SessionCardViewModel.SubagentBadgeText),
+            nameof(SessionCardViewModel.SubagentTokensDisplay),
+            nameof(SessionCardViewModel.TokensDisplay),
+            nameof(SessionCardViewModel.TotalTokensRaw),
+            nameof(SessionCardViewModel.TokensTooltip),
+        });
+    }
+
+    [Fact]
+    public void SubagentBadgeText_IsEmptyUntilSubagentsAreLoaded()
+    {
+        var sut = new SessionCardViewModel(SessionWithoutUsage(), new FixedTimeProvider(Now));
+
+        sut.SubagentBadgeText.Should().BeEmpty();
+
+        sut.SetSubagents(new[] { Subagent("a", 1L), Subagent("b", 1L), Subagent("c", 1L) });
+
+        sut.SubagentBadgeText.Should().Be("🧰 ×3");
+    }
+
+    [Fact]
+    public void TokensTooltip_WithSubagents_IncludesBreakdown()
+    {
+        var sut = new SessionCardViewModel(SessionWithUsage(("claude", 1_000L)), new FixedTimeProvider(Now));
+
+        sut.SetSubagents(new[] { Subagent("a", 2_000L), Subagent("b", 4_000L) });
+
+        sut.TokensTooltip.Should().Contain("+ 2 sub-agents totalling 6.0k tokens (3.0k avg)");
+    }
+
+    [Fact]
+    public void SubagentTokensDisplay_WithoutSubagents_ReturnsDash()
+    {
+        var sut = new SessionCardViewModel(SessionWithoutUsage(), new FixedTimeProvider(Now));
+
+        sut.SubagentTokensDisplay.Should().Be("—");
+    }
+
+    [Fact]
+    public void SetSubagents_NullList_TreatsAsEmpty()
+    {
+        var sut = new SessionCardViewModel(SessionWithoutUsage(), new FixedTimeProvider(Now));
+
+        sut.SetSubagents(null!);
+
+        sut.HasSubagents.Should().BeFalse();
+        sut.Subagents.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task LoadSubagentsAsync_ScansOnlyOnceAfterSuccess()
+    {
+        var sut = new SessionCardViewModel(SessionWithoutUsage(), new FixedTimeProvider(Now));
+        var scanner = new FakeSubagentScanService(new[] { Subagent("call-1", 42L) });
+
+        await sut.LoadSubagentsAsync(scanner);
+        await sut.LoadSubagentsAsync(scanner);
+
+        scanner.CallCount.Should().Be(1);
+        sut.Subagents.Should().ContainSingle().Which.TokensTotal.Should().Be(42L);
+    }
+
+    private sealed class FakeSubagentScanService(IReadOnlyList<SubagentSummary> result) : ISubagentScanService
+    {
+        public int CallCount { get; private set; }
+
+        public Task<IReadOnlyList<SubagentSummary>> ScanAsync(string sessionId, CancellationToken ct = default)
+        {
+            CallCount++;
+            return Task.FromResult(result);
+        }
     }
 }

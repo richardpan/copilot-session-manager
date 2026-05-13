@@ -50,6 +50,9 @@ public sealed partial class SessionCardViewModel : ObservableObject
     private bool _isEditingTitle;
     private string _editableTitle = string.Empty;
     private readonly Action<SessionCardViewModel>? _openMergeWizard;
+    private IReadOnlyList<SubagentSummary> _subagents = Array.Empty<SubagentSummary>();
+    private bool _subagentsLoaded;
+    private Task? _subagentsLoadTask;
 
     #region IssueLinks
     private readonly IssueLinksViewModel? _issueLinks;
@@ -550,6 +553,18 @@ public sealed partial class SessionCardViewModel : ObservableObject
         }
     }
 
+    public IReadOnlyList<SubagentSummary> Subagents => _subagents;
+
+    public bool HasSubagents => _subagents.Count > 0;
+
+    public int SubagentCount => _subagents.Count;
+
+    public long SubagentTokensTotal => _subagents.Sum(static s => s.TokensTotal);
+
+    public string SubagentBadgeText => HasSubagents ? $"🧰 ×{SubagentCount}" : string.Empty;
+
+    public string SubagentTokensDisplay => FormatTokens(SubagentTokensTotal);
+
     /// <summary>
     /// Total tokens consumed across all models in this session, formatted
     /// for at-a-glance display. Returns "—" when no usage data is available
@@ -560,29 +575,58 @@ public sealed partial class SessionCardViewModel : ObservableObject
     {
         get
         {
-            var total = TotalTokensRaw;
-            if (total <= 0)
-            {
-                return "—";
-            }
-            if (total < 1000)
-            {
-                return total.ToString(CultureInfo.InvariantCulture);
-            }
-            if (total < 10_000)
-            {
-                return (total / 1000.0).ToString("0.0", CultureInfo.InvariantCulture) + "k";
-            }
-            if (total < 1_000_000)
-            {
-                return (total / 1000).ToString(CultureInfo.InvariantCulture) + "k";
-            }
-            return (total / 1_000_000.0).ToString("0.0", CultureInfo.InvariantCulture) + "M";
+            var own = OwnTokensRaw;
+            var display = FormatTokens(own);
+            var subagentTokens = SubagentTokensTotal;
+            return subagentTokens > 0
+                ? $"{display} (+{FormatTokens(subagentTokens)})"
+                : display;
         }
     }
 
-    /// <summary>Absolute token count for the session, summed across all models.</summary>
-    public long TotalTokensRaw
+    /// <summary>Absolute token count for the session plus completed sub-agents.</summary>
+    public long TotalTokensRaw => OwnTokensRaw + SubagentTokensTotal;
+
+    /// <summary>Tooltip on the Tokens column — exact number + provenance hint.</summary>
+    public string TokensTooltip
+    {
+        get
+        {
+            var info = _model.ModelInfo;
+            if ((info?.UsageByModel is null || info.UsageByModel.Count == 0 || OwnTokensRaw == 0) && !HasSubagents)
+            {
+                return "Tokens not yet recorded — only available after the session ends.";
+            }
+
+            var lines = new List<string>();
+            if (info?.UsageByModel is not null && info.UsageByModel.Count > 0 && OwnTokensRaw > 0)
+            {
+                var formatted = OwnTokensRaw.ToString("N0", CultureInfo.GetCultureInfo("en-US"));
+                var modelCount = info.UsageByModel.Count;
+                var noun = modelCount == 1 ? "model" : "models";
+                lines.Add($"{formatted} tokens consumed across {modelCount} {noun}.");
+                lines.Add(info.IsFromShutdown
+                    ? "Source: session shutdown record (final)."
+                    : "Source: live snapshot — total may grow.");
+            }
+            else
+            {
+                lines.Add("Parent session tokens not yet recorded.");
+            }
+
+            if (HasSubagents)
+            {
+                var count = SubagentCount;
+                var noun = count == 1 ? "sub-agent" : "sub-agents";
+                var avg = count == 0 ? 0 : SubagentTokensTotal / count;
+                lines.Add($"+ {count} {noun} totalling {FormatTokens(SubagentTokensTotal)} tokens ({FormatTokens(avg)} avg)");
+            }
+
+            return string.Join("\n", lines);
+        }
+    }
+
+    private long OwnTokensRaw
     {
         get
         {
@@ -597,26 +641,6 @@ public sealed partial class SessionCardViewModel : ObservableObject
                 sum += usage.TotalTokens;
             }
             return sum;
-        }
-    }
-
-    /// <summary>Tooltip on the Tokens column — exact number + provenance hint.</summary>
-    public string TokensTooltip
-    {
-        get
-        {
-            var info = _model.ModelInfo;
-            if (info?.UsageByModel is null || info.UsageByModel.Count == 0 || TotalTokensRaw == 0)
-            {
-                return "Tokens not yet recorded — only available after the session ends.";
-            }
-            var formatted = TotalTokensRaw.ToString("N0", CultureInfo.GetCultureInfo("en-US"));
-            var modelCount = info.UsageByModel.Count;
-            var noun = modelCount == 1 ? "model" : "models";
-            var sourceLine = info.IsFromShutdown
-                ? "Source: session shutdown record (final)."
-                : "Source: live snapshot — total may grow.";
-            return $"{formatted} tokens consumed across {modelCount} {noun}.\n{sourceLine}";
         }
     }
 
@@ -1162,6 +1186,47 @@ public sealed partial class SessionCardViewModel : ObservableObject
         }
     }
 
+    public void SetSubagents(IReadOnlyList<SubagentSummary> subagents)
+    {
+        _subagents = subagents ?? Array.Empty<SubagentSummary>();
+        OnPropertyChanged(nameof(Subagents));
+        OnPropertyChanged(nameof(HasSubagents));
+        OnPropertyChanged(nameof(SubagentCount));
+        OnPropertyChanged(nameof(SubagentTokensTotal));
+        OnPropertyChanged(nameof(SubagentBadgeText));
+        OnPropertyChanged(nameof(SubagentTokensDisplay));
+        OnPropertyChanged(nameof(TokensDisplay));
+        OnPropertyChanged(nameof(TotalTokensRaw));
+        OnPropertyChanged(nameof(TokensTooltip));
+    }
+
+    public Task LoadSubagentsAsync(ISubagentScanService scanService, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(scanService);
+        if (_subagentsLoaded)
+        {
+            return Task.CompletedTask;
+        }
+
+        _subagentsLoadTask ??= LoadSubagentsCoreAsync(scanService, ct);
+        return _subagentsLoadTask;
+    }
+
+    private async Task LoadSubagentsCoreAsync(ISubagentScanService scanService, CancellationToken ct)
+    {
+        try
+        {
+            var subagents = await scanService.ScanAsync(Id, ct);
+            SetSubagents(subagents);
+            _subagentsLoaded = true;
+        }
+        catch
+        {
+            _subagentsLoadTask = null;
+            throw;
+        }
+    }
+
     private bool CanOpenUrl(string? url) => !string.IsNullOrWhiteSpace(url) && _fileLauncher is not null;
 
     private async Task OpenUrlAsync(string? url)
@@ -1301,6 +1366,27 @@ public sealed partial class SessionCardViewModel : ObservableObject
             : span.TotalMinutes < 60 ? $"{(int)span.TotalMinutes}m"
             : span.TotalHours < 24 ? $"{span.Hours}h {span.Minutes}m"
             : $"{(int)span.TotalDays}d {span.Hours}h";
+    }
+
+    private static string FormatTokens(long total)
+    {
+        if (total <= 0)
+        {
+            return "—";
+        }
+        if (total < 1000)
+        {
+            return total.ToString(CultureInfo.InvariantCulture);
+        }
+        if (total < 10_000)
+        {
+            return (total / 1000.0).ToString("0.0", CultureInfo.InvariantCulture) + "k";
+        }
+        if (total < 1_000_000)
+        {
+            return (total / 1000).ToString(CultureInfo.InvariantCulture) + "k";
+        }
+        return (total / 1_000_000.0).ToString("0.0", CultureInfo.InvariantCulture) + "M";
     }
 }
 
