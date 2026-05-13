@@ -59,6 +59,7 @@ public static class CoreServiceCollectionExtensions
         services.AddGitHubLinks();
         services.AddGitHubLinkStorage();
         services.AddSessionLifecycle();
+        services.AddSubagentScanService();
         services.TryAddSingleton<ICopilotPaths, DefaultCopilotPaths>();
         services.TryAddSingleton<ISessionStore, SessionStore>();
         services.TryAddSingleton<ISessionDiscoveryService>(sp =>
@@ -70,6 +71,20 @@ public static class CoreServiceCollectionExtensions
             concrete.SetDeletedSessionRegistry(sp.GetService<IDeletedSessionRegistry>());
             return concrete;
         });
+
+        return services;
+    }
+
+    /// <summary>
+    /// Registers the sub-agent scanner used by the dashboard row-details view.
+    /// Safe to call multiple times.
+    /// </summary>
+    public static IServiceCollection AddSubagentScanService(this IServiceCollection services)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        services.TryAddSingleton<ICopilotPaths, DefaultCopilotPaths>();
+        services.TryAddSingleton<ISubagentScanService, SubagentScanService>();
 
         return services;
     }

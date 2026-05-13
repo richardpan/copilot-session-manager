@@ -589,6 +589,8 @@
                   BorderThickness="0"
                   Foreground="{DynamicResource TextPrimaryBrush}"
                   RowHeight="40"
+                  RowDetailsVisibilityMode="VisibleWhenSelected"
+                  LoadingRowDetails="DataGrid_LoadingRowDetails"
                   RowStyle="{StaticResource SessionRowStyle}"
                   CellStyle="{StaticResource SessionCellStyle}"
                   ColumnHeaderStyle="{StaticResource SessionHeaderStyle}"
@@ -596,6 +598,44 @@
                   VerticalScrollBarVisibility="Auto"
                   AutomationProperties.Name="Sessions table"
                   AutomationProperties.HelpText="Click any column header to sort. Right-click a row for actions. Hover a row to reveal inline actions. Use Up and Down arrow keys to move between rows; navigation cycles at the top and bottom.">
+            <DataGrid.RowDetailsTemplate>
+                <DataTemplate>
+                    <Border Background="{DynamicResource SurfaceAltBrush}"
+                            Padding="20,8,8,8"
+                            BorderBrush="{DynamicResource SurfaceBrush}"
+                            BorderThickness="0,1,0,1"
+                            Visibility="{Binding HasSubagents, Converter={StaticResource BoolToVisibility}}"
+                            KeyboardNavigation.TabNavigation="Local">
+                        <StackPanel>
+                            <TextBlock Text="Sub-agents"
+                                       FontWeight="SemiBold"
+                                       FontSize="11"
+                                       Foreground="{DynamicResource TextSecondaryBrush}"
+                                       Margin="0,0,0,4"
+                                       AutomationProperties.HeadingLevel="Level3" />
+                            <DataGrid ItemsSource="{Binding Subagents}"
+                                      AutoGenerateColumns="False"
+                                      HeadersVisibility="Column"
+                                      GridLinesVisibility="None"
+                                      IsReadOnly="True"
+                                      Background="Transparent"
+                                      BorderThickness="0"
+                                      CanUserSortColumns="True"
+                                      AutomationProperties.Name="Sub-agents spawned by this session">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="180" />
+                                    <DataGridTextColumn Header="Type" Binding="{Binding AgentType}" Width="120" />
+                                    <DataGridTextColumn Header="Model" Binding="{Binding Model}" Width="160" />
+                                    <DataGridTextColumn Header="Tokens" Binding="{Binding TokensDisplay}" Width="80" SortMemberPath="TokensTotal" />
+                                    <DataGridTextColumn Header="Tools" Binding="{Binding ToolCallsTotal}" Width="60" />
+                                    <DataGridTextColumn Header="Duration" Binding="{Binding DurationDisplay}" Width="80" SortMemberPath="Duration" />
+                                    <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="80" />
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </StackPanel>
+                    </Border>
+                </DataTemplate>
+            </DataGrid.RowDetailsTemplate>
             <DataGrid.Columns>
                 <!-- Star toggle. Sort by IsStarred desc puts starred first. -->
                 <DataGridTemplateColumn Header="" Width="32" SortMemberPath="IsStarred" CanUserSort="True">
@@ -806,18 +846,26 @@
                         <DataTemplate>
                             <StackPanel Orientation="Vertical" VerticalAlignment="Center">
                                 <Grid>
-                                    <TextBlock x:Name="CardTitleText"
-                                               Text="{Binding DisplayName}"
-                                               Foreground="{DynamicResource TextPrimaryBrush}"
-                                               FontSize="13"
-                                               FontWeight="SemiBold"
-                                               TextTrimming="CharacterEllipsis"
-                                               ToolTip="{Binding TitleTooltip}"
-                                               Cursor="IBeam"
-                                               MouseLeftButtonDown="OnCardTitleClicked"
-                                               Visibility="{Binding IsEditingTitle, Converter={StaticResource InverseBoolToVisibility}}"
-                                               AutomationProperties.Name="{Binding DisplayName}"
-                                               AutomationProperties.HelpText="Click to rename this session." />
+                                    <StackPanel Orientation="Horizontal"
+                                                Visibility="{Binding IsEditingTitle, Converter={StaticResource InverseBoolToVisibility}}">
+                                        <TextBlock x:Name="CardTitleText"
+                                                   Text="{Binding DisplayName}"
+                                                   Foreground="{DynamicResource TextPrimaryBrush}"
+                                                   FontSize="13"
+                                                   FontWeight="SemiBold"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   ToolTip="{Binding TitleTooltip}"
+                                                   Cursor="IBeam"
+                                                   MouseLeftButtonDown="OnCardTitleClicked"
+                                                   AutomationProperties.Name="{Binding DisplayName}"
+                                                   AutomationProperties.HelpText="Click to rename this session." />
+                                        <TextBlock Text="{Binding SubagentBadgeText}"
+                                                   Foreground="{DynamicResource TextSecondaryBrush}"
+                                                   FontSize="10"
+                                                   Margin="6,0,0,0"
+                                                   VerticalAlignment="Center"
+                                                   Visibility="{Binding HasSubagents, Converter={StaticResource BoolToVisibility}}" />
+                                    </StackPanel>
                                     <TextBox x:Name="CardTitleEditor"
                                              Text="{Binding EditableTitle, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                              Foreground="{DynamicResource TextOnAccentBrush}"
