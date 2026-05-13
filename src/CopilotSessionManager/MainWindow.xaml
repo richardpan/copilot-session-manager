@@ -23,7 +23,8 @@
             <CheckBox Content="{Binding Label}"
                       IsChecked="{Binding IsVisible, Mode=TwoWay}"
                       Foreground="{DynamicResource TextPrimaryBrush}"
-                      Margin="0,0,12,0"
+                      Margin="0,3,0,3"
+                      MinWidth="130"
                       VerticalAlignment="Center"
                       AutomationProperties.Name="{Binding Label}"
                       AutomationProperties.HelpText="Toggle visibility of sessions with this label." />
@@ -33,7 +34,8 @@
             <CheckBox Content="{Binding Label}"
                       IsChecked="{Binding IsVisible, Mode=TwoWay}"
                       Foreground="{DynamicResource TextPrimaryBrush}"
-                      Margin="0,0,12,0"
+                      Margin="0,3,0,3"
+                      MinWidth="130"
                       VerticalAlignment="Center"
                       AutomationProperties.Name="{Binding Label}"
                       AutomationProperties.HelpText="Toggle visibility of sessions running models in this tier." />
@@ -43,11 +45,70 @@
             <CheckBox Content="{Binding Label}"
                       IsChecked="{Binding IsVisible, Mode=TwoWay}"
                       Foreground="{DynamicResource TextPrimaryBrush}"
-                      Margin="0,0,12,0"
+                      Margin="0,3,0,3"
+                      MinWidth="180"
                       VerticalAlignment="Center"
                       AutomationProperties.Name="{Binding Label}"
                       AutomationProperties.HelpText="Toggle visibility of sessions started by this Copilot client (e.g. agency, copilot-agent)." />
         </DataTemplate>
+
+        <!--
+            V1.2.3 (#142): styled ToggleButton used as the header for each
+            filter dropdown. Looks like a ComboBox: padded text + chevron,
+            checked-state highlights the surface alt brush so the user can
+            tell the popup is open.
+        -->
+        <Style x:Key="FilterDropdownToggleStyle" TargetType="ToggleButton">
+            <Setter Property="Background" Value="{DynamicResource SurfaceAltBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Padding" Value="10,4" />
+            <Setter Property="MinWidth" Value="150" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Border x:Name="Bd"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="3"
+                                Padding="{TemplateBinding Padding}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <ContentPresenter Grid.Column="0"
+                                                  VerticalAlignment="Center"
+                                                  HorizontalAlignment="Left"
+                                                  TextElement.Foreground="{TemplateBinding Foreground}" />
+                                <Path Grid.Column="1"
+                                      x:Name="Chevron"
+                                      Margin="8,0,0,0"
+                                      VerticalAlignment="Center"
+                                      Width="9" Height="6"
+                                      Stretch="Uniform"
+                                      Fill="{DynamicResource TextMutedBrush}"
+                                      Data="M 0 0 L 5 5 L 10 0 Z" />
+                            </Grid>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource SurfaceBrush}" />
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
 
         <!--
             V1.5 (#116): Right-click context menu for each session row in the
@@ -414,48 +475,87 @@
                            Foreground="{DynamicResource TextMutedBrush}"
                            VerticalAlignment="Center"
                            Margin="0,2,16,2" />
-                <TextBlock Text="Labels:"
-                           Foreground="{DynamicResource TextMutedBrush}"
-                           VerticalAlignment="Center"
-                           Margin="0,2,8,2" />
-                <ItemsControl ItemsSource="{Binding Sessions.LabelFilters}"
-                              ItemTemplate="{StaticResource LabelFilterTemplate}"
-                              VerticalAlignment="Center"
-                              Margin="0,2,8,2">
-                    <ItemsControl.ItemsPanel>
-                        <ItemsPanelTemplate>
-                            <WrapPanel Orientation="Horizontal" />
-                        </ItemsPanelTemplate>
-                    </ItemsControl.ItemsPanel>
-                </ItemsControl>
-                <TextBlock Text="Tiers:"
-                           Foreground="{DynamicResource TextMutedBrush}"
-                           VerticalAlignment="Center"
-                           Margin="0,2,8,2" />
-                <ItemsControl ItemsSource="{Binding Sessions.TierFilters}"
-                              ItemTemplate="{StaticResource TierFilterTemplate}"
-                              VerticalAlignment="Center"
-                              Margin="0,2,8,2">
-                    <ItemsControl.ItemsPanel>
-                        <ItemsPanelTemplate>
-                            <WrapPanel Orientation="Horizontal" />
-                        </ItemsPanelTemplate>
-                    </ItemsControl.ItemsPanel>
-                </ItemsControl>
-                <TextBlock Text="Producers:"
-                           Foreground="{DynamicResource TextMutedBrush}"
-                           VerticalAlignment="Center"
-                           Margin="0,2,8,2" />
-                <ItemsControl ItemsSource="{Binding Sessions.ProducerFilters}"
-                              ItemTemplate="{StaticResource ProducerFilterTemplate}"
-                              VerticalAlignment="Center"
-                              Margin="0,2,0,2">
-                    <ItemsControl.ItemsPanel>
-                        <ItemsPanelTemplate>
-                            <WrapPanel Orientation="Horizontal" />
-                        </ItemsPanelTemplate>
-                    </ItemsControl.ItemsPanel>
-                </ItemsControl>
+                <!--
+                    V1.2.3 (#142): three filter dropdowns replaced the inline
+                    checkbox WrapPanels. Each ToggleButton's caption (e.g.
+                    "Labels (3 of 8)") summarises selection state at a glance,
+                    and the Popup hosts the existing per-chip CheckBoxes.
+                    StaysOpen=False makes the popup close on click-out so the
+                    user doesn't have to re-click the toggle to dismiss it.
+                -->
+                <Grid Margin="0,2,8,2" VerticalAlignment="Center">
+                    <ToggleButton x:Name="LabelsFilterButton"
+                                  Style="{StaticResource FilterDropdownToggleStyle}"
+                                  Content="{Binding Sessions.LabelsFilterSummary}"
+                                  ToolTip="Choose which session labels to include."
+                                  AutomationProperties.Name="Labels filter"
+                                  AutomationProperties.HelpText="Click to open the labels filter dropdown. Toggle one or more labels to include or exclude their sessions from the table." />
+                    <Popup PlacementTarget="{Binding ElementName=LabelsFilterButton}"
+                           Placement="Bottom"
+                           IsOpen="{Binding IsChecked, ElementName=LabelsFilterButton, Mode=TwoWay}"
+                           StaysOpen="False"
+                           AllowsTransparency="True"
+                           PopupAnimation="Fade">
+                        <Border Background="{DynamicResource SurfaceBrush}"
+                                BorderBrush="{DynamicResource BorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="3"
+                                Padding="12,8"
+                                Margin="0,4,0,0">
+                            <ItemsControl ItemsSource="{Binding Sessions.LabelFilters}"
+                                          ItemTemplate="{StaticResource LabelFilterTemplate}" />
+                        </Border>
+                    </Popup>
+                </Grid>
+                <Grid Margin="0,2,8,2" VerticalAlignment="Center">
+                    <ToggleButton x:Name="TiersFilterButton"
+                                  Style="{StaticResource FilterDropdownToggleStyle}"
+                                  Content="{Binding Sessions.TiersFilterSummary}"
+                                  ToolTip="Choose which model tiers to include."
+                                  AutomationProperties.Name="Tiers filter"
+                                  AutomationProperties.HelpText="Click to open the tiers filter dropdown. Toggle one or more tiers (Premium, Standard, Fast, Unknown) to include or exclude their sessions from the table." />
+                    <Popup PlacementTarget="{Binding ElementName=TiersFilterButton}"
+                           Placement="Bottom"
+                           IsOpen="{Binding IsChecked, ElementName=TiersFilterButton, Mode=TwoWay}"
+                           StaysOpen="False"
+                           AllowsTransparency="True"
+                           PopupAnimation="Fade">
+                        <Border Background="{DynamicResource SurfaceBrush}"
+                                BorderBrush="{DynamicResource BorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="3"
+                                Padding="12,8"
+                                Margin="0,4,0,0">
+                            <ItemsControl ItemsSource="{Binding Sessions.TierFilters}"
+                                          ItemTemplate="{StaticResource TierFilterTemplate}" />
+                        </Border>
+                    </Popup>
+                </Grid>
+                <Grid Margin="0,2,0,2" VerticalAlignment="Center">
+                    <ToggleButton x:Name="ProducersFilterButton"
+                                  Style="{StaticResource FilterDropdownToggleStyle}"
+                                  MinWidth="170"
+                                  Content="{Binding Sessions.ProducersFilterSummary}"
+                                  ToolTip="Choose which Copilot clients to include (e.g. agency, copilot-agent)."
+                                  AutomationProperties.Name="Producers filter"
+                                  AutomationProperties.HelpText="Click to open the producers filter dropdown. Toggle one or more Copilot clients (agency, copilot-agent, etc.) to include or exclude their sessions from the table." />
+                    <Popup PlacementTarget="{Binding ElementName=ProducersFilterButton}"
+                           Placement="Bottom"
+                           IsOpen="{Binding IsChecked, ElementName=ProducersFilterButton, Mode=TwoWay}"
+                           StaysOpen="False"
+                           AllowsTransparency="True"
+                           PopupAnimation="Fade">
+                        <Border Background="{DynamicResource SurfaceBrush}"
+                                BorderBrush="{DynamicResource BorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="3"
+                                Padding="12,8"
+                                Margin="0,4,0,0">
+                            <ItemsControl ItemsSource="{Binding Sessions.ProducerFilters}"
+                                          ItemTemplate="{StaticResource ProducerFilterTemplate}" />
+                        </Border>
+                    </Popup>
+                </Grid>
             </WrapPanel>
         </Border>
 

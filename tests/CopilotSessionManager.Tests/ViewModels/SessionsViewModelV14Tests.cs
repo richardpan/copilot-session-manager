@@ -186,6 +186,101 @@ public class SessionsViewModelV14Tests
         await vm.DisposeAsync();
     }
 
+    // V1.2.3 (#142): captions on the new filter dropdowns.
+    [Fact]
+    public async Task FilterSummaries_TrackChipState_ForLabelsTiersAndProducers()
+    {
+        var (vm, _, _) = CreateSut(new[]
+        {
+            Build("a", SessionStatus.Idle, producer: "agency"),
+            Build("b", SessionStatus.Idle, producer: "copilot-agent"),
+        });
+
+        // All chips start visible -> "(all)".
+        vm.LabelsFilterSummary.Should().Be("Labels (all)");
+        vm.TiersFilterSummary.Should().Be("Tiers (all)");
+        vm.ProducersFilterSummary.Should().Be("Producers (all)");
+
+        // Hide one of each.
+        var oneLabel = vm.LabelFilters.First();
+        var oneTier = vm.TierFilters.First();
+        var oneProducer = vm.ProducerFilters.Single(c => c.Label == "agency");
+        var labelTotal = vm.LabelFilters.Count;
+        var tierTotal = vm.TierFilters.Count;
+        var producerTotal = vm.ProducerFilters.Count;
+
+        var labelChanges = 0;
+        var tierChanges = 0;
+        var producerChanges = 0;
+        vm.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(SessionsViewModel.LabelsFilterSummary))
+                labelChanges++;
+            else if (e.PropertyName == nameof(SessionsViewModel.TiersFilterSummary))
+                tierChanges++;
+            else if (e.PropertyName == nameof(SessionsViewModel.ProducersFilterSummary))
+                producerChanges++;
+        };
+
+        oneLabel.IsVisible = false;
+        oneTier.IsVisible = false;
+        oneProducer.IsVisible = false;
+
+        vm.LabelsFilterSummary.Should().Be($"Labels ({labelTotal - 1} of {labelTotal})");
+        vm.TiersFilterSummary.Should().Be($"Tiers ({tierTotal - 1} of {tierTotal})");
+        vm.ProducersFilterSummary.Should().Be($"Producers ({producerTotal - 1} of {producerTotal})");
+
+        labelChanges.Should().BeGreaterThan(0);
+        tierChanges.Should().BeGreaterThan(0);
+        producerChanges.Should().BeGreaterThan(0);
+
+        // Hide the rest -> "(none)".
+        foreach (var c in vm.LabelFilters)
+            c.IsVisible = false;
+        foreach (var c in vm.TierFilters)
+            c.IsVisible = false;
+        foreach (var c in vm.ProducerFilters)
+            c.IsVisible = false;
+
+        vm.LabelsFilterSummary.Should().Be("Labels (none)");
+        vm.TiersFilterSummary.Should().Be("Tiers (none)");
+        vm.ProducersFilterSummary.Should().Be("Producers (none)");
+
+        await vm.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task ProducersFilterSummary_RefiresWhenNewProducerChipAppears()
+    {
+        var (vm, _, disc) = CreateSut(new[]
+        {
+            Build("a", SessionStatus.Idle, producer: "agency"),
+        });
+
+        vm.ProducersFilterSummary.Should().Be("Producers (all)");
+
+        var refires = 0;
+        vm.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(SessionsViewModel.ProducersFilterSummary))
+                refires++;
+        };
+
+        // Stream in a new session with a never-before-seen producer; the
+        // chip should be added incrementally and the summary should re-fire.
+        disc.RaiseChanged(new[]
+        {
+            Build("a", SessionStatus.Idle, producer: "agency"),
+            Build("b", SessionStatus.Idle, producer: "copilot-agent"),
+        });
+        await Task.Delay(50);
+
+        vm.ProducerFilters.Select(c => c.Label).Should().Contain("copilot-agent");
+        refires.Should().BeGreaterThan(0);
+
+        await vm.DisposeAsync();
+    }
+
     private sealed class FakeStarStore : ISessionStarStore
     {
         private readonly HashSet<string> _starred = new(StringComparer.OrdinalIgnoreCase);
