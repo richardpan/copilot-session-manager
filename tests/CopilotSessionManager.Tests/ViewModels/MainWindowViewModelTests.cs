@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using CopilotSessionManager.Core.Cli;
 using CopilotSessionManager.Core.GitHub;
 using CopilotSessionManager.Core.Logging;
 using CopilotSessionManager.Core.Models;
@@ -27,7 +28,9 @@ public class MainWindowViewModelTests
         LogLevelSwitchAccessor? levelSwitch = null,
         FakeFileLauncher? fileLauncher = null,
         IGitHubAvailabilityProvider? availability = null,
-        IUiDispatcher? dispatcher = null)
+        IUiDispatcher? dispatcher = null,
+        ICliAvailabilityProvider? cliAvailability = null,
+        ICliVersionProbe? cliVersionProbe = null)
     {
         var sessions = new SessionsViewModel(
             new FakeDiscoveryService(),
@@ -46,6 +49,8 @@ public class MainWindowViewModelTests
             fileLauncher ?? new FakeFileLauncher(),
             availability,
             dispatcher,
+            cliAvailability,
+            cliVersionProbe,
             NullLogger<MainWindowViewModel>.Instance);
     }
 
@@ -75,6 +80,30 @@ public class MainWindowViewModelTests
     {
         var sut = CreateSut();
         sut.Sessions.Should().NotBeNull();
+    }
+
+    [Fact]
+    public void OutdatedCliBanner_IsConstructed()
+    {
+        var sut = CreateSut();
+
+        sut.OutdatedCliBanner.Should().NotBeNull();
+        sut.OutdatedCliBanner.IsVisible.Should().BeFalse();
+    }
+
+    [Fact]
+    public void OutdatedCliBanner_UpdatesWhenProviderReportsOutdatedState()
+    {
+        var cliAvailability = new CliAvailabilityProvider();
+        var sut = CreateSut(cliAvailability: cliAvailability);
+
+        cliAvailability.Report(
+            CliAvailability.Outdated,
+            new[] { new CliVersionInfo("gh", new Version(2, 39, 0), new Version(2, 40, 0), true, "gh version 2.39.0") },
+            "old gh");
+
+        sut.OutdatedCliBanner.IsVisible.Should().BeTrue();
+        sut.OutdatedCliBanner.Headline.Should().Contain("GitHub CLI 2.39.0");
     }
 
     [Fact]

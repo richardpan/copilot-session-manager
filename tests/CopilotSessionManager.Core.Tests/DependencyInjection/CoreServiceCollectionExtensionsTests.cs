@@ -34,6 +34,24 @@ public class CoreServiceCollectionExtensionsTests
     }
 
     [Fact]
+    public async Task AddCliAvailability_registers_probe_and_provider_as_singletons()
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton<ILoggerFactory>(NullLoggerFactory.Instance);
+        services.AddSingleton(typeof(ILogger<>), typeof(NullLogger<>));
+
+        services.AddCliAvailability();
+        services.AddCliAvailability();
+
+        await using var provider = services.BuildServiceProvider();
+
+        provider.GetRequiredService<ICliAvailabilityProvider>()
+            .Should().BeSameAs(provider.GetRequiredService<ICliAvailabilityProvider>());
+        provider.GetRequiredService<ICliVersionProbe>().Should().BeOfType<CliVersionProbe>();
+        provider.GetRequiredService<MinimumSupportedVersions>().Should().Be(MinimumSupportedVersions.Default);
+    }
+
+    [Fact]
     public async Task AddSessionDiscovery_registers_paths_store_and_discovery()
     {
         var services = new ServiceCollection();

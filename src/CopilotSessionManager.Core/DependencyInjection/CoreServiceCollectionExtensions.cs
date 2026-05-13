@@ -170,6 +170,35 @@ public static class CoreServiceCollectionExtensions
     }
 
     /// <summary>
+    /// Registers CLI version probing used by the startup compatibility banner.
+    /// Safe to call multiple times.
+    /// </summary>
+    public static IServiceCollection AddCliVersionProbe(this IServiceCollection services)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        services.TryAddSingleton<IProcessRunner, ProcessRunner>();
+        services.TryAddSingleton(MinimumSupportedVersions.Default);
+        services.TryAddSingleton<ICliVersionProbe, CliVersionProbe>();
+
+        return services;
+    }
+
+    /// <summary>
+    /// Registers the app-scoped CLI availability snapshot provider.
+    /// Safe to call multiple times.
+    /// </summary>
+    public static IServiceCollection AddCliAvailability(this IServiceCollection services)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        services.TryAddSingleton<ICliAvailabilityProvider, CliAvailabilityProvider>();
+        services.AddCliVersionProbe();
+
+        return services;
+    }
+
+    /// <summary>
     /// Registers first-run onboarding services: <see cref="IProcessRunner"/>,
     /// <see cref="IPrerequisiteChecker"/>, and <see cref="IAppSettingsStore"/>
     /// at <c>%LOCALAPPDATA%\CopilotSessionManager\settings.json</c>. Safe to

@@ -528,6 +528,50 @@
                 </DockPanel>
             </Border>
 
+            <Border DockPanel.Dock="Top"
+                    Padding="12,8"
+                    MinHeight="56"
+                    Background="{DynamicResource WarningSurfaceBrush}"
+                    BorderBrush="{DynamicResource AccentBrush}"
+                    BorderThickness="0,0,0,1"
+                    Visibility="{Binding OutdatedCliBanner.IsVisible, Converter={StaticResource BoolToVisibility}}"
+                    KeyboardNavigation.TabNavigation="Local"
+                    AutomationProperties.LiveSetting="Polite"
+                    AutomationProperties.Name="CLI compatibility notification"
+                    AutomationProperties.HelpText="Notifies when the GitHub or Copilot CLI version is missing or older than the supported minimum.">
+                <DockPanel LastChildFill="True" VerticalAlignment="Center">
+                    <TextBlock DockPanel.Dock="Left"
+                               Text="⬆"
+                               Foreground="{DynamicResource AccentBrush}"
+                               FontSize="16"
+                               FontWeight="SemiBold"
+                               VerticalAlignment="Center"
+                               Margin="0,0,10,0" />
+                    <Button DockPanel.Dock="Right"
+                            Content="Dismiss"
+                            Padding="12,4"
+                            Margin="12,0,0,0"
+                            Background="{DynamicResource OverlayBrush}"
+                            Foreground="{DynamicResource TextPrimaryBrush}"
+                            BorderBrush="{DynamicResource BorderBrush}"
+                            Command="{Binding OutdatedCliBanner.DismissCommand}"
+                            AutomationProperties.Name="Dismiss CLI compatibility notification"
+                            AutomationProperties.HelpText="Hides this CLI compatibility notification for the current app session." />
+                    <StackPanel>
+                        <TextBlock Text="{Binding OutdatedCliBanner.Headline}"
+                                   Foreground="{DynamicResource TextPrimaryBrush}"
+                                   FontSize="12"
+                                   FontWeight="SemiBold"
+                                   TextWrapping="Wrap" />
+                        <TextBlock Text="{Binding OutdatedCliBanner.UpgradeInstructions}"
+                                   Foreground="{DynamicResource TextSecondaryBrush}"
+                                   FontSize="11"
+                                   Margin="0,2,0,0"
+                                   TextWrapping="Wrap" />
+                    </StackPanel>
+                </DockPanel>
+            </Border>
+
             <DataGrid ItemsSource="{Binding Sessions.VisibleSessions}"
                   AutoGenerateColumns="False"
                   CanUserAddRows="False"

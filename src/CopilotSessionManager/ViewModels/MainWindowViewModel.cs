@@ -1,8 +1,11 @@
 using System;
 using System.IO;
+using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using CopilotSessionManager.Core.Cli;
 using CopilotSessionManager.Core.Configuration;
 using CopilotSessionManager.Core.GitHub;
 using CopilotSessionManager.Core.Logging;
@@ -20,6 +23,8 @@ namespace CopilotSessionManager.ViewModels;
 /// </summary>
 public sealed partial class MainWindowViewModel : ObservableObject
 {
+    private static readonly Version UnknownCliVersion = new(0, 0, 0);
+
     private readonly ILogger<MainWindowViewModel> _logger;
     private readonly IServiceProvider _serviceProvider;
     private readonly IAppSettingsStore _settingsStore;
@@ -28,6 +33,9 @@ public sealed partial class MainWindowViewModel : ObservableObject
     private readonly IFileLauncher _fileLauncher;
     private readonly IGitHubAvailabilityProvider? _availability;
     private readonly IUiDispatcher? _dispatcher;
+    private readonly ICliAvailabilityProvider _cliAvailability;
+    private readonly ICliVersionProbe? _cliVersionProbe;
+    private int _cliProbeStarted;
 
     [ObservableProperty]
     private string _title = $"{AppMetadata.ProductName} {AppMetadata.Version}";
@@ -77,6 +85,33 @@ public sealed partial class MainWindowViewModel : ObservableObject
             fileLauncher,
             availability: null,
             dispatcher: null,
+            cliAvailability: null,
+            cliVersionProbe: null,
+            logger)
+    {
+    }
+
+    public MainWindowViewModel(
+        SessionsViewModel sessions,
+        IServiceProvider serviceProvider,
+        IAppSettingsStore settingsStore,
+        ILogBundler logBundler,
+        LogLevelSwitchAccessor levelSwitch,
+        IFileLauncher fileLauncher,
+        IGitHubAvailabilityProvider? availability,
+        IUiDispatcher? dispatcher,
+        ILogger<MainWindowViewModel> logger)
+        : this(
+            sessions,
+            serviceProvider,
+            settingsStore,
+            logBundler,
+            levelSwitch,
+            fileLauncher,
+            availability,
+            dispatcher,
+            cliAvailability: null,
+            cliVersionProbe: null,
             logger)
     {
     }
@@ -97,6 +132,8 @@ public sealed partial class MainWindowViewModel : ObservableObject
         IFileLauncher fileLauncher,
         IGitHubAvailabilityProvider? availability,
         IUiDispatcher? dispatcher,
+        ICliAvailabilityProvider? cliAvailability,
+        ICliVersionProbe? cliVersionProbe,
         ILogger<MainWindowViewModel> logger)
     {
         ArgumentNullException.ThrowIfNull(sessions);
@@ -115,7 +152,10 @@ public sealed partial class MainWindowViewModel : ObservableObject
         _fileLauncher = fileLauncher;
         _availability = availability;
         _dispatcher = dispatcher;
+        _cliAvailability = cliAvailability ?? new CliAvailabilityProvider();
+        _cliVersionProbe = cliVersionProbe;
         _logger = logger;
+        OutdatedCliBanner = new OutdatedCliBannerViewModel(_cliAvailability);
 
         _isVerboseLogging = _levelSwitch.IsVerbose;
 
@@ -129,6 +169,8 @@ public sealed partial class MainWindowViewModel : ObservableObject
     }
 
     public SessionsViewModel Sessions { get; }
+
+    public OutdatedCliBannerViewModel OutdatedCliBanner { get; }
 
     /// <summary>Opens the first-run onboarding window modally so the user can
     /// re-run the welcome flow at any time. Bound to the Help → Onboarding…
@@ -229,6 +271,8 @@ public sealed partial class MainWindowViewModel : ObservableObject
     /// </summary>
     public async Task RunStartupTasksAsync(CancellationToken cancellationToken = default)
     {
+        StartCliVersionProbeOnce(cancellationToken);
+
         var autoClean = false;
         try
         {
@@ -244,6 +288,57 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         await Sessions.InitializeAsync(autoClean, cancellationToken).ConfigureAwait(false);
     }
+
+    private void StartCliVersionProbeOnce(CancellationToken cancellationToken)
+    {
+        if (_cliVersionProbe is null || Interlocked.Exchange(ref _cliProbeStarted, 1) == 1)
+        {
+            return;
+        }
+
+        _ = ProbeCliVersionsAsync(cancellationToken);
+    }
+
+    private async Task ProbeCliVersionsAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            var probes = await _cliVersionProbe!.ProbeAsync(cancellationToken);
+            var state = ClassifyCliAvailability(probes);
+            _cliAvailability.Report(state, probes, BuildCliAvailabilityMessage(state, probes));
+            _logger.LogInformation("CLI version probe completed with state {State}.", state);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogDebug("CLI version probe cancelled during startup.");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "CLI version probe failed during startup.");
+        }
+    }
+
+    private static CliAvailability ClassifyCliAvailability(IReadOnlyList<CliVersionInfo> probes)
+    {
+        if (probes.Any(probe => probe.IsOutdated && probe.Detected.Equals(UnknownCliVersion)))
+        {
+            return CliAvailability.NotInstalled;
+        }
+
+        return probes.Any(static probe => probe.IsOutdated)
+            ? CliAvailability.Outdated
+            : CliAvailability.Available;
+    }
+
+    private static string? BuildCliAvailabilityMessage(CliAvailability state, IReadOnlyList<CliVersionInfo> probes) =>
+        state switch
+        {
+            CliAvailability.Available => null,
+            CliAvailability.NotInstalled => "One or more required CLI tools are not installed or could not be probed.",
+            _ => string.Join(", ", probes
+                .Where(static probe => probe.IsOutdated)
+                .Select(static probe => $"{probe.Cli} {probe.Detected} < {probe.Minimum}")),
+        };
 
     private void OnAvailabilityChanged(object? sender, GitHubAvailabilityState state)
     {
