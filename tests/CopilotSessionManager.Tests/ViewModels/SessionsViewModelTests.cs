@@ -127,6 +127,22 @@ public class SessionsViewModelTests
     }
 
     [Fact]
+    public async Task CrashBanner_ConstructedAndUpdatesWhenCardCrashStateFlips()
+    {
+        var (vm, disc, _, _, _) = CreateSut(new[] { Build("a", SessionStatus.Idle) });
+
+        vm.CrashBanner.Should().NotBeNull();
+        vm.CrashBanner.IsVisible.Should().BeFalse();
+
+        disc.RaiseChanged(new[] { Build("a", SessionStatus.Orphaned) });
+
+        vm.CrashBanner.IsVisible.Should().BeTrue();
+        vm.CrashBanner.CrashedCount.Should().Be(1);
+        vm.CrashBanner.Message.Should().Be("1 session crashed since last scan.");
+        await vm.DisposeAsync();
+    }
+
+    [Fact]
     public async Task SessionsChangedEvent_AddsAndRemovesByDiff()
     {
         var (vm, disc, _, _, _) = CreateSut(new[]

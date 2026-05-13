@@ -476,8 +476,59 @@
             matching the wrap-around behavior the original ListBox proposal
             would have given via the ListBox default.
         -->
-        <DataGrid Grid.Row="4"
-                  ItemsSource="{Binding Sessions.VisibleSessions}"
+        <DockPanel Grid.Row="4" LastChildFill="True">
+            <Border DockPanel.Dock="Top"
+                    Padding="12,8"
+                    MinHeight="44"
+                    Background="{DynamicResource WarningSurfaceBrush}"
+                    BorderBrush="{DynamicResource StatusCrashedBrush}"
+                    BorderThickness="0,0,0,1"
+                    Visibility="{Binding Sessions.CrashBanner.IsVisible, Converter={StaticResource BoolToVisibility}}"
+                    KeyboardNavigation.TabNavigation="Local"
+                    AutomationProperties.LiveSetting="Polite"
+                    AutomationProperties.Name="Crash notification"
+                    AutomationProperties.HelpText="Notifies when one or more Copilot sessions crashed since the last scan.">
+                <DockPanel LastChildFill="True" VerticalAlignment="Center">
+                    <TextBlock DockPanel.Dock="Left"
+                               Text="⚠"
+                               Foreground="{DynamicResource StatusCrashedBrush}"
+                               FontSize="16"
+                               FontWeight="SemiBold"
+                               VerticalAlignment="Center"
+                               Margin="0,0,10,0" />
+                    <StackPanel DockPanel.Dock="Right"
+                                Orientation="Horizontal"
+                                VerticalAlignment="Center"
+                                Margin="12,0,0,0">
+                        <Button Content="Clean up all"
+                                Padding="12,4"
+                                Margin="0,0,8,0"
+                                Background="{DynamicResource PrimaryActionBrush}"
+                                Foreground="{DynamicResource TextOnAccentBrush}"
+                                BorderBrush="{DynamicResource PrimaryActionBorderBrush}"
+                                FontWeight="SemiBold"
+                                Command="{Binding Sessions.CrashBanner.CleanUpAllCommand}"
+                                AutomationProperties.Name="Clean up all crashed sessions"
+                                AutomationProperties.HelpText="Runs the existing clean stale locks action for all sessions." />
+                        <Button Content="Dismiss"
+                                Padding="12,4"
+                                Background="{DynamicResource OverlayBrush}"
+                                Foreground="{DynamicResource TextPrimaryBrush}"
+                                BorderBrush="{DynamicResource BorderBrush}"
+                                Command="{Binding Sessions.CrashBanner.DismissCommand}"
+                                AutomationProperties.Name="Dismiss crash notification"
+                                AutomationProperties.HelpText="Hides this crash notification for the current app session." />
+                    </StackPanel>
+                    <TextBlock Text="{Binding Sessions.CrashBanner.Message}"
+                               Foreground="{DynamicResource TextPrimaryBrush}"
+                               FontSize="12"
+                               FontWeight="SemiBold"
+                               VerticalAlignment="Center"
+                               TextTrimming="CharacterEllipsis" />
+                </DockPanel>
+            </Border>
+
+            <DataGrid ItemsSource="{Binding Sessions.VisibleSessions}"
                   AutoGenerateColumns="False"
                   CanUserAddRows="False"
                   CanUserDeleteRows="False"
@@ -926,7 +977,8 @@
                 </DataGridTextColumn>
 
             </DataGrid.Columns>
-        </DataGrid>
+            </DataGrid>
+        </DockPanel>
 
         <Border Grid.Row="5" Padding="16,6" Background="{DynamicResource SurfaceBrush}">
             <TextBlock Text="{Binding Sessions.StatusMessage}"
