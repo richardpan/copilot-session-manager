@@ -425,6 +425,46 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
     public ObservableCollection<ProducerFilterChip> ProducerFilters { get; }
 
     /// <summary>
+    /// V1.2.3 (#142): caption shown on the Labels filter dropdown — e.g.
+    /// "Labels (all)", "Labels (3 of 8)", or "Labels (none)". Updates in
+    /// response to per-chip <see cref="LabelFilterChip.IsVisible"/> changes.
+    /// </summary>
+    public string LabelsFilterSummary => FormatFilterSummary(
+        "Labels", LabelFilters.Count(c => c.IsVisible), LabelFilters.Count);
+
+    /// <summary>
+    /// V1.2.3 (#142): caption shown on the Tiers filter dropdown.
+    /// </summary>
+    public string TiersFilterSummary => FormatFilterSummary(
+        "Tiers", TierFilters.Count(c => c.IsVisible), TierFilters.Count);
+
+    /// <summary>
+    /// V1.2.3 (#142): caption shown on the Producers filter dropdown. The
+    /// chip set is built incrementally as sessions stream in, so the count
+    /// here grows over time and the property re-fires from
+    /// <see cref="EnsureProducerChip"/>.
+    /// </summary>
+    public string ProducersFilterSummary => FormatFilterSummary(
+        "Producers", ProducerFilters.Count(c => c.IsVisible), ProducerFilters.Count);
+
+    private static string FormatFilterSummary(string label, int visible, int total)
+    {
+        if (total == 0)
+        {
+            return $"{label} (none)";
+        }
+        if (visible == total)
+        {
+            return $"{label} (all)";
+        }
+        if (visible == 0)
+        {
+            return $"{label} (none)";
+        }
+        return $"{label} ({visible} of {total})";
+    }
+
+    /// <summary>
     /// Wires the callback the WPF host uses to pop the merge wizard for a
     /// given source card. Set once at startup by <see cref="App"/> (the
     /// callback constructs <c>MergeWizardViewModel</c> + the
@@ -1181,6 +1221,7 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
         if (changed)
         {
             RebuildVisible();
+            OnPropertyChanged(nameof(LabelsFilterSummary));
         }
     }
 
@@ -1194,6 +1235,7 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
         if (changed)
         {
             RebuildVisible();
+            OnPropertyChanged(nameof(TiersFilterSummary));
         }
     }
 
@@ -1217,6 +1259,7 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
         if (changed)
         {
             RebuildVisible();
+            OnPropertyChanged(nameof(ProducersFilterSummary));
         }
     }
 
@@ -1236,6 +1279,7 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
             }
         }
         ProducerFilters.Add(new ProducerFilterChip(key, isVisible: true, this));
+        OnPropertyChanged(nameof(ProducersFilterSummary));
     }
 
     /// <summary>
