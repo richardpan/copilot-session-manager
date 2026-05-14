@@ -77,6 +77,9 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
     // grouping cards into chips and matching cards back to chips.
     private readonly HashSet<string> _hiddenProducers = new(StringComparer.OrdinalIgnoreCase);
     private bool _hideUnknownProducer;
+    // V1.3 (#148): doc-freshness chip visibility. The bucket enum collapses
+    // Stale + VeryStale into a single user-facing "Stale" chip.
+    private readonly HashSet<DocFreshnessFilterBucket> _hiddenDocFreshness = new();
     private bool _started;
     private bool _disposed;
 
@@ -431,6 +434,11 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
             TierFilters.Add(new TierFilterChip(t, isVisible: true, this));
         }
         ProducerFilters = new ObservableCollection<ProducerFilterChip>();
+        DocsFilters = new ObservableCollection<DocsFilterChip>();
+        foreach (var b in Enum.GetValues<DocFreshnessFilterBucket>())
+        {
+            DocsFilters.Add(new DocsFilterChip(b, isVisible: true, this));
+        }
     }
 
     private void OnDisplayNameStoreChanged(object? sender, SessionDisplayNameChangedEventArgs e)
@@ -468,6 +476,14 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
     public ObservableCollection<ProducerFilterChip> ProducerFilters { get; }
 
     /// <summary>
+    /// V1.3 (#148): one filter chip per <see cref="DocFreshnessFilterBucket"/>
+    /// (Fresh / Stale / Missing / N/A). Stale + VeryStale share a single
+    /// "Stale" bucket because the user-facing column already collapses them
+    /// to the same amber badge.
+    /// </summary>
+    public ObservableCollection<DocsFilterChip> DocsFilters { get; }
+
+    /// <summary>
     /// V1.2.3 (#142): caption shown on the Labels filter dropdown — e.g.
     /// "Labels (all)", "Labels (3 of 8)", or "Labels (none)". Updates in
     /// response to per-chip <see cref="LabelFilterChip.IsVisible"/> changes.
@@ -489,6 +505,14 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
     /// </summary>
     public string ProducersFilterSummary => FormatFilterSummary(
         "Producers", ProducerFilters.Count(c => c.IsVisible), ProducerFilters.Count);
+
+    /// <summary>
+    /// V1.3 (#148): caption shown on the Docs filter dropdown — e.g.
+    /// "Docs (all)", "Docs (3 of 4)", or "Docs (none)". Updates in
+    /// response to per-chip <see cref="DocsFilterChip.IsVisible"/> changes.
+    /// </summary>
+    public string DocsFilterSummary => FormatFilterSummary(
+        "Docs", DocsFilters.Count(c => c.IsVisible), DocsFilters.Count);
 
     private static string FormatFilterSummary(string label, int visible, int total)
     {
@@ -1179,6 +1203,7 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
                 && !_hiddenLabels.Contains(card.Label)
                 && !_hiddenTiers.Contains(card.ModelTier)
                 && IsProducerVisible(card.Producer)
+                && IsDocFreshnessVisible(card.DocFreshness)
                 && MatchesSearch(card, tokens))
             {
                 VisibleSessions.Add(card);
@@ -1194,6 +1219,9 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
         }
         return !_hiddenProducers.Contains(producer);
     }
+
+    private bool IsDocFreshnessVisible(DocFreshnessState state) =>
+        !_hiddenDocFreshness.Contains(DocsFilterChip.ToBucket(state));
 
     private static string[] TokenizeSearch(string? text)
     {
@@ -1281,6 +1309,21 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
         {
             RebuildVisible();
             OnPropertyChanged(nameof(TiersFilterSummary));
+        }
+    }
+
+    /// <summary>
+    /// V1.3 (#148): toggles whether sessions whose Docs freshness falls in
+    /// <paramref name="bucket"/> are visible. Used by
+    /// <see cref="DocsFilterChip"/> bindings.
+    /// </summary>
+    internal void SetDocsFilterVisible(DocFreshnessFilterBucket bucket, bool isVisible)
+    {
+        var changed = isVisible ? _hiddenDocFreshness.Remove(bucket) : _hiddenDocFreshness.Add(bucket);
+        if (changed)
+        {
+            RebuildVisible();
+            OnPropertyChanged(nameof(DocsFilterSummary));
         }
     }
 
@@ -1496,4 +1539,68 @@ public sealed partial class ProducerFilterChip : ObservableObject
     public string Label => Producer ?? "(unknown)";
 
     partial void OnIsVisibleChanged(bool value) => _owner.SetProducerVisible(Producer, value);
+}
+
+/// <summary>
+/// V1.3 (#148): user-facing buckets for the Docs filter dropdown. Mirrors
+/// <see cref="DocFreshnessState"/> but folds <c>Stale</c> + <c>VeryStale</c>
+/// into a single <c>Stale</c> bucket because the column already shows them
+/// with the same amber badge — splitting them in the filter would surprise
+/// the user.
+/// </summary>
+public enum DocFreshnessFilterBucket
+{
+    Fresh = 0,
+    Stale = 1,
+    Missing = 2,
+    NotApplicable = 3,
+}
+
+/// <summary>
+/// Bindable toggle representing one <see cref="DocFreshnessFilterBucket"/>
+/// in the dashboard Docs filter dropdown. Two-way bound to a CheckBox;
+/// setting <see cref="IsVisible"/> calls back into
+/// <see cref="SessionsViewModel.SetDocsFilterVisible"/>.
+/// </summary>
+public sealed partial class DocsFilterChip : ObservableObject
+{
+    private readonly SessionsViewModel _owner;
+
+    [ObservableProperty]
+    private bool _isVisible;
+
+    public DocsFilterChip(DocFreshnessFilterBucket bucket, bool isVisible, SessionsViewModel owner)
+    {
+        ArgumentNullException.ThrowIfNull(owner);
+        Bucket = bucket;
+        _isVisible = isVisible;
+        _owner = owner;
+    }
+
+    public DocFreshnessFilterBucket Bucket { get; }
+
+    public string Label => Bucket switch
+    {
+        DocFreshnessFilterBucket.Fresh => "Fresh",
+        DocFreshnessFilterBucket.Stale => "Stale",
+        DocFreshnessFilterBucket.Missing => "Missing",
+        DocFreshnessFilterBucket.NotApplicable => "N/A",
+        _ => Bucket.ToString(),
+    };
+
+    /// <summary>
+    /// Maps a raw <see cref="DocFreshnessState"/> to the user-facing bucket.
+    /// <c>Stale</c> and <c>VeryStale</c> both fold into <c>Stale</c>.
+    /// </summary>
+    public static DocFreshnessFilterBucket ToBucket(DocFreshnessState state) => state switch
+    {
+        DocFreshnessState.Fresh => DocFreshnessFilterBucket.Fresh,
+        DocFreshnessState.Stale => DocFreshnessFilterBucket.Stale,
+        DocFreshnessState.VeryStale => DocFreshnessFilterBucket.Stale,
+        DocFreshnessState.Missing => DocFreshnessFilterBucket.Missing,
+        DocFreshnessState.NotApplicable => DocFreshnessFilterBucket.NotApplicable,
+        _ => DocFreshnessFilterBucket.NotApplicable,
+    };
+
+    partial void OnIsVisibleChanged(bool value) => _owner.SetDocsFilterVisible(Bucket, value);
 }
