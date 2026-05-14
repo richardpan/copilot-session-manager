@@ -52,6 +52,17 @@
                       AutomationProperties.HelpText="Toggle visibility of sessions started by this Copilot client (e.g. agency, copilot-agent)." />
         </DataTemplate>
 
+        <DataTemplate x:Key="DocsFilterTemplate" DataType="{x:Type vm:DocsFilterChip}">
+            <CheckBox Content="{Binding Label}"
+                      IsChecked="{Binding IsVisible, Mode=TwoWay}"
+                      Foreground="{DynamicResource TextPrimaryBrush}"
+                      Margin="0,3,0,3"
+                      MinWidth="130"
+                      VerticalAlignment="Center"
+                      AutomationProperties.Name="{Binding Label}"
+                      AutomationProperties.HelpText="Toggle visibility of sessions whose SESSION-README/DOCS freshness falls in this bucket." />
+        </DataTemplate>
+
         <!--
             V1.2.3 (#142): styled ToggleButton used as the header for each
             filter dropdown. Looks like a ComboBox: padded text + chevron,
@@ -531,7 +542,7 @@
                         </Border>
                     </Popup>
                 </Grid>
-                <Grid Margin="0,2,0,2" VerticalAlignment="Center">
+                <Grid Margin="0,2,8,2" VerticalAlignment="Center">
                     <ToggleButton x:Name="ProducersFilterButton"
                                   Style="{StaticResource FilterDropdownToggleStyle}"
                                   MinWidth="170"
@@ -553,6 +564,30 @@
                                 Margin="0,4,0,0">
                             <ItemsControl ItemsSource="{Binding Sessions.ProducerFilters}"
                                           ItemTemplate="{StaticResource ProducerFilterTemplate}" />
+                        </Border>
+                    </Popup>
+                </Grid>
+                <Grid Margin="0,2,0,2" VerticalAlignment="Center">
+                    <ToggleButton x:Name="DocsFilterButton"
+                                  Style="{StaticResource FilterDropdownToggleStyle}"
+                                  Content="{Binding Sessions.DocsFilterSummary}"
+                                  ToolTip="Choose which SESSION-README/DOCS freshness states to include (Fresh, Stale, Missing, N/A)."
+                                  AutomationProperties.Name="Docs filter"
+                                  AutomationProperties.HelpText="Click to open the docs freshness filter dropdown. Toggle Fresh, Stale, Missing or N/A to include or exclude sessions whose docs match those buckets." />
+                    <Popup PlacementTarget="{Binding ElementName=DocsFilterButton}"
+                           Placement="Bottom"
+                           IsOpen="{Binding IsChecked, ElementName=DocsFilterButton, Mode=TwoWay}"
+                           StaysOpen="False"
+                           AllowsTransparency="True"
+                           PopupAnimation="Fade">
+                        <Border Background="{DynamicResource SurfaceBrush}"
+                                BorderBrush="{DynamicResource BorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="3"
+                                Padding="12,8"
+                                Margin="0,4,0,0">
+                            <ItemsControl ItemsSource="{Binding Sessions.DocsFilters}"
+                                          ItemTemplate="{StaticResource DocsFilterTemplate}" />
                         </Border>
                     </Popup>
                 </Grid>
