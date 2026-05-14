@@ -385,6 +385,7 @@ public static class CoreServiceCollectionExtensions
         services.TryAddSingleton<ISessionReadmeRenderer>(_ => new TemplatedSessionReadmeRenderer());
         services.TryAddSingleton<ISessionReadmeStore, FileSessionReadmeStore>();
         services.TryAddSingleton<ISessionReadmeService, SessionReadmeService>();
+        services.TryAddSingleton<IDocFreshnessService, DocFreshnessService>();
 
         return services;
     }

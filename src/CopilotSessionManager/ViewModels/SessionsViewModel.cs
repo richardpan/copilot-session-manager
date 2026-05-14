@@ -60,6 +60,7 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
     private readonly ISessionStarStore? _starStore;
     private readonly ISessionDeletionService? _deletionService;
     private readonly Func<SessionDeletionPrompt, bool>? _confirmDelete;
+    private readonly IDocFreshnessService? _docFreshness;
     #endregion
 
     // V1.6 (#118): generated HTML session docs. Settable post-construction
@@ -329,6 +330,47 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
         ISessionDeletionService? deletionService,
         Func<SessionDeletionPrompt, bool>? confirmDelete,
         ISessionStarStore? starStore)
+        : this(discovery, labelStore, readmeService, fileLauncher, dispatcher,
+            timeProvider, modelCatalog, costCalculator, githubClient, checksClient,
+            lockCleanup, sessionLauncher, loggerFactory, logger,
+            issuesClient, linksStore, showAddIssueDialog, readmeIssueRefs,
+            runningSessions, windowActivator, displayNameStore, deletionService,
+            confirmDelete, starStore, docFreshness: null)
+    {
+    }
+
+    /// <summary>
+    /// V1.3 (#147) canonical constructor adding the optional
+    /// <see cref="IDocFreshnessService"/> used by each card to populate the
+    /// "Docs" freshness badge column. Nullable so existing tests and call
+    /// sites keep working.
+    /// </summary>
+    public SessionsViewModel(
+        ISessionDiscoveryService discovery,
+        ISessionLabelStore labelStore,
+        ISessionReadmeService readmeService,
+        IFileLauncher fileLauncher,
+        IUiDispatcher dispatcher,
+        TimeProvider timeProvider,
+        IModelCatalog? modelCatalog,
+        IModelCostCalculator? costCalculator,
+        IGitHubClient? githubClient,
+        IGitHubChecksClient? checksClient,
+        ISessionLockCleanup? lockCleanup,
+        ISessionLauncher? sessionLauncher,
+        ILoggerFactory? loggerFactory,
+        ILogger<SessionsViewModel> logger,
+        IGitHubIssuesClient? issuesClient,
+        ISessionGitHubLinksStore? linksStore,
+        Func<string?, IssueRef?>? showAddIssueDialog,
+        IReadmeIssueRefProvider? readmeIssueRefs,
+        IRunningSessionRegistry? runningSessions,
+        Native.IWindowActivator? windowActivator,
+        ISessionDisplayNameStore? displayNameStore,
+        ISessionDeletionService? deletionService,
+        Func<SessionDeletionPrompt, bool>? confirmDelete,
+        ISessionStarStore? starStore,
+        IDocFreshnessService? docFreshness)
     {
         ArgumentNullException.ThrowIfNull(discovery);
         ArgumentNullException.ThrowIfNull(labelStore);
@@ -362,6 +404,7 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
         _starStore = starStore;
         _deletionService = deletionService;
         _confirmDelete = confirmDelete;
+        _docFreshness = docFreshness;
 
         if (_displayNameStore is not null)
         {
@@ -942,7 +985,8 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
                     _displayNameStore, displayName,
                     _deletionService, _confirmDelete,
                     _starStore, isStarred,
-                    onDeleted: RemoveCardAsync);
+                    onDeleted: RemoveCardAsync,
+                    docFreshness: _docFreshness);
                 _byId[session.Id] = card;
                 Sessions.Add(card);
                 EnsureProducerChip(session.Producer);
