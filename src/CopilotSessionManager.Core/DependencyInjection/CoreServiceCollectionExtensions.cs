@@ -60,6 +60,7 @@ public static class CoreServiceCollectionExtensions
         services.AddGitHubLinkStorage();
         services.AddSessionLifecycle();
         services.AddSubagentScanService();
+        services.AddSessionEventSummary();
         services.TryAddSingleton<ICopilotPaths, DefaultCopilotPaths>();
         services.TryAddSingleton<ISessionStore, SessionStore>();
         services.TryAddSingleton<ISessionDiscoveryService>(sp =>
@@ -85,6 +86,22 @@ public static class CoreServiceCollectionExtensions
 
         services.TryAddSingleton<ICopilotPaths, DefaultCopilotPaths>();
         services.TryAddSingleton<ISubagentScanService, SubagentScanService>();
+
+        return services;
+    }
+
+    /// <summary>
+    /// V1.3 (#144): Registers the events.jsonl summary scanner used by the
+    /// README renderer to fill in the auto-generated activity sections
+    /// (Recent prompts / Tool usage / Activity gaps). Safe to call multiple
+    /// times.
+    /// </summary>
+    public static IServiceCollection AddSessionEventSummary(this IServiceCollection services)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        services.TryAddSingleton<ICopilotPaths, DefaultCopilotPaths>();
+        services.TryAddSingleton<ISessionEventSummaryService, SessionEventSummaryService>();
 
         return services;
     }
