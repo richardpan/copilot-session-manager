@@ -390,8 +390,11 @@ public static class CoreServiceCollectionExtensions
 
     /// <summary>
     /// Registers the session README pipeline: folder reader, renderer,
-    /// file-backed store, and orchestration service. Safe to call multiple
-    /// times.
+    /// file-backed store, and orchestration service. As of V1.3 also pulls
+    /// in <see cref="AddSessionEventSummary"/> and
+    /// <see cref="AddSubagentScanService"/> so the README renderer can fill
+    /// in the auto Recent prompts / Tool usage / Sub-agents / Activity gaps
+    /// sections from <c>events.jsonl</c>. Safe to call multiple times.
     /// </summary>
     public static IServiceCollection AddSessionReadme(this IServiceCollection services)
     {
@@ -403,6 +406,8 @@ public static class CoreServiceCollectionExtensions
         services.TryAddSingleton<ISessionReadmeStore, FileSessionReadmeStore>();
         services.TryAddSingleton<ISessionReadmeService, SessionReadmeService>();
         services.TryAddSingleton<IDocFreshnessService, DocFreshnessService>();
+        services.AddSessionEventSummary();
+        services.AddSubagentScanService();
 
         return services;
     }

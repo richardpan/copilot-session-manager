@@ -15,6 +15,10 @@ namespace CopilotSessionManager.Core.Sessions;
 ///   <item>Activity (auto)</item>
 ///   <item>Goal (auto)</item>
 ///   <item>History (auto)</item>
+///   <item>Recent prompts (auto, V1.3) — last user.message bodies</item>
+///   <item>Tool usage (auto, V1.3) — tool.execution_start histogram</item>
+///   <item>Sub-agents (auto, V1.3) — name + token rollup per task call</item>
+///   <item>Activity gaps (auto, V1.3) — longest pause + active span</item>
 ///   <item>Notes (user-editable)</item>
 ///   <item>Next steps (user-editable)</item>
 /// </list>
@@ -58,6 +62,10 @@ public sealed class TemplatedSessionReadmeRenderer : ISessionReadmeRenderer
         AppendActivity(sb, s);
         AppendGoal(sb, s);
         AppendHistory(sb, context);
+        AppendRecentPrompts(sb, context.EventSummary);
+        AppendToolUsage(sb, context.EventSummary);
+        AppendSubagents(sb, context.Subagents);
+        AppendActivityGaps(sb, context.EventSummary);
         AppendUserBlock(sb, "notes", "Notes",
             "Add anything worth remembering about this session — decisions, gotchas, references.");
         AppendUserBlock(sb, "next-steps", "Next steps",
@@ -139,6 +147,90 @@ public sealed class TemplatedSessionReadmeRenderer : ISessionReadmeRenderer
         sb.AppendLine();
     }
 
+    private static void AppendRecentPrompts(StringBuilder sb, SessionEventSummary summary)
+    {
+        sb.AppendLine("## Recent prompts");
+        sb.AppendLine();
+        if (summary.RecentPrompts.Count == 0)
+        {
+            sb.AppendLine("_(No user prompts recorded yet.)_");
+        }
+        else
+        {
+            foreach (var prompt in summary.RecentPrompts)
+            {
+                sb.Append("- _").Append(FormatTimestamp(prompt.Timestamp)).Append("_ — ")
+                  .AppendLine(EscapeInline(prompt.Body));
+            }
+        }
+        sb.AppendLine();
+    }
+
+    private static void AppendToolUsage(StringBuilder sb, SessionEventSummary summary)
+    {
+        sb.AppendLine("## Tool usage");
+        sb.AppendLine();
+        if (summary.TopTools.Count == 0)
+        {
+            sb.AppendLine("_(No tool calls recorded yet.)_");
+            sb.AppendLine();
+            return;
+        }
+
+        sb.AppendLine("| Tool | Count |");
+        sb.AppendLine("|------|------:|");
+        foreach (var tool in summary.TopTools)
+        {
+            sb.Append("| `").Append(EscapeInline(tool.ToolName)).Append("` | ")
+              .Append(tool.Count.ToString(CultureInfo.InvariantCulture))
+              .AppendLine(" |");
+        }
+        sb.AppendLine();
+    }
+
+    private static void AppendSubagents(StringBuilder sb, System.Collections.Generic.IReadOnlyList<SubagentSummary> subagents)
+    {
+        sb.AppendLine("## Sub-agents");
+        sb.AppendLine();
+        if (subagents.Count == 0)
+        {
+            sb.AppendLine("_(No sub-agents launched.)_");
+            sb.AppendLine();
+            return;
+        }
+
+        sb.AppendLine("| Started | Name | Type | Status | Tokens | Duration |");
+        sb.AppendLine("|---------|------|------|--------|-------:|---------:|");
+        foreach (var sa in subagents)
+        {
+            sb.Append("| ").Append(FormatTimestamp(sa.StartedAt))
+              .Append(" | ").Append(EscapeInline(NonEmpty(sa.AgentDisplayName, sa.Name)))
+              .Append(" | ").Append(EscapeInline(sa.AgentType))
+              .Append(" | ").Append(sa.Status.ToString())
+              .Append(" | ").Append(sa.TokensDisplay)
+              .Append(" | ").Append(sa.DurationDisplay)
+              .AppendLine(" |");
+        }
+        sb.AppendLine();
+    }
+
+    private static void AppendActivityGaps(StringBuilder sb, SessionEventSummary summary)
+    {
+        sb.AppendLine("## Activity gaps");
+        sb.AppendLine();
+        if (summary.TotalEvents == 0)
+        {
+            sb.AppendLine("_(No events recorded yet.)_");
+            sb.AppendLine();
+            return;
+        }
+
+        sb.Append("- **Total events:** ").AppendLine(summary.TotalEvents.ToString(CultureInfo.InvariantCulture));
+        sb.Append("- **Total active span:** ").AppendLine(FormatTimeSpan(summary.TotalActiveSpan));
+        sb.Append("- **Longest idle gap:** ").AppendLine(FormatTimeSpan(summary.LongestIdleGap));
+        sb.AppendLine();
+    }
+
     private static void AppendUserBlock(StringBuilder sb, string name, string heading, string placeholder)
     {
         sb.Append("## ").AppendLine(heading);
@@ -154,6 +246,28 @@ public sealed class TemplatedSessionReadmeRenderer : ISessionReadmeRenderer
             ? "_(unknown)_"
             : ts.ToString("u", CultureInfo.InvariantCulture);
 
+    private static string FormatTimeSpan(TimeSpan? span)
+    {
+        if (span is not { } ts || ts <= TimeSpan.Zero)
+        {
+            return "_(unknown)_";
+        }
+
+        if (ts.TotalDays >= 1)
+        {
+            return $"{(int)ts.TotalDays}d {ts.Hours}h {ts.Minutes}m";
+        }
+        if (ts.TotalHours >= 1)
+        {
+            return $"{(int)ts.TotalHours}h {ts.Minutes}m";
+        }
+        if (ts.TotalMinutes >= 1)
+        {
+            return $"{(int)ts.TotalMinutes}m {ts.Seconds}s";
+        }
+        return $"{(int)ts.TotalSeconds}s";
+    }
+
     private static string FormatPath(string? path) =>
         string.IsNullOrWhiteSpace(path) ? "_(none)_" : "`" + path + "`";
 
@@ -162,6 +276,9 @@ public sealed class TemplatedSessionReadmeRenderer : ISessionReadmeRenderer
 
     private static string Truncate(string s, int max) =>
         s.Length <= max ? s : s[..max] + "…";
+
+    private static string NonEmpty(string? value, string fallback) =>
+        string.IsNullOrWhiteSpace(value) ? fallback : value!;
 
     private static string EscapeInline(string value)
     {
