@@ -587,11 +587,14 @@ public sealed partial class SessionCardViewModel : ObservableObject
     public Brush StatusBrush => _model.Status switch
     {
         // Working: vibrant green; AwaitingApproval: amber; AwaitingInput: blue;
-        // Idle: muted gray; Inactive: dim slate; Orphaned: red.
+        // Idle: yellow (drawing the eye to a stale-looking session that still
+        // holds a lock); Inactive: dim slate; Orphaned: red. Idle uses Gold
+        // (#FFD700) — clearly distinct from AwaitingApproval's Goldenrod
+        // (#DAA520) so the two amber-family states don't collide.
         SessionStatus.Working => Brushes.MediumSeaGreen,
         SessionStatus.AwaitingApproval => Brushes.Goldenrod,
         SessionStatus.AwaitingInput => Brushes.CornflowerBlue,
-        SessionStatus.Idle => Brushes.DarkGray,
+        SessionStatus.Idle => Brushes.Gold,
         SessionStatus.Inactive => Brushes.SlateGray,
         SessionStatus.Orphaned => Brushes.IndianRed,
         _ => Brushes.Gray,

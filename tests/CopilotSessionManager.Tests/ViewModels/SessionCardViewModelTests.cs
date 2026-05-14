@@ -91,6 +91,20 @@ public class SessionCardViewModelTests
         ((SolidColorBrush)working).Color.Should().NotBe(((SolidColorBrush)orphaned).Color);
     }
 
+    [Fact]
+    public void StatusBrush_Idle_IsGoldYellow()
+    {
+        // Per the QoL change after v1.3.0: Idle reads as Gold (#FFD700) so a
+        // long-quiet-but-still-locked session draws the eye, while staying
+        // visually distinct from the Goldenrod (#DAA520) used for
+        // AwaitingApproval.
+        var idle = new SessionCardViewModel(BuildSession(status: SessionStatus.Idle), TimeAt(Now)).StatusBrush;
+        var awaitingApproval = new SessionCardViewModel(BuildSession(status: SessionStatus.AwaitingApproval), TimeAt(Now)).StatusBrush;
+
+        ((SolidColorBrush)idle).Color.Should().Be(Colors.Gold);
+        ((SolidColorBrush)idle).Color.Should().NotBe(((SolidColorBrush)awaitingApproval).Color);
+    }
+
     [Theory]
     [InlineData(0, "just now")]
     [InlineData(30, "just now")]
