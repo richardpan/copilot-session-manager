@@ -59,6 +59,45 @@ public sealed class AppSettings
     /// </summary>
     public bool AutoCleanStaleLocksOnStartup { get; set; }
 
+    /// <summary>
+    /// Default prompt copied to the clipboard by the V1.3 (#149)
+    /// "📝 Wrap up" launcher button. Tokens substituted by
+    /// <c>WrapUpPromptBuilder</c>: <c>{sessionId}</c>, <c>{summary}</c>,
+    /// <c>{repository}</c>, <c>{branch}</c>. Unknown <c>{placeholders}</c>
+    /// are left literal so a typo in user-edited prompts does not crash
+    /// the launcher.
+    /// </summary>
+    public const string DefaultWrapUpPromptTemplate =
+        "Please wrap up this Copilot session.\n\n"
+        + "Session id: {sessionId}\n"
+        + "Repository: {repository}\n"
+        + "Branch: {branch}\n"
+        + "Summary so far: {summary}\n\n"
+        + "1. Read the current SESSION-DOCS.md (or SESSION-README.md) for this session.\n"
+        + "2. Review the conversation we just completed.\n"
+        + "3. Append/update these sections, keeping the existing structure:\n"
+        + "   - Decisions: durable choices we made and why.\n"
+        + "   - Features: capabilities added or changed.\n"
+        + "   - Expected behavior: how the system should behave after this session.\n"
+        + "   - Notes: anything else worth remembering for the next agent.\n"
+        + "4. Save the updated doc and confirm the path you wrote to.\n";
+
+    /// <summary>
+    /// Idle hours after which the V1.3 (#149) "📝 Wrap up" launcher button
+    /// becomes visible on a session row whose status is <c>AwaitingInput</c>
+    /// or <c>Idle</c>. <c>0</c> or negative disables the badge entirely.
+    /// Additive, non-breaking — no schema bump needed.
+    /// </summary>
+    public int WrapUpAfterHours { get; set; } = 24;
+
+    /// <summary>
+    /// Prompt template copied to the clipboard by the V1.3 (#149)
+    /// "📝 Wrap up" launcher button. See
+    /// <see cref="DefaultWrapUpPromptTemplate"/> for the supported tokens.
+    /// Additive, non-breaking — no schema bump needed.
+    /// </summary>
+    public string WrapUpPromptTemplate { get; set; } = DefaultWrapUpPromptTemplate;
+
     /// <summary>Returns a fresh instance with all defaults.</summary>
     public static AppSettings Defaults() => new();
 }

@@ -11,6 +11,7 @@ using CopilotSessionManager.Core.Cost;
 using CopilotSessionManager.Core.GitHub.Checks;
 using CopilotSessionManager.Core.Models;
 using CopilotSessionManager.Core.Sessions;
+using CopilotSessionManager.Core.Settings;
 using CopilotSessionManager.Native;
 using CopilotSessionManager.Services;
 using Microsoft.Extensions.Logging;
@@ -55,6 +56,10 @@ public sealed partial class SessionCardViewModel : ObservableObject
     private Task? _subagentsLoadTask;
     private readonly IDocFreshnessService? _docFreshness;
     private readonly ISessionReadmeService? _readmeService;
+    private readonly IWrapUpStateStore? _wrapUpStateStore;
+    private readonly IClipboardService? _clipboardService;
+    private readonly AppSettings? _appSettings;
+    private DateTimeOffset? _wrapUpRequestedAt;
 
     /// <summary>
     /// V1.3 (#146): minimum gap between background README refreshes that get
@@ -290,6 +295,54 @@ public sealed partial class SessionCardViewModel : ObservableObject
         Func<string, Task>? onDeleted,
         IDocFreshnessService? docFreshness,
         ISessionReadmeService? readmeService)
+        : this(model, label, timeProvider, modelCatalog, costCalculator,
+            fileLauncher, lockCleanup, sessionLauncher, logger,
+            openMergeWizard, issueLinks,
+            runningSessions, windowActivator, displayNameStore, displayNameOverride,
+            deletionService, confirmDelete,
+            starStore, isStarred,
+            onDeleted: onDeleted,
+            docFreshness: docFreshness,
+            readmeService: readmeService,
+            wrapUpStateStore: null,
+            clipboardService: null,
+            appSettings: null)
+    {
+    }
+
+    /// <summary>
+    /// V1.3 (#149) canonical constructor adding the optional
+    /// <see cref="IWrapUpStateStore"/> + <see cref="IClipboardService"/>
+    /// + <see cref="AppSettings"/> trio that powers the "📝 Wrap up"
+    /// launcher button. All three are nullable so older call sites /
+    /// tests compile unchanged via the chained ctor above.
+    /// </summary>
+    public SessionCardViewModel(
+        Session model,
+        SessionType label,
+        TimeProvider timeProvider,
+        IModelCatalog? modelCatalog,
+        IModelCostCalculator? costCalculator,
+        IFileLauncher? fileLauncher,
+        ISessionLockCleanup? lockCleanup,
+        ISessionLauncher? sessionLauncher,
+        ILogger? logger,
+        Action<SessionCardViewModel>? openMergeWizard,
+        IssueLinksViewModel? issueLinks,
+        IRunningSessionRegistry? runningSessions,
+        IWindowActivator? windowActivator,
+        ISessionDisplayNameStore? displayNameStore,
+        string? displayNameOverride,
+        ISessionDeletionService? deletionService,
+        Func<SessionDeletionPrompt, bool>? confirmDelete,
+        ISessionStarStore? starStore,
+        bool isStarred,
+        Func<string, Task>? onDeleted,
+        IDocFreshnessService? docFreshness,
+        ISessionReadmeService? readmeService,
+        IWrapUpStateStore? wrapUpStateStore,
+        IClipboardService? clipboardService,
+        AppSettings? appSettings)
     {
         ArgumentNullException.ThrowIfNull(model);
         ArgumentNullException.ThrowIfNull(timeProvider);
@@ -316,6 +369,9 @@ public sealed partial class SessionCardViewModel : ObservableObject
         _issueLinks = issueLinks;
         _docFreshness = docFreshness;
         _readmeService = readmeService;
+        _wrapUpStateStore = wrapUpStateStore;
+        _clipboardService = clipboardService;
+        _appSettings = appSettings;
 
         OpenUrlCommand = new AsyncRelayCommand<string?>(OpenUrlAsync, CanOpenUrl);
         CleanupStaleLocksCommand = new AsyncRelayCommand(CleanupStaleLocksAsync, CanCleanupStaleLocks);
@@ -327,6 +383,7 @@ public sealed partial class SessionCardViewModel : ObservableObject
         DeleteCommand = new AsyncRelayCommand(DeleteAsync, CanDelete);
         ToggleStarCommand = new AsyncRelayCommand(ToggleStarAsync, () => _starStore is not null);
         MergeIntoCommand = new RelayCommand(InvokeMergeWizard, () => _openMergeWizard is not null);
+        WrapUpCommand = new AsyncRelayCommand(WrapUpAsync, CanWrapUp);
     }
 
     /// <summary>
@@ -1499,6 +1556,13 @@ public sealed partial class SessionCardViewModel : ObservableObject
         RaisePullRequestChanged();
         RaiseChecksChanged();
 
+        // V1.3 (#149): the Wrap up badge depends on UpdatedAt + Status; fresh
+        // activity should re-arm it once the previously-recorded wrap-up
+        // timestamp falls behind the new UpdatedAt.
+        OnPropertyChanged(nameof(IsWrapUpDue));
+        OnPropertyChanged(nameof(WrapUpTooltip));
+        WrapUpCommand.NotifyCanExecuteChanged();
+
         // V1.3 (#146): fire the background README refresh AFTER all property
         // notifications so the WPF UI gets the current model + freshness
         // badge updates first; the disk write happens off-thread. The
@@ -1527,6 +1591,156 @@ public sealed partial class SessionCardViewModel : ObservableObject
         OnPropertyChanged(nameof(LabelBrush));
         OnPropertyChanged(nameof(AutomationName));
     }
+
+    #region WrapUp
+    /// <summary>
+    /// Bound to the V1.3 (#149) "📝 Wrap up" launcher button. Copies a
+    /// configurable wrap-up prompt to the clipboard, opens / activates the
+    /// PowerShell window for this session, and persists a "wrap-up
+    /// requested at" timestamp so the badge hides until the user produces
+    /// fresh activity.
+    /// </summary>
+    public IAsyncRelayCommand WrapUpCommand { get; private set; } =
+        new AsyncRelayCommand(() => Task.CompletedTask, () => false);
+
+    /// <summary>
+    /// Hydrates the cached "wrap-up requested at" timestamp from the
+    /// store. Called by <see cref="SessionsViewModel"/> on card creation
+    /// and whenever <see cref="IWrapUpStateStore.WrapUpStateChanged"/>
+    /// fires for this session.
+    /// </summary>
+    public void SetWrapUpRequestedAt(DateTimeOffset? requestedAt)
+    {
+        if (_wrapUpRequestedAt == requestedAt)
+        {
+            return;
+        }
+
+        _wrapUpRequestedAt = requestedAt;
+        OnPropertyChanged(nameof(IsWrapUpDue));
+        OnPropertyChanged(nameof(WrapUpTooltip));
+        WrapUpCommand.NotifyCanExecuteChanged();
+    }
+
+    /// <summary>
+    /// True when the V1.3 (#149) wrap-up badge should be visible: the
+    /// session is in <see cref="SessionStatus.AwaitingInput"/> or
+    /// <see cref="SessionStatus.Idle"/>, has been idle for at least
+    /// <see cref="AppSettings.WrapUpAfterHours"/> hours, and the last
+    /// recorded wrap-up timestamp (if any) is older than the current
+    /// <see cref="Session.UpdatedAt"/>.
+    /// </summary>
+    public bool IsWrapUpDue
+    {
+        get
+        {
+            if (_wrapUpStateStore is null || _appSettings is null)
+            {
+                return false;
+            }
+
+            if (_appSettings.WrapUpAfterHours <= 0)
+            {
+                return false;
+            }
+
+            if (_model.Status is not (SessionStatus.AwaitingInput or SessionStatus.Idle))
+            {
+                return false;
+            }
+
+            var idleFor = _timeProvider.GetUtcNow() - _model.UpdatedAt;
+            if (idleFor < TimeSpan.FromHours(_appSettings.WrapUpAfterHours))
+            {
+                return false;
+            }
+
+            if (_wrapUpRequestedAt.HasValue && _wrapUpRequestedAt.Value >= _model.UpdatedAt)
+            {
+                return false;
+            }
+
+            return true;
+        }
+    }
+
+    /// <summary>
+    /// Tooltip describing the current wrap-up state. Useful for
+    /// accessibility and for explaining why the badge is or isn't visible.
+    /// </summary>
+    public string WrapUpTooltip
+    {
+        get
+        {
+            if (_wrapUpStateStore is null || _appSettings is null)
+            {
+                return "Wrap-up prompt launcher is not configured.";
+            }
+
+            if (_appSettings.WrapUpAfterHours <= 0)
+            {
+                return "Wrap-up prompt launcher is disabled (WrapUpAfterHours ≤ 0).";
+            }
+
+            if (_wrapUpRequestedAt.HasValue && _wrapUpRequestedAt.Value >= _model.UpdatedAt)
+            {
+                return $"Wrap-up already requested at {_wrapUpRequestedAt:u}. The button reappears when the session has new activity.";
+            }
+
+            return $"Copy a wrap-up prompt to the clipboard and open this session's PowerShell window. Configurable in Settings → Wrap-up (currently {_appSettings.WrapUpAfterHours}h idle threshold).";
+        }
+    }
+
+    private bool CanWrapUp()
+        => IsWrapUpDue
+        && _sessionLauncher is not null
+        && _clipboardService is not null
+        && _wrapUpStateStore is not null
+        && _appSettings is not null;
+
+    private async Task WrapUpAsync()
+    {
+        if (_wrapUpStateStore is null
+            || _clipboardService is null
+            || _sessionLauncher is null
+            || _appSettings is null)
+        {
+            return;
+        }
+
+        var prompt = WrapUpPromptBuilder.Build(_appSettings.WrapUpPromptTemplate, _model);
+
+        try
+        {
+            _clipboardService.SetText(prompt);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not copy wrap-up prompt to clipboard for {SessionId}.", _model.Id);
+            LastActionMessage = $"Could not copy wrap-up prompt to clipboard: {ex.Message}";
+            return;
+        }
+
+        // Reuse the existing OpenAsync flow for activate-existing + fresh
+        // launch. It will also set its own LastActionMessage which we
+        // overwrite below with the wrap-up-specific toast.
+        await OpenAsync().ConfigureAwait(true);
+
+        try
+        {
+            var requestedAt = _timeProvider.GetUtcNow();
+            await _wrapUpStateStore.MarkRequestedAsync(_model.Id, requestedAt).ConfigureAwait(true);
+            SetWrapUpRequestedAt(requestedAt);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to persist wrap-up timestamp for {SessionId}.", _model.Id);
+            // Continue — the user still has the prompt on the clipboard.
+        }
+
+        LastActionMessage = "Wrap-up prompt copied — press Ctrl+V in the PowerShell window to paste.";
+    }
+    #endregion
 
     private string FormatRelative(DateTimeOffset when)
     {

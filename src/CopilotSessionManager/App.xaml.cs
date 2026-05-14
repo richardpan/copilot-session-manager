@@ -421,6 +421,26 @@ public partial class App : Application
         services.AddSingleton<IUiDispatcher>(_ => new WpfDispatcher(Current.Dispatcher));
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton<Services.IFileLauncher, Services.ShellFileLauncher>();
+        services.AddSingleton<Services.IClipboardService, Services.WpfClipboardService>();
+
+        // V1.3 (#149): expose the persisted AppSettings instance to the
+        // sessions VM and per-card view-models so the wrap-up threshold
+        // and prompt template are picked up at startup. Edits to
+        // settings.json take effect after a restart, mirroring the other
+        // AppSettings consumers (e.g. the LogLevel switch).
+        services.AddSingleton<Core.Settings.AppSettings>(sp =>
+        {
+            try
+            {
+                var store = sp.GetRequiredService<Core.Settings.IAppSettingsStore>();
+                return store.LoadAsync().GetAwaiter().GetResult();
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "Failed to load AppSettings for DI; falling back to defaults.");
+                return Core.Settings.AppSettings.Defaults();
+            }
+        });
         services.AddSingleton(new LogLevelSwitchAccessor(_levelSwitch));
 
         // Tray icon is Windows-only and the WPF host is itself Windows-only
