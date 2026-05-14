@@ -61,6 +61,9 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
     private readonly ISessionDeletionService? _deletionService;
     private readonly Func<SessionDeletionPrompt, bool>? _confirmDelete;
     private readonly IDocFreshnessService? _docFreshness;
+    private readonly IWrapUpStateStore? _wrapUpStateStore;
+    private readonly IClipboardService? _clipboardService;
+    private readonly Core.Settings.AppSettings? _appSettings;
     #endregion
 
     // V1.6 (#118): generated HTML session docs. Settable post-construction
@@ -374,6 +377,52 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
         Func<SessionDeletionPrompt, bool>? confirmDelete,
         ISessionStarStore? starStore,
         IDocFreshnessService? docFreshness)
+        : this(discovery, labelStore, readmeService, fileLauncher, dispatcher,
+            timeProvider, modelCatalog, costCalculator, githubClient, checksClient,
+            lockCleanup, sessionLauncher, loggerFactory, logger,
+            issuesClient, linksStore, showAddIssueDialog, readmeIssueRefs,
+            runningSessions, windowActivator, displayNameStore, deletionService,
+            confirmDelete, starStore, docFreshness,
+            wrapUpStateStore: null, clipboardService: null, appSettings: null)
+    {
+    }
+
+    /// <summary>
+    /// V1.3 (#149) canonical constructor adding the optional
+    /// <see cref="IWrapUpStateStore"/> + <see cref="IClipboardService"/>
+    /// + <see cref="Core.Settings.AppSettings"/> trio that powers the
+    /// "📝 Wrap up" launcher badge on each session card. All three are
+    /// nullable so older call sites and tests keep compiling.
+    /// </summary>
+    public SessionsViewModel(
+        ISessionDiscoveryService discovery,
+        ISessionLabelStore labelStore,
+        ISessionReadmeService readmeService,
+        IFileLauncher fileLauncher,
+        IUiDispatcher dispatcher,
+        TimeProvider timeProvider,
+        IModelCatalog? modelCatalog,
+        IModelCostCalculator? costCalculator,
+        IGitHubClient? githubClient,
+        IGitHubChecksClient? checksClient,
+        ISessionLockCleanup? lockCleanup,
+        ISessionLauncher? sessionLauncher,
+        ILoggerFactory? loggerFactory,
+        ILogger<SessionsViewModel> logger,
+        IGitHubIssuesClient? issuesClient,
+        ISessionGitHubLinksStore? linksStore,
+        Func<string?, IssueRef?>? showAddIssueDialog,
+        IReadmeIssueRefProvider? readmeIssueRefs,
+        IRunningSessionRegistry? runningSessions,
+        Native.IWindowActivator? windowActivator,
+        ISessionDisplayNameStore? displayNameStore,
+        ISessionDeletionService? deletionService,
+        Func<SessionDeletionPrompt, bool>? confirmDelete,
+        ISessionStarStore? starStore,
+        IDocFreshnessService? docFreshness,
+        IWrapUpStateStore? wrapUpStateStore,
+        IClipboardService? clipboardService,
+        Core.Settings.AppSettings? appSettings)
     {
         ArgumentNullException.ThrowIfNull(discovery);
         ArgumentNullException.ThrowIfNull(labelStore);
@@ -408,6 +457,9 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
         _deletionService = deletionService;
         _confirmDelete = confirmDelete;
         _docFreshness = docFreshness;
+        _wrapUpStateStore = wrapUpStateStore;
+        _clipboardService = clipboardService;
+        _appSettings = appSettings;
 
         if (_displayNameStore is not null)
         {
@@ -417,6 +469,11 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
         if (_starStore is not null)
         {
             _starStore.StarsChanged += OnStarStoreChanged;
+        }
+
+        if (_wrapUpStateStore is not null)
+        {
+            _wrapUpStateStore.WrapUpStateChanged += OnWrapUpStateStoreChanged;
         }
 
         Sessions = new ObservableCollection<SessionCardViewModel>();
@@ -567,7 +624,7 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
         }
         Sessions.Clear();
         _byId.Clear();
-        ApplySnapshot(snapshot, labels, new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase), new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase));
+        ApplySnapshot(snapshot, labels, new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase), new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase), new Dictionary<string, DateTimeOffset>(StringComparer.OrdinalIgnoreCase));
     }
 
     public int TotalCount => Sessions.Count;
@@ -926,6 +983,7 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
         var newLabels = new Dictionary<string, SessionType>(StringComparer.OrdinalIgnoreCase);
         var newDisplayNames = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
         var newStars = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+        var newWrapUps = new Dictionary<string, DateTimeOffset>(StringComparer.OrdinalIgnoreCase);
         foreach (var session in snapshot)
         {
             if (!_byId.ContainsKey(session.Id))
@@ -971,17 +1029,36 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
                         newStars[session.Id] = false;
                     }
                 }
+
+                if (_wrapUpStateStore is not null)
+                {
+                    try
+                    {
+                        var ts = await _wrapUpStateStore
+                            .GetRequestedAtAsync(session.Id, cancellationToken)
+                            .ConfigureAwait(false);
+                        if (ts.HasValue)
+                        {
+                            newWrapUps[session.Id] = ts.Value;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogDebug(ex, "Could not read wrap-up state for {Id}.", session.Id);
+                    }
+                }
             }
         }
 
-        _dispatcher.Post(() => ApplySnapshot(snapshot, newLabels, newDisplayNames, newStars));
+        _dispatcher.Post(() => ApplySnapshot(snapshot, newLabels, newDisplayNames, newStars, newWrapUps));
     }
 
     private void ApplySnapshot(
         IReadOnlyList<Session> snapshot,
         IReadOnlyDictionary<string, SessionType> newLabels,
         IReadOnlyDictionary<string, string?> newDisplayNames,
-        IReadOnlyDictionary<string, bool> newStars)
+        IReadOnlyDictionary<string, bool> newStars,
+        IReadOnlyDictionary<string, DateTimeOffset> newWrapUps)
     {
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var inserted = false;
@@ -1011,7 +1088,14 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
                     _starStore, isStarred,
                     onDeleted: RemoveCardAsync,
                     docFreshness: _docFreshness,
-                    readmeService: _readmeService);
+                    readmeService: _readmeService,
+                    wrapUpStateStore: _wrapUpStateStore,
+                    clipboardService: _clipboardService,
+                    appSettings: _appSettings);
+                if (newWrapUps.TryGetValue(session.Id, out var wrapTs))
+                {
+                    card.SetWrapUpRequestedAt(wrapTs);
+                }
                 _byId[session.Id] = card;
                 Sessions.Add(card);
                 EnsureProducerChip(session.Producer);
@@ -1388,6 +1472,22 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
         });
     }
 
+    /// <summary>
+    /// V1.3 (#149): keeps each card in sync with the wrap-up state store
+    /// so the badge animates in/out correctly when another surface
+    /// records or clears a wrap-up timestamp.
+    /// </summary>
+    private void OnWrapUpStateStoreChanged(object? sender, WrapUpStateChangedEventArgs e)
+    {
+        _dispatcher.Post(() =>
+        {
+            if (_byId.TryGetValue(e.SessionId, out var card))
+            {
+                card.SetWrapUpRequestedAt(e.RequestedAt);
+            }
+        });
+    }
+
     private static bool IsActive(SessionStatus status) =>
         status is SessionStatus.Working
             or SessionStatus.AwaitingApproval
@@ -1428,6 +1528,10 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
         if (_starStore is not null)
         {
             _starStore.StarsChanged -= OnStarStoreChanged;
+        }
+        if (_wrapUpStateStore is not null)
+        {
+            _wrapUpStateStore.WrapUpStateChanged -= OnWrapUpStateStoreChanged;
         }
         try
         {

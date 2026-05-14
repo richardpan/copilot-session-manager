@@ -87,6 +87,29 @@ public class JsonAppSettingsStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task Save_ThenLoad_RoundTripsWrapUpSettings()
+    {
+        var sut = Sut();
+        await sut.SaveAsync(new AppSettings
+        {
+            WrapUpAfterHours = 6,
+            WrapUpPromptTemplate = "wrap {sessionId}",
+        });
+
+        var loaded = await sut.LoadAsync();
+        loaded.WrapUpAfterHours.Should().Be(6);
+        loaded.WrapUpPromptTemplate.Should().Be("wrap {sessionId}");
+    }
+
+    [Fact]
+    public async Task Defaults_HasSensibleWrapUpValues()
+    {
+        var loaded = await Sut().LoadAsync();
+        loaded.WrapUpAfterHours.Should().Be(24);
+        loaded.WrapUpPromptTemplate.Should().Be(AppSettings.DefaultWrapUpPromptTemplate);
+    }
+
+    [Fact]
     public void Constructor_RejectsBlankPath()
     {
         FluentActions.Invoking(() => new JsonAppSettingsStore("", NullLogger<JsonAppSettingsStore>.Instance))

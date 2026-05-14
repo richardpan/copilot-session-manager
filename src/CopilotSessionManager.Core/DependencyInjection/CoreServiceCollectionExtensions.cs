@@ -126,6 +126,7 @@ public static class CoreServiceCollectionExtensions
         services.TryAddSingleton<ISessionFolderReader, SessionFolderReader>();
         services.AddSessionDisplayNames();
         services.AddSessionStars();
+        services.AddWrapUpStateStore();
         services.AddDeletedSessionRegistry();
         services.TryAddSingleton<ISessionDeletionService, SessionDeletionService>();
 
@@ -196,6 +197,29 @@ public static class CoreServiceCollectionExtensions
                 JsonSessionStarStore.DefaultFileName);
             var logger = sp.GetRequiredService<ILogger<JsonSessionStarStore>>();
             return new JsonSessionStarStore(path, logger);
+        });
+
+        return services;
+    }
+
+    /// <summary>
+    /// Registers <see cref="IWrapUpStateStore"/> backed by
+    /// <see cref="JsonWrapUpStateStore"/> at
+    /// <c>%LOCALAPPDATA%\CopilotSessionManager\wrapup.json</c> for the
+    /// V1.3 (#149) "📝 Wrap up" launcher button. Safe to call multiple
+    /// times.
+    /// </summary>
+    public static IServiceCollection AddWrapUpStateStore(this IServiceCollection services)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        services.TryAddSingleton<IWrapUpStateStore>(sp =>
+        {
+            var path = System.IO.Path.Combine(
+                AppPaths.LocalAppDataDirectory,
+                JsonWrapUpStateStore.DefaultFileName);
+            var logger = sp.GetRequiredService<ILogger<JsonWrapUpStateStore>>();
+            return new JsonWrapUpStateStore(path, logger);
         });
 
         return services;

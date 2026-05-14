@@ -900,6 +900,32 @@
                                         </ToolTip>
                                     </Button.ToolTip>
                                 </Button>
+                                <Button Content="📝 Wrap up"
+                                        Padding="6,0"
+                                        FontSize="11"
+                                        Margin="0,0,3,0"
+                                        Background="Transparent"
+                                        Foreground="{DynamicResource StatusAwaitingBrush}"
+                                        BorderBrush="{DynamicResource StatusAwaitingBrush}"
+                                        BorderThickness="1"
+                                        ToolTipService.ShowDuration="25000"
+                                        Visibility="{Binding IsWrapUpDue, Converter={StaticResource BoolToVisibility}}"
+                                        Command="{Binding WrapUpCommand}"
+                                        AutomationProperties.Name="Copy wrap-up prompt and open this session in PowerShell">
+                                    <Button.ToolTip>
+                                        <ToolTip MaxWidth="420">
+                                            <StackPanel>
+                                                <TextBlock FontWeight="SemiBold" Text="Wrap up this session" />
+                                                <TextBlock TextWrapping="Wrap" Margin="0,4,0,0"
+                                                           Text="Copies a wrap-up prompt to the clipboard and opens (or activates) this session's PowerShell window. Press Ctrl+V in the window to paste, then send the prompt so Copilot can summarise the conversation into SESSION-DOCS." />
+                                                <TextBlock TextWrapping="Wrap" Margin="0,6,0,0"
+                                                           Text="{Binding WrapUpTooltip}" />
+                                                <TextBlock TextWrapping="Wrap" Margin="0,6,0,0" FontStyle="Italic" Foreground="{DynamicResource TextSecondaryBrush}"
+                                                           Text="The threshold (default 24h idle) and prompt template are configurable in settings.json — see Settings → Wrap-up." />
+                                            </StackPanel>
+                                        </ToolTip>
+                                    </Button.ToolTip>
+                                </Button>
                                 <Button Content="🧹"
                                         Padding="5,0"
                                         FontSize="11"
