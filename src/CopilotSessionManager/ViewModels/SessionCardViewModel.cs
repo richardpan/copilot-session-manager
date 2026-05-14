@@ -54,6 +54,17 @@ public sealed partial class SessionCardViewModel : ObservableObject
     private bool _subagentsLoaded;
     private Task? _subagentsLoadTask;
     private readonly IDocFreshnessService? _docFreshness;
+    private readonly ISessionReadmeService? _readmeService;
+
+    /// <summary>
+    /// V1.3 (#146): minimum gap between background README refreshes that get
+    /// triggered from the SessionUpdated tick path. Status-transition and
+    /// Open Terminal triggers ignore this throttle so the freshly-finished
+    /// README is always available when the user re-engages.
+    /// </summary>
+    public static readonly TimeSpan AutoRefreshThrottle = TimeSpan.FromMinutes(5);
+
+    private DateTimeOffset _lastReadmeRefresh = DateTimeOffset.MinValue;
 
     #region IssueLinks
     private readonly IssueLinksViewModel? _issueLinks;
@@ -241,16 +252,20 @@ public sealed partial class SessionCardViewModel : ObservableObject
             deletionService, confirmDelete,
             starStore, isStarred,
             onDeleted: onDeleted,
-            docFreshness: null)
+            docFreshness: null,
+            readmeService: null)
     {
     }
 
     /// <summary>
-    /// V1.3 (#147) canonical constructor adding the optional
+    /// V1.3 (#146/#147) canonical constructor. Adds the optional
     /// <see cref="IDocFreshnessService"/> for the SESSION-README/DOCS
-    /// freshness badge. <paramref name="docFreshness"/> is nullable so
-    /// existing call sites and tests keep compiling — when it's null the
-    /// card reports <see cref="DocFreshnessState.NotApplicable"/>.
+    /// freshness badge (#147) and the optional
+    /// <see cref="ISessionReadmeService"/> used to auto-refresh the
+    /// per-session README on status transitions / Open Terminal /
+    /// throttled snapshot ticks (#146). Both are nullable so existing call
+    /// sites and tests keep compiling — when they're null the card behaves
+    /// as it did pre-V1.3.
     /// </summary>
     public SessionCardViewModel(
         Session model,
@@ -273,7 +288,8 @@ public sealed partial class SessionCardViewModel : ObservableObject
         ISessionStarStore? starStore,
         bool isStarred,
         Func<string, Task>? onDeleted,
-        IDocFreshnessService? docFreshness)
+        IDocFreshnessService? docFreshness,
+        ISessionReadmeService? readmeService)
     {
         ArgumentNullException.ThrowIfNull(model);
         ArgumentNullException.ThrowIfNull(timeProvider);
@@ -299,6 +315,7 @@ public sealed partial class SessionCardViewModel : ObservableObject
         _openMergeWizard = openMergeWizard;
         _issueLinks = issueLinks;
         _docFreshness = docFreshness;
+        _readmeService = readmeService;
 
         OpenUrlCommand = new AsyncRelayCommand<string?>(OpenUrlAsync, CanOpenUrl);
         CleanupStaleLocksCommand = new AsyncRelayCommand(CleanupStaleLocksAsync, CanCleanupStaleLocks);
@@ -1062,6 +1079,10 @@ public sealed partial class SessionCardViewModel : ObservableObject
             {
                 LastActionMessage = "Launched PowerShell.";
             }
+            // V1.3 (#146): refresh the per-session README in the background
+            // so it reflects whatever Copilot just did before the user
+            // re-engages. Bypasses the snapshot-tick throttle.
+            FireForgetReadmeRefresh(forceBypassThrottle: true);
         }
         catch (Exception ex)
         {
@@ -1364,6 +1385,54 @@ public sealed partial class SessionCardViewModel : ObservableObject
     }
 
     /// <summary>
+    /// V1.3 (#146): fires <see cref="ISessionReadmeService.EnsureAsync"/>
+    /// for this session in the background. The store no-ops on identical
+    /// content, so the only real cost is the events.jsonl scan — which we
+    /// throttle here per <see cref="AutoRefreshThrottle"/> when called
+    /// from the snapshot-tick path. Status-transition (Running → Idle)
+    /// and Open Terminal callers pass <c>forceBypassThrottle: true</c>.
+    /// All exceptions are swallowed and logged because this is a
+    /// best-effort UX nicety.
+    /// </summary>
+    private void FireForgetReadmeRefresh(bool forceBypassThrottle)
+    {
+        if (_readmeService is null)
+        {
+            return;
+        }
+
+        var now = _timeProvider.GetUtcNow();
+        if (!forceBypassThrottle && now - _lastReadmeRefresh < AutoRefreshThrottle)
+        {
+            return;
+        }
+        _lastReadmeRefresh = now;
+
+        var snapshot = _model;
+        var label = _label;
+        var service = _readmeService;
+        var logger = _logger;
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await service.EnsureAsync(snapshot, label, CancellationToken.None).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                // Cancellation is expected when the host shuts down.
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(
+                    ex,
+                    "Background README refresh failed for session {SessionId}.",
+                    snapshot.Id);
+            }
+        });
+    }
+
+    /// <summary>
     /// Replaces this card's underlying model and raises change notifications
     /// for every projected property. Used by <see cref="SessionsViewModel"/>
     /// when discovery reports an updated <see cref="Session"/> for the same id.
@@ -1375,6 +1444,11 @@ public sealed partial class SessionCardViewModel : ObservableObject
         {
             throw new ArgumentException("Cannot replace session model with a different id.", nameof(newModel));
         }
+
+        // V1.3 (#146): capture the previous status so we can detect
+        // Running → Idle transitions before mutating the model. Used to
+        // trigger a forced README refresh when Copilot finishes a turn.
+        var previousStatus = _model.Status;
 
         _model = newModel;
         // Discovery's snapshot is authoritative for repo/branch links; reset
@@ -1424,6 +1498,16 @@ public sealed partial class SessionCardViewModel : ObservableObject
         OnPropertyChanged(nameof(HasBranchUrl));
         RaisePullRequestChanged();
         RaiseChecksChanged();
+
+        // V1.3 (#146): fire the background README refresh AFTER all property
+        // notifications so the WPF UI gets the current model + freshness
+        // badge updates first; the disk write happens off-thread. The
+        // "settled" trigger is Working → AwaitingInput — i.e. Copilot just
+        // finished its turn — which is when the events.jsonl tail is most
+        // worth re-scanning.
+        var statusJustSettled = previousStatus == SessionStatus.Working
+            && newModel.Status == SessionStatus.AwaitingInput;
+        FireForgetReadmeRefresh(forceBypassThrottle: statusJustSettled);
     }
 
     /// <summary>

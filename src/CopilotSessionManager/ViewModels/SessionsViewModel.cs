@@ -986,7 +986,8 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
                     _deletionService, _confirmDelete,
                     _starStore, isStarred,
                     onDeleted: RemoveCardAsync,
-                    docFreshness: _docFreshness);
+                    docFreshness: _docFreshness,
+                    readmeService: _readmeService);
                 _byId[session.Id] = card;
                 Sessions.Add(card);
                 EnsureProducerChip(session.Producer);
