@@ -53,7 +53,8 @@ public sealed class DocFreshnessCaptionTests
         deletionService: null, confirmDelete: null,
         starStore: null, isStarred: false,
         onDeleted: null,
-        docFreshness: new StubDocFreshness(freshness));
+        docFreshness: new StubDocFreshness(freshness),
+        readmeService: null);
 
     [Theory]
     [InlineData(DocFreshnessState.Fresh, null, "📄 ✓ fresh")]
