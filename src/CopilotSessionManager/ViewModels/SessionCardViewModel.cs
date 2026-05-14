@@ -53,6 +53,7 @@ public sealed partial class SessionCardViewModel : ObservableObject
     private IReadOnlyList<SubagentSummary> _subagents = Array.Empty<SubagentSummary>();
     private bool _subagentsLoaded;
     private Task? _subagentsLoadTask;
+    private readonly IDocFreshnessService? _docFreshness;
 
     #region IssueLinks
     private readonly IssueLinksViewModel? _issueLinks;
@@ -233,6 +234,46 @@ public sealed partial class SessionCardViewModel : ObservableObject
         ISessionStarStore? starStore,
         bool isStarred,
         Func<string, Task>? onDeleted)
+        : this(model, label, timeProvider, modelCatalog, costCalculator,
+            fileLauncher, lockCleanup, sessionLauncher, logger,
+            openMergeWizard, issueLinks,
+            runningSessions, windowActivator, displayNameStore, displayNameOverride,
+            deletionService, confirmDelete,
+            starStore, isStarred,
+            onDeleted: onDeleted,
+            docFreshness: null)
+    {
+    }
+
+    /// <summary>
+    /// V1.3 (#147) canonical constructor adding the optional
+    /// <see cref="IDocFreshnessService"/> for the SESSION-README/DOCS
+    /// freshness badge. <paramref name="docFreshness"/> is nullable so
+    /// existing call sites and tests keep compiling — when it's null the
+    /// card reports <see cref="DocFreshnessState.NotApplicable"/>.
+    /// </summary>
+    public SessionCardViewModel(
+        Session model,
+        SessionType label,
+        TimeProvider timeProvider,
+        IModelCatalog? modelCatalog,
+        IModelCostCalculator? costCalculator,
+        IFileLauncher? fileLauncher,
+        ISessionLockCleanup? lockCleanup,
+        ISessionLauncher? sessionLauncher,
+        ILogger? logger,
+        Action<SessionCardViewModel>? openMergeWizard,
+        IssueLinksViewModel? issueLinks,
+        IRunningSessionRegistry? runningSessions,
+        IWindowActivator? windowActivator,
+        ISessionDisplayNameStore? displayNameStore,
+        string? displayNameOverride,
+        ISessionDeletionService? deletionService,
+        Func<SessionDeletionPrompt, bool>? confirmDelete,
+        ISessionStarStore? starStore,
+        bool isStarred,
+        Func<string, Task>? onDeleted,
+        IDocFreshnessService? docFreshness)
     {
         ArgumentNullException.ThrowIfNull(model);
         ArgumentNullException.ThrowIfNull(timeProvider);
@@ -257,6 +298,7 @@ public sealed partial class SessionCardViewModel : ObservableObject
         _logger = logger ?? NullLogger.Instance;
         _openMergeWizard = openMergeWizard;
         _issueLinks = issueLinks;
+        _docFreshness = docFreshness;
 
         OpenUrlCommand = new AsyncRelayCommand<string?>(OpenUrlAsync, CanOpenUrl);
         CleanupStaleLocksCommand = new AsyncRelayCommand(CleanupStaleLocksAsync, CanCleanupStaleLocks);
@@ -564,6 +606,68 @@ public sealed partial class SessionCardViewModel : ObservableObject
     public string SubagentBadgeText => HasSubagents ? $"🧰 ×{SubagentCount}" : string.Empty;
 
     public string SubagentTokensDisplay => FormatTokens(SubagentTokensTotal);
+
+    /// <summary>
+    /// V1.3 (#147): Cached freshness result for the session's docs. Recomputed
+    /// every read since the underlying file mtime may change at any time;
+    /// the call is cheap (single <c>File.Exists</c> + <c>GetLastWriteTimeUtc</c>).
+    /// Null service falls back to <see cref="DocFreshnessState.NotApplicable"/>.
+    /// </summary>
+    private DocFreshnessResult ComputeDocFreshness() =>
+        _docFreshness?.Evaluate(_model.Id, _model.CreatedAt)
+            ?? new DocFreshnessResult(DocFreshnessState.NotApplicable, null);
+
+    /// <summary>Traffic-light state for the SESSION-README/DOCS freshness badge.</summary>
+    public DocFreshnessState DocFreshness => ComputeDocFreshness().State;
+
+    /// <summary>
+    /// Sort key for the "Docs" data-grid column. Ordered so that VeryStale
+    /// → Stale → Missing surface to the top of an ascending sort, with
+    /// Fresh and NotApplicable rows at the bottom.
+    /// </summary>
+    public int DocFreshnessSortKey => DocFreshness switch
+    {
+        DocFreshnessState.VeryStale => 0,
+        DocFreshnessState.Stale => 1,
+        DocFreshnessState.Missing => 2,
+        DocFreshnessState.Fresh => 3,
+        DocFreshnessState.NotApplicable => 4,
+        _ => 5,
+    };
+
+    /// <summary>Caption shown inside the "Docs" badge cell.</summary>
+    public string DocFreshnessCaption
+    {
+        get
+        {
+            var (state, ageDays) = ComputeDocFreshness();
+            return state switch
+            {
+                DocFreshnessState.Fresh => "📄 ✓ fresh",
+                DocFreshnessState.Stale => $"📄 ⚠ stale {ageDays ?? 0}d",
+                DocFreshnessState.VeryStale => $"📄 ⚠ stale {ageDays ?? 0}d",
+                DocFreshnessState.Missing => "📄 ✗ missing",
+                DocFreshnessState.NotApplicable => "📄 — n/a",
+                _ => string.Empty,
+            };
+        }
+    }
+
+    /// <summary>Tooltip on the "Docs" badge cell.</summary>
+    public string DocFreshnessTooltip => DocFreshness switch
+    {
+        DocFreshnessState.Fresh =>
+            "SESSION-README is up to date (updated within the last day). Click to open.",
+        DocFreshnessState.Stale =>
+            "SESSION-README is between 1 and 7 days old. Click to regenerate and open.",
+        DocFreshnessState.VeryStale =>
+            "SESSION-README is more than 7 days old. Click to regenerate and open.",
+        DocFreshnessState.Missing =>
+            "No SESSION-README has been generated yet. Click to scaffold and open.",
+        DocFreshnessState.NotApplicable =>
+            "Session is too new for a freshness check (under 30 minutes old).",
+        _ => string.Empty,
+    };
 
     /// <summary>
     /// Total tokens consumed across all models in this session, formatted
@@ -1301,6 +1405,10 @@ public sealed partial class SessionCardViewModel : ObservableObject
         DeleteCommand.NotifyCanExecuteChanged();
         OnPropertyChanged(nameof(UpdatedRelative));
         OnPropertyChanged(nameof(Age));
+        OnPropertyChanged(nameof(DocFreshness));
+        OnPropertyChanged(nameof(DocFreshnessSortKey));
+        OnPropertyChanged(nameof(DocFreshnessCaption));
+        OnPropertyChanged(nameof(DocFreshnessTooltip));
         OnPropertyChanged(nameof(LockSummary));
         OnPropertyChanged(nameof(ModelDisplay));
         OnPropertyChanged(nameof(ModelTier));
