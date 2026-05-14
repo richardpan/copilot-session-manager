@@ -77,6 +77,72 @@ public class SessionReadmeServiceTests
         await act.Should().ThrowAsync<InvalidOperationException>();
     }
 
+    [Fact]
+    public async Task EnsureAsync_WiresEventSummaryAndSubagentsIntoContext()
+    {
+        var renderer = new FakeRenderer();
+        var folders = new FakeFolders();
+        var store = new FakeStore();
+        var events = new FakeEventSummary
+        {
+            Result = new SessionEventSummary(
+                new[] { new RecentPrompt(DateTimeOffset.UtcNow, "hi") },
+                new[] { new ToolUsageCount("grep", 3) },
+                TimeSpan.FromMinutes(5),
+                TimeSpan.FromMinutes(30),
+                42),
+        };
+        var subagents = new FakeSubagentScan
+        {
+            Result = new[]
+            {
+                new SubagentSummary(
+                    "tc-1", "explore", "explore", null, null,
+                    1000, 5, TimeSpan.FromSeconds(20),
+                    DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, SubagentStatus.Completed),
+            },
+        };
+        var svc = new SessionReadmeService(renderer, store, folders, NullLogger<SessionReadmeService>.Instance, events, subagents);
+
+        await svc.EnsureAsync(Build("abc"), SessionType.Bug);
+
+        events.Calls.Should().Be(1);
+        subagents.Calls.Should().Be(1);
+        renderer.LastContext!.EventSummary.TotalEvents.Should().Be(42);
+        renderer.LastContext.EventSummary.RecentPrompts.Should().HaveCount(1);
+        renderer.LastContext.Subagents.Should().HaveCount(1);
+    }
+
+    [Fact]
+    public async Task EnsureAsync_FallsBackToEmptyContext_WhenScannersThrow()
+    {
+        var renderer = new FakeRenderer();
+        var folders = new FakeFolders();
+        var store = new FakeStore();
+        var events = new FakeEventSummary { ThrowOnScan = true };
+        var subagents = new FakeSubagentScan { ThrowOnScan = true };
+        var svc = new SessionReadmeService(renderer, store, folders, NullLogger<SessionReadmeService>.Instance, events, subagents);
+
+        await svc.EnsureAsync(Build("abc"), SessionType.Bug);
+
+        renderer.LastContext!.EventSummary.Should().BeSameAs(SessionEventSummary.Empty);
+        renderer.LastContext.Subagents.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task EnsureAsync_PropagatesCancellation_FromScanners()
+    {
+        var renderer = new FakeRenderer();
+        var folders = new FakeFolders();
+        var store = new FakeStore();
+        var events = new FakeEventSummary { ThrowCancellation = true };
+        var svc = new SessionReadmeService(renderer, store, folders, NullLogger<SessionReadmeService>.Instance, events, null);
+
+        var act = async () => await svc.EnsureAsync(Build("abc"), SessionType.Bug);
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+    }
+
     private sealed class FakeRenderer : ISessionReadmeRenderer
     {
         public SessionReadmeContext? LastContext { get; private set; }
@@ -85,6 +151,45 @@ public class SessionReadmeServiceTests
         {
             LastContext = context;
             return Output;
+        }
+    }
+
+    private sealed class FakeEventSummary : ISessionEventSummaryService
+    {
+        public int Calls { get; private set; }
+        public SessionEventSummary Result { get; set; } = SessionEventSummary.Empty;
+        public bool ThrowOnScan { get; set; }
+        public bool ThrowCancellation { get; set; }
+
+        public Task<SessionEventSummary> ScanAsync(string sessionId, CancellationToken ct = default)
+        {
+            Calls++;
+            if (ThrowCancellation)
+            {
+                throw new OperationCanceledException();
+            }
+            if (ThrowOnScan)
+            {
+                throw new InvalidOperationException("boom");
+            }
+            return Task.FromResult(Result);
+        }
+    }
+
+    private sealed class FakeSubagentScan : ISubagentScanService
+    {
+        public int Calls { get; private set; }
+        public IReadOnlyList<SubagentSummary> Result { get; set; } = Array.Empty<SubagentSummary>();
+        public bool ThrowOnScan { get; set; }
+
+        public Task<IReadOnlyList<SubagentSummary>> ScanAsync(string sessionId, CancellationToken ct = default)
+        {
+            Calls++;
+            if (ThrowOnScan)
+            {
+                throw new InvalidOperationException("boom");
+            }
+            return Task.FromResult(Result);
         }
     }
 

@@ -17,13 +17,17 @@ public sealed class SessionReadmeService : ISessionReadmeService
     private readonly ISessionReadmeRenderer _renderer;
     private readonly ISessionReadmeStore _store;
     private readonly ISessionFolderReader _folders;
+    private readonly ISessionEventSummaryService? _events;
+    private readonly ISubagentScanService? _subagents;
     private readonly ILogger<SessionReadmeService> _logger;
 
     public SessionReadmeService(
         ISessionReadmeRenderer renderer,
         ISessionReadmeStore store,
         ISessionFolderReader folders,
-        ILogger<SessionReadmeService> logger)
+        ILogger<SessionReadmeService> logger,
+        ISessionEventSummaryService? events = null,
+        ISubagentScanService? subagents = null)
     {
         ArgumentNullException.ThrowIfNull(renderer);
         ArgumentNullException.ThrowIfNull(store);
@@ -32,6 +36,8 @@ public sealed class SessionReadmeService : ISessionReadmeService
         _renderer = renderer;
         _store = store;
         _folders = folders;
+        _events = events;
+        _subagents = subagents;
         _logger = logger;
     }
 
@@ -44,9 +50,19 @@ public sealed class SessionReadmeService : ISessionReadmeService
     {
         ArgumentNullException.ThrowIfNull(session);
 
-        var checkpoints = await _folders.GetCheckpointsAsync(session.Id, cancellationToken)
-            .ConfigureAwait(false);
-        var ctx = new SessionReadmeContext(session, label, checkpoints);
+        var checkpointsTask = _folders.GetCheckpointsAsync(session.Id, cancellationToken);
+        var eventsTask = _events is null
+            ? Task.FromResult(SessionEventSummary.Empty)
+            : SafeScanEventsAsync(session.Id, cancellationToken);
+        var subagentsTask = _subagents is null
+            ? Task.FromResult<System.Collections.Generic.IReadOnlyList<SubagentSummary>>(Array.Empty<SubagentSummary>())
+            : SafeScanSubagentsAsync(session.Id, cancellationToken);
+
+        var checkpoints = await checkpointsTask.ConfigureAwait(false);
+        var eventSummary = await eventsTask.ConfigureAwait(false);
+        var subagents = await subagentsTask.ConfigureAwait(false);
+
+        var ctx = new SessionReadmeContext(session, label, checkpoints, eventSummary, subagents);
         var rendered = _renderer.Render(ctx);
 
         try
@@ -57,6 +73,40 @@ public sealed class SessionReadmeService : ISessionReadmeService
         {
             _logger.LogError(ex, "Failed to write README for session {SessionId}.", session.Id);
             throw;
+        }
+    }
+
+    private async Task<SessionEventSummary> SafeScanEventsAsync(string sessionId, CancellationToken ct)
+    {
+        try
+        {
+            return await _events!.ScanAsync(sessionId, ct).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Event summary scan failed for session {SessionId}; rendering with empty summary.", sessionId);
+            return SessionEventSummary.Empty;
+        }
+    }
+
+    private async Task<System.Collections.Generic.IReadOnlyList<SubagentSummary>> SafeScanSubagentsAsync(string sessionId, CancellationToken ct)
+    {
+        try
+        {
+            return await _subagents!.ScanAsync(sessionId, ct).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Sub-agent scan failed for session {SessionId}; rendering with empty list.", sessionId);
+            return Array.Empty<SubagentSummary>();
         }
     }
 
