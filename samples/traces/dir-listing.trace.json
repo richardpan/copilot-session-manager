@@ -1,0 +1,11 @@
+{
+  "schema": "csm.capture-pty-trace.v1",
+  "commandLine": "cmd.exe /c dir /a-d C:\\Windows\\System32\\drivers\\etc",
+  "workingDirectory": null,
+  "columns": 100,
+  "rows": 30,
+  "capturedAtUtc": "2026-05-15T23:05:08.4522788Z",
+  "durationMs": 587,
+  "bytesCaptured": 568,
+  "traceFile": "dir-listing.trace.bin"
+}
