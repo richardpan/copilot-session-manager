@@ -2,15 +2,11 @@ using System.Runtime.CompilerServices;
 
 [assembly: InternalsVisibleTo("CopilotSessionManager.Native.Tests")]
 
-// Placeholder marker for the Native assembly.
-// Real ConPTY / Win32 P/Invoke types will live alongside this file; see
-// docs/adr/0001-conpty-for-embedded-terminal.md.
-
 namespace CopilotSessionManager.Native;
 
 /// <summary>
-/// Internal marker type for the Native assembly. Will be removed once real
-/// types land here.
+/// Internal marker type for the Native assembly. Kept as a stable handle for
+/// tests that want to identify the assembly without referencing P/Invoke types.
 /// </summary>
 internal static class NativeMarker
 {
