@@ -1,0 +1,11 @@
+{
+  "schema": "csm.capture-pty-trace.v1",
+  "commandLine": "cmd /c pwsh -NoLogo -NoProfile -Command \u0022$PSStyle.OutputRendering=\u0027Ansi\u0027; Write-Host -ForegroundColor Green green-line; Write-Host -ForegroundColor Red red-line; Write-Host -ForegroundColor Yellow yellow-line; Start-Sleep -Milliseconds 300\u0022",
+  "workingDirectory": null,
+  "columns": 80,
+  "rows": 24,
+  "capturedAtUtc": "2026-05-15T23:05:35.8724249Z",
+  "durationMs": 1279,
+  "bytesCaptured": 156,
+  "traceFile": "pwsh-color.trace.bin"
+}

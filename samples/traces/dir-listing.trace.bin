@@ -1,0 +1,9 @@
+[?9001h[?1004h[?25l[2J[m[H Volume in drive C is Local Disk
+]0;C:\Windows\SYSTEM32\cmd.exe[?25h[?25l Volume Serial Number is DAE5-734A[4;1H Directory of C:\Windows\System32\drivers\etc[6;1H04/01/2024  01:44 AM               824 hosts
+04/01/2024  01:44 AM             3,683 lmhosts.sam
+04/01/2024  01:44 AM               407 networks
+04/01/2024  01:44 AM             1,358 protocol
+04/01/2024  01:44 AM            17,635 services
+               5 File(s)         23,907 bytes
+               0 Dir(s)  774,790,422,528 bytes free
+[?25h[?9001l[?1004l
