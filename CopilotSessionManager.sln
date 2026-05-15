@@ -19,6 +19,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CopilotSessionManager.Nativ
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CopilotSessionManager.Tests", "tests\CopilotSessionManager.Tests\CopilotSessionManager.Tests.csproj", "{E4D4CDC6-80B4-4CB5-A880-282E28613A78}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CopilotSessionManager.Terminal", "src\CopilotSessionManager.Terminal\CopilotSessionManager.Terminal.csproj", "{E32CB6FA-3ABF-427F-A533-8DE1DEE6FA5E}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CopilotSessionManager.Terminal.Tests", "tests\CopilotSessionManager.Terminal.Tests\CopilotSessionManager.Terminal.Tests.csproj", "{FEAFAAEC-7380-4E45-B68A-F2C2C1E3CF69}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -101,6 +105,30 @@ Global
 		{E4D4CDC6-80B4-4CB5-A880-282E28613A78}.Release|x64.Build.0 = Release|Any CPU
 		{E4D4CDC6-80B4-4CB5-A880-282E28613A78}.Release|x86.ActiveCfg = Release|Any CPU
 		{E4D4CDC6-80B4-4CB5-A880-282E28613A78}.Release|x86.Build.0 = Release|Any CPU
+		{E32CB6FA-3ABF-427F-A533-8DE1DEE6FA5E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E32CB6FA-3ABF-427F-A533-8DE1DEE6FA5E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E32CB6FA-3ABF-427F-A533-8DE1DEE6FA5E}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{E32CB6FA-3ABF-427F-A533-8DE1DEE6FA5E}.Debug|x64.Build.0 = Debug|Any CPU
+		{E32CB6FA-3ABF-427F-A533-8DE1DEE6FA5E}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{E32CB6FA-3ABF-427F-A533-8DE1DEE6FA5E}.Debug|x86.Build.0 = Debug|Any CPU
+		{E32CB6FA-3ABF-427F-A533-8DE1DEE6FA5E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E32CB6FA-3ABF-427F-A533-8DE1DEE6FA5E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E32CB6FA-3ABF-427F-A533-8DE1DEE6FA5E}.Release|x64.ActiveCfg = Release|Any CPU
+		{E32CB6FA-3ABF-427F-A533-8DE1DEE6FA5E}.Release|x64.Build.0 = Release|Any CPU
+		{E32CB6FA-3ABF-427F-A533-8DE1DEE6FA5E}.Release|x86.ActiveCfg = Release|Any CPU
+		{E32CB6FA-3ABF-427F-A533-8DE1DEE6FA5E}.Release|x86.Build.0 = Release|Any CPU
+		{FEAFAAEC-7380-4E45-B68A-F2C2C1E3CF69}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{FEAFAAEC-7380-4E45-B68A-F2C2C1E3CF69}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{FEAFAAEC-7380-4E45-B68A-F2C2C1E3CF69}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{FEAFAAEC-7380-4E45-B68A-F2C2C1E3CF69}.Debug|x64.Build.0 = Debug|Any CPU
+		{FEAFAAEC-7380-4E45-B68A-F2C2C1E3CF69}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{FEAFAAEC-7380-4E45-B68A-F2C2C1E3CF69}.Debug|x86.Build.0 = Debug|Any CPU
+		{FEAFAAEC-7380-4E45-B68A-F2C2C1E3CF69}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{FEAFAAEC-7380-4E45-B68A-F2C2C1E3CF69}.Release|Any CPU.Build.0 = Release|Any CPU
+		{FEAFAAEC-7380-4E45-B68A-F2C2C1E3CF69}.Release|x64.ActiveCfg = Release|Any CPU
+		{FEAFAAEC-7380-4E45-B68A-F2C2C1E3CF69}.Release|x64.Build.0 = Release|Any CPU
+		{FEAFAAEC-7380-4E45-B68A-F2C2C1E3CF69}.Release|x86.ActiveCfg = Release|Any CPU
+		{FEAFAAEC-7380-4E45-B68A-F2C2C1E3CF69}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -112,5 +140,7 @@ Global
 		{E67FBE56-702A-4B44-A824-1E37E7C5FF4A} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 		{A15A78A8-2314-42E5-A3A8-E5A6DA99A71A} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 		{E4D4CDC6-80B4-4CB5-A880-282E28613A78} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
+		{E32CB6FA-3ABF-427F-A533-8DE1DEE6FA5E} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
+		{FEAFAAEC-7380-4E45-B68A-F2C2C1E3CF69} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 	EndGlobalSection
 EndGlobal
