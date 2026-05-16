@@ -36,6 +36,7 @@ public class TerminalControl : FrameworkElement
 
     private readonly VisualCollection _children;
     private readonly List<DrawingVisual> _rowVisuals = new();
+    private readonly DrawingVisual _selectionVisual = new();
     private readonly DrawingVisual _cursorVisual = new();
     private readonly DispatcherTimer _cursorBlinkTimer;
 
@@ -44,6 +45,9 @@ public class TerminalControl : FrameworkElement
     private bool _renderPending;
     private bool _cursorBlinkOn = true;
     private bool _suppressNextTextInput;
+    private bool _selecting;
+    private TerminalSelection? _selection;
+    private ITerminalClipboard _clipboard = new WpfClipboard();
     private EventHandler? _bufferInvalidationHandler;
 
     /// <summary>Identifies the <see cref="Buffer"/> dependency property.</summary>
@@ -93,6 +97,16 @@ public class TerminalControl : FrameworkElement
         typeof(TerminalControl),
         new FrameworkPropertyMetadata(
             defaultValue: Color.FromRgb(0x12, 0x12, 0x12),
+            FrameworkPropertyMetadataOptions.AffectsRender,
+            propertyChangedCallback: OnAppearancePropertyChanged));
+
+    /// <summary>Identifies the <see cref="SelectionBrush"/> dependency property.</summary>
+    public static readonly DependencyProperty SelectionBrushProperty = DependencyProperty.Register(
+        nameof(SelectionBrush),
+        typeof(Color),
+        typeof(TerminalControl),
+        new FrameworkPropertyMetadata(
+            defaultValue: Color.FromArgb(0x66, 0x33, 0x88, 0xCC),
             FrameworkPropertyMetadataOptions.AffectsRender,
             propertyChangedCallback: OnAppearancePropertyChanged));
 
@@ -163,6 +177,31 @@ public class TerminalControl : FrameworkElement
         set => SetValue(BackgroundProperty, value);
     }
 
+    /// <summary>Overlay colour used to highlight selected cells. Should be semi-transparent.</summary>
+    public Color SelectionBrush
+    {
+        get => (Color)GetValue(SelectionBrushProperty);
+        set => SetValue(SelectionBrushProperty, value);
+    }
+
+    /// <summary>The current text selection, or <c>null</c> if nothing is selected.</summary>
+    public TerminalSelection? Selection => _selection;
+
+    /// <summary>Raised whenever <see cref="Selection"/> changes value (including transitions to or from null).</summary>
+    public event EventHandler? SelectionChanged;
+
+    /// <summary>
+    /// The clipboard abstraction used by <see cref="CopyToClipboard"/>
+    /// and <see cref="PasteFromClipboard"/>. Defaults to a
+    /// <see cref="WpfClipboard"/> wrapping <see cref="System.Windows.Clipboard"/>;
+    /// tests inject a fake.
+    /// </summary>
+    public ITerminalClipboard Clipboard
+    {
+        get => _clipboard;
+        set => _clipboard = value ?? throw new ArgumentNullException(nameof(value));
+    }
+
     /// <summary>
     /// Cell metrics used by the most recent render pass. Null until the
     /// first render. Exposed for diagnostics and unit tests.
@@ -210,15 +249,55 @@ public class TerminalControl : FrameworkElement
     }
 
     /// <inheritdoc />
-    protected override void OnPreviewMouseDown(MouseButtonEventArgs e)
+    protected override void OnPreviewMouseLeftButtonDown(MouseButtonEventArgs e)
     {
-        base.OnPreviewMouseDown(e);
-        // A click should hand the terminal keyboard focus so the user can
-        // start typing immediately.
+        base.OnPreviewMouseLeftButtonDown(e);
+
         if (Focusable && !IsKeyboardFocused)
         {
             Focus();
         }
+
+        var cell = HitTestCell(e.GetPosition(this));
+        if (cell is null)
+        {
+            return;
+        }
+        BeginSelection(cell.Value.Row, cell.Value.Column);
+        CaptureMouse();
+        e.Handled = true;
+    }
+
+    /// <inheritdoc />
+    protected override void OnPreviewMouseMove(MouseEventArgs e)
+    {
+        base.OnPreviewMouseMove(e);
+        if (!_selecting || e.LeftButton != MouseButtonState.Pressed)
+        {
+            return;
+        }
+        var cell = HitTestCell(e.GetPosition(this));
+        if (cell is null)
+        {
+            return;
+        }
+        UpdateSelection(cell.Value.Row, cell.Value.Column);
+    }
+
+    /// <inheritdoc />
+    protected override void OnPreviewMouseLeftButtonUp(MouseButtonEventArgs e)
+    {
+        base.OnPreviewMouseLeftButtonUp(e);
+        if (!_selecting)
+        {
+            return;
+        }
+        EndSelection();
+        if (IsMouseCaptured)
+        {
+            ReleaseMouseCapture();
+        }
+        e.Handled = true;
     }
 
     /// <inheritdoc />
@@ -283,6 +362,27 @@ public class TerminalControl : FrameworkElement
     private bool DispatchKeyCore(Key key, ModifierKeys wpfModifiers)
     {
         var modifiers = MapModifiers(wpfModifiers);
+
+        // Clipboard shortcuts intercept the key before any byte emission.
+        // Ctrl+C copies when there is a selection, otherwise falls through
+        // to the encoder so the shell still receives SIGINT (0x03).
+        // Ctrl+V always pastes from the clipboard.
+        if (modifiers == TerminalKeyModifiers.Control)
+        {
+            if (key == Key.C && _selection is not null && !_selection.IsEmpty)
+            {
+                CopyToClipboard();
+                ClearSelection();
+                return true;
+            }
+            if (key == Key.V)
+            {
+                PasteFromClipboard();
+                ClearSelection();
+                return true;
+            }
+        }
+
         var tkey = MapKey(key);
         if (tkey != TerminalKey.None)
         {
@@ -290,6 +390,7 @@ public class TerminalControl : FrameworkElement
             if (bytes is not null && bytes.Length > 0)
             {
                 EmitInput(bytes);
+                ClearSelection();
                 if (tkey is TerminalKey.Enter or TerminalKey.Tab or TerminalKey.Backspace or TerminalKey.Escape)
                 {
                     _suppressNextTextInput = true;
@@ -333,6 +434,7 @@ public class TerminalControl : FrameworkElement
             return false;
         }
         EmitInput(bytes2);
+        ClearSelection();
         _suppressNextTextInput = true;
         return true;
     }
@@ -358,7 +460,143 @@ public class TerminalControl : FrameworkElement
             return false;
         }
         EmitInput(bytes);
+        ClearSelection();
         return true;
+    }
+
+
+    /// <summary>
+    /// Begin a fresh selection anchored at the given 1-based cell. The
+    /// focus starts equal to the anchor (empty selection).
+    /// </summary>
+    public void BeginSelection(int row, int column)
+    {
+        var buffer = Buffer;
+        if (buffer is null)
+        {
+            return;
+        }
+        row = Math.Clamp(row, 1, buffer.Rows);
+        column = Math.Clamp(column, 1, buffer.Columns);
+        _selecting = true;
+        SetSelection(new TerminalSelection(row, column, row, column));
+    }
+
+    /// <summary>Update the focus end of an in-progress selection.</summary>
+    public void UpdateSelection(int row, int column)
+    {
+        if (_selection is null)
+        {
+            return;
+        }
+        var buffer = Buffer;
+        if (buffer is null)
+        {
+            return;
+        }
+        row = Math.Clamp(row, 1, buffer.Rows);
+        column = Math.Clamp(column, 1, buffer.Columns);
+        SetSelection(_selection with { FocusRow = row, FocusColumn = column });
+    }
+
+    /// <summary>Finalize the selection (mouse-up). Keeps the selection visible.</summary>
+    public void EndSelection() => _selecting = false;
+
+    /// <summary>Clear any active selection.</summary>
+    public void ClearSelection()
+    {
+        _selecting = false;
+        if (_selection is null)
+        {
+            return;
+        }
+        SetSelection(null);
+    }
+
+    /// <summary>Return the text spanned by <see cref="Selection"/>, or empty when there is none.</summary>
+    public string GetSelectedText()
+    {
+        var sel = _selection;
+        var buffer = Buffer;
+        if (sel is null || sel.IsEmpty || buffer is null)
+        {
+            return string.Empty;
+        }
+        return SelectionTextExtractor.Extract(buffer, sel);
+    }
+
+    /// <summary>
+    /// Copy <see cref="GetSelectedText"/> to <see cref="Clipboard"/>. No-op
+    /// when the selection is empty.
+    /// </summary>
+    public void CopyToClipboard()
+    {
+        var text = GetSelectedText();
+        if (text.Length == 0)
+        {
+            return;
+        }
+        _clipboard.SetText(text);
+    }
+
+    /// <summary>Read text from <see cref="Clipboard"/> and feed it through <see cref="Paste"/>.</summary>
+    public void PasteFromClipboard()
+    {
+        var text = _clipboard.GetText();
+        if (string.IsNullOrEmpty(text))
+        {
+            return;
+        }
+        Paste(text);
+    }
+
+    /// <summary>Test hook: drive a "mouse down at cell" event without WPF mouse plumbing.</summary>
+    internal void DispatchMouseDownForTest(int row, int column)
+    {
+        BeginSelection(row, column);
+    }
+
+    /// <summary>Test hook: drive a "mouse drag to cell" event.</summary>
+    internal void DispatchMouseDragForTest(int row, int column)
+    {
+        UpdateSelection(row, column);
+    }
+
+    /// <summary>Test hook: drive a "mouse up" event.</summary>
+    internal void DispatchMouseUpForTest() => EndSelection();
+
+    /// <summary>Selection visual exposed for test inspection.</summary>
+    internal DrawingVisual SelectionVisual => _selectionVisual;
+
+    private void SetSelection(TerminalSelection? selection)
+    {
+        if (Equals(_selection, selection))
+        {
+            return;
+        }
+        _selection = selection;
+        UpdateSelectionVisual();
+        SelectionChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    private (int Row, int Column)? HitTestCell(Point position)
+    {
+        var buffer = Buffer;
+        if (buffer is null)
+        {
+            return null;
+        }
+        EnsureMetrics();
+        var metrics = _metrics!;
+        if (metrics.CellWidth <= 0 || metrics.CellHeight <= 0)
+        {
+            return null;
+        }
+        var col = (int)Math.Floor(position.X / metrics.CellWidth) + 1;
+        var row = (int)Math.Floor(position.Y / metrics.CellHeight) + 1;
+        col = Math.Clamp(col, 1, buffer.Columns);
+        row = Math.Clamp(row, 1, buffer.Rows);
+        return (row, col);
     }
 
 
@@ -616,6 +854,7 @@ public class TerminalControl : FrameworkElement
         }
 
         buffer.ClearDirty();
+        UpdateSelectionVisual();
         UpdateCursorVisual();
     }
 
@@ -651,6 +890,7 @@ public class TerminalControl : FrameworkElement
         }
 
         buffer.ClearDirty();
+        UpdateSelectionVisual();
         UpdateCursorVisual();
     }
 
@@ -659,6 +899,10 @@ public class TerminalControl : FrameworkElement
         _children.Clear();
         _rowVisuals.Clear();
         _renderedRows = 0;
+        using (_selectionVisual.RenderOpen())
+        {
+            // Drop any cached selection overlay.
+        }
         using (_cursorVisual.RenderOpen())
         {
             // Drop any cached cursor content.
@@ -667,16 +911,23 @@ public class TerminalControl : FrameworkElement
 
     private void SyncVisualCount(int rows)
     {
-        if (rows == _renderedRows && _children.Contains(_cursorVisual))
+        if (rows == _renderedRows
+            && _children.Contains(_selectionVisual)
+            && _children.Contains(_cursorVisual))
         {
             return;
         }
 
-        // Detach the cursor while we rebuild row visuals; re-attach last
-        // so it stays the top-most child.
+        // Detach the overlays while we rebuild row visuals; re-attach in
+        // z-order: rows, then selection (over rows), then cursor (over
+        // selection).
         if (_children.Contains(_cursorVisual))
         {
             _children.Remove(_cursorVisual);
+        }
+        if (_children.Contains(_selectionVisual))
+        {
+            _children.Remove(_selectionVisual);
         }
 
         while (_rowVisuals.Count < rows)
@@ -693,8 +944,41 @@ public class TerminalControl : FrameworkElement
             _rowVisuals.RemoveAt(idx);
         }
 
+        _children.Add(_selectionVisual);
         _children.Add(_cursorVisual);
         _renderedRows = rows;
+    }
+
+    private void UpdateSelectionVisual()
+    {
+        var buffer = Buffer;
+        using var dc = _selectionVisual.RenderOpen();
+
+        var sel = _selection;
+        if (sel is null || sel.IsEmpty || buffer is null || _metrics is null)
+        {
+            return;
+        }
+
+        var metrics = _metrics;
+        var norm = sel.Normalize();
+        var startRow = Math.Clamp(norm.AnchorRow, 1, buffer.Rows);
+        var endRow = Math.Clamp(norm.FocusRow, 1, buffer.Rows);
+        var startCol = Math.Clamp(norm.AnchorColumn, 1, buffer.Columns);
+        var endCol = Math.Clamp(norm.FocusColumn, 1, buffer.Columns);
+
+        var brush = new SolidColorBrush(SelectionBrush);
+        brush.Freeze();
+
+        for (var row = startRow; row <= endRow; row++)
+        {
+            var first = row == startRow ? startCol : 1;
+            var last = row == endRow ? endCol : buffer.Columns;
+            var x = (first - 1) * metrics.CellWidth;
+            var y = (row - 1) * metrics.CellHeight;
+            var width = (last - first + 1) * metrics.CellWidth;
+            dc.DrawRectangle(brush, null, new Rect(x, y, width, metrics.CellHeight));
+        }
     }
 
     private void UpdateCursorVisual()
