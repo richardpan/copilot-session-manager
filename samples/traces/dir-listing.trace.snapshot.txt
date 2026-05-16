@@ -1,0 +1,55 @@
+# CapturePtyTrace conformance snapshot v1
+trace: dir-listing.trace.bin
+geometry: 100x30
+events: 472
+alt-screen: false
+cursor: row=13 col=1
+cursor-visible: true
+scrollback-lines: 0
+title: "C:\\Windows\\SYSTEM32\\cmd.exe"
+
+event-counts:
+  CarriageReturn=8
+  EraseInDisplay=1
+  LineFeed=8
+  PrintRune=442
+  SetCursorPosition=3
+  SetCursorVisibility=4
+  SetGraphicsRendition=1
+  SetMode=4
+  SetWindowTitle=1
+
+viewport:
+  001: | Volume in drive C is Local Disk|
+  002: | Volume Serial Number is DAE5-734A|
+  003: ||
+  004: | Directory of C:\Windows\System32\drivers\etc|
+  005: ||
+  006: |04/01/2024  01:44 AM               824 hosts|
+  007: |04/01/2024  01:44 AM             3,683 lmhosts.sam|
+  008: |04/01/2024  01:44 AM               407 networks|
+  009: |04/01/2024  01:44 AM             1,358 protocol|
+  010: |04/01/2024  01:44 AM            17,635 services|
+  011: |               5 File(s)         23,907 bytes|
+  012: |               0 Dir(s)  774,790,422,528 bytes free|
+  013: ||
+  014: ||
+  015: ||
+  016: ||
+  017: ||
+  018: ||
+  019: ||
+  020: ||
+  021: ||
+  022: ||
+  023: ||
+  024: ||
+  025: ||
+  026: ||
+  027: ||
+  028: ||
+  029: ||
+  030: ||
+
+styled-spans:
+  (none - every cell is default style)

@@ -9,11 +9,13 @@ will and will not render. It is derived from real traces captured with
 [`docs/guides/capture-pty-trace.md`](guides/capture-pty-trace.md) for how
 to add a new trace).
 
-Phase reference: this matrix tracks the state at the close of Phase 2C
-(parser + screen buffer + capture utility). Phase 2D ships the
-conformance harness that will replay each captured trace under
-`samples/traces/` and snapshot-diff the resulting screen state against
-this vocabulary.
+Phase reference: this matrix tracks the state at the close of Phase 2D
+(parser + screen buffer + capture utility + conformance harness). Each
+trace catalogued at the bottom of this document is replayed against
+`ScreenBuffer` by `tests/CopilotSessionManager.Terminal.Tests/Conformance/`
+and snapshot-diffed; any deliberate change to parser or buffer
+behavior surfaces as a textual diff to the committed
+`*.snapshot.txt` files.
 
 ---
 
@@ -147,13 +149,13 @@ omissions. Tracked here so Phase 3 / Phase 4 don't surprise us.
 
 ## Captured traces
 
-The following traces are committed under `samples/traces/` for
-Phase 2D's conformance harness to replay against:
+The following traces are committed under `samples/traces/` and replayed
+by the Phase 2D conformance harness (`TraceConformanceTests`):
 
-| File | Captured from | What it exercises |
-|---|---|---|
-| `pwsh-color.trace.bin` | `pwsh -Command "Write-Host -Foreground Green/Red/Yellow ..."` | SGR foreground (palette 9/10/11), CR/LF, OSC title set. |
-| `dir-listing.trace.bin` | `cmd /c dir /a-d C:\Windows\System32\drivers\etc` | Plain-text wrapping, CR/LF, OSC title set, no SGR. |
+| File | Captured from | What it exercises | Snapshot |
+|---|---|---|---|
+| `pwsh-color.trace.bin` | `pwsh -Command "Write-Host -Foreground Green/Red/Yellow ..."` | SGR foreground (palette 9/10/11), CR/LF, OSC title set. | `pwsh-color.trace.snapshot.txt` |
+| `dir-listing.trace.bin` | `cmd /c dir /a-d C:\Windows\System32\drivers\etc` | Plain-text wrapping, CR/LF, OSC title set, no SGR. | `dir-listing.trace.snapshot.txt` |
 
 To add a new trace:
 
@@ -164,5 +166,19 @@ To add a new trace:
     -- <command line>
 ```
 
+The first test run after adding a new trace will write the initial
+`*.snapshot.txt` and fail with a message telling you to inspect it.
+Commit both the `.trace.bin` / `.trace.json` and the snapshot, and the
+harness will lock them in.
+
+To regenerate snapshots after a deliberate parser / buffer change:
+
+```pwsh
+$env:CSM_REGEN_SNAPSHOTS = "1"
+dotnet test tests\CopilotSessionManager.Terminal.Tests --filter "FullyQualifiedName~TraceConformance"
+Remove-Item Env:\CSM_REGEN_SNAPSHOTS
+git diff samples/traces/
+```
+
 See [`docs/guides/capture-pty-trace.md`](guides/capture-pty-trace.md)
-for usage details and gotchas.
+for capture usage details and gotchas.
