@@ -156,6 +156,12 @@ public sealed partial class MainWindowViewModel : ObservableObject
         _cliVersionProbe = cliVersionProbe;
         _logger = logger;
         OutdatedCliBanner = new OutdatedCliBannerViewModel(_cliAvailability);
+        // V1.4 (#159): optional embedded tabs surface resolved from DI.
+        // Tests build MainWindowViewModel without a provider that has
+        // TerminalTabsViewModel registered, so the optional resolve
+        // keeps them green.
+        TerminalTabs = serviceProvider.GetService(typeof(ViewModels.Terminal.TerminalTabsViewModel))
+            as ViewModels.Terminal.TerminalTabsViewModel;
 
         _isVerboseLogging = _levelSwitch.IsVerbose;
 
@@ -171,6 +177,15 @@ public sealed partial class MainWindowViewModel : ObservableObject
     public SessionsViewModel Sessions { get; }
 
     public OutdatedCliBannerViewModel OutdatedCliBanner { get; }
+
+    /// <summary>
+    /// V1.4 (#159) embedded tabbed-terminal surface bound by
+    /// <c>MainWindow.xaml</c>'s docked <c>TerminalTabsView</c>. Null when
+    /// the host's <see cref="IServiceProvider"/> does not register the
+    /// tabs view-model (unit-test fixtures), in which case the XAML
+    /// hides the pane.
+    /// </summary>
+    public ViewModels.Terminal.TerminalTabsViewModel? TerminalTabs { get; }
 
     /// <summary>Opens the first-run onboarding window modally so the user can
     /// re-run the welcome flow at any time. Bound to the Help → Onboarding…
