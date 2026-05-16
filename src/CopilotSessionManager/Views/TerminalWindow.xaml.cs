@@ -57,7 +57,7 @@ public partial class TerminalWindow : Window
         }
     }
 
-    private void OnInputProduced(object? sender, Terminal.Wpf.TerminalInputEventArgs e)
+    private void OnInputProduced(object? sender, CopilotSessionManager.Terminal.Wpf.TerminalInputEventArgs e)
     {
         try
         {

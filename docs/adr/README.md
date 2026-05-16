@@ -43,3 +43,6 @@ straightforward features that fit existing patterns).
 | 0003 | [Versioned adapter layer for Copilot CLI compatibility](0003-versioned-cli-adapter.md) | Accepted |
 | 0004 | [Encrypt app DB at rest with DPAPI](0004-encrypt-app-db-with-dpapi.md) | Accepted |
 | 0005 | [Settings schema versioning and migration](0005-settings-schema-migration.md) | Accepted |
+| 0006 | [Hand-rolled VT parser for embedded terminal](0006-vt-parser-choice.md) | Accepted |
+| 0007 | [WPF terminal rendering strategy](0007-wpf-terminal-rendering.md) | Accepted |
+| 0008 | [Tabbed multi-session terminal view](0008-tabbed-terminal-view.md) | Accepted |
