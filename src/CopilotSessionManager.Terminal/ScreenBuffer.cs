@@ -161,6 +161,24 @@ public sealed class ScreenBuffer
         Array.Clear(_dirtyRows);
     }
 
+    /// <summary>
+    /// Raised after a mutation (<see cref="Apply(VtEvent)"/>,
+    /// <see cref="Resize(int, int)"/>, <see cref="Reset"/>) has touched the
+    /// buffer. Subscribers should consult <see cref="DirtyRows"/> /
+    /// <see cref="HasDirtyRows"/> to determine what to repaint, then call
+    /// <see cref="ClearDirty"/>. Phase 3B of epic #93.
+    /// </summary>
+    /// <remarks>
+    /// The event fires synchronously on the thread that performed the
+    /// mutation. Subscribers that touch UI state must marshal to their
+    /// dispatcher; the buffer itself remains thread-affine to its writer.
+    /// Cursor moves, alternate-screen swaps, title changes, and any other
+    /// state visible to a renderer also raise this event even when no row
+    /// is marked dirty — renderers may need to repaint the cursor visual
+    /// or react to a title change without any cell content shifting.
+    /// </remarks>
+    public event EventHandler? ViewportInvalidated;
+
     /// <summary>Apply a sequence of events (convenience for <see cref="Apply(VtEvent)"/>).</summary>
     public void ApplyAll(IEnumerable<VtEvent> events)
     {
@@ -254,6 +272,8 @@ public sealed class ScreenBuffer
             case UnknownSequence:
                 break;
         }
+
+        ViewportInvalidated?.Invoke(this, EventArgs.Empty);
     }
 
     /// <summary>
@@ -284,6 +304,8 @@ public sealed class ScreenBuffer
         _cursorRow0 = Math.Min(_cursorRow0, rows - 1);
         _cursorCol0 = Math.Min(_cursorCol0, columns - 1);
         _pendingWrap = false;
+
+        ViewportInvalidated?.Invoke(this, EventArgs.Empty);
     }
 
     /// <summary>Full terminal reset (RIS / ESC c).</summary>
@@ -305,6 +327,8 @@ public sealed class ScreenBuffer
         _scrollback.Clear();
         for (var i = 0; i < _dirtyRows.Length; i++)
             _dirtyRows[i] = true;
+
+        ViewportInvalidated?.Invoke(this, EventArgs.Empty);
     }
 
     // -- handlers --------------------------------------------------------

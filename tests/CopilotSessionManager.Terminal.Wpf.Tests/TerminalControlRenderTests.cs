@@ -26,7 +26,7 @@ public class TerminalControlRenderTests
     });
 
     [Fact]
-    public void Visual_children_count_equals_buffer_row_count() => StaRunner.Run(() =>
+    public void Visual_children_count_equals_buffer_row_count_plus_cursor() => StaRunner.Run(() =>
     {
         var control = NewControl();
         var buffer = new ScreenBuffer(rows: 12, columns: 40);
@@ -35,7 +35,8 @@ public class TerminalControlRenderTests
 
         ForceRender(control);
 
-        VisualTreeHelper.GetChildrenCount(control).Should().Be(12);
+        // 12 row visuals + 1 cursor visual.
+        VisualTreeHelper.GetChildrenCount(control).Should().Be(13);
     });
 
     [Fact]
@@ -93,7 +94,7 @@ public class TerminalControlRenderTests
         control.Buffer = buffer;
         control.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
         ForceRender(control);
-        VisualTreeHelper.GetChildrenCount(control).Should().Be(5);
+        VisualTreeHelper.GetChildrenCount(control).Should().Be(6); // 5 rows + cursor
 
         control.Buffer = null;
         ForceRender(control);
