@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Windows;
 using System.Windows.Media;
+using System.Windows.Threading;
 using CopilotSessionManager.Terminal;
 
 namespace CopilotSessionManager.Terminal.Wpf;
@@ -10,9 +11,11 @@ namespace CopilotSessionManager.Terminal.Wpf;
 /// Custom-drawn WPF host that renders a <see cref="ScreenBuffer"/> using
 /// one <see cref="DrawingVisual"/> per terminal row, drawn with
 /// <see cref="GlyphRun"/>s built from a cached <see cref="GlyphTypeface"/>.
-/// Phase 3A of epic #93: bare control + full-viewport repaint on any
-/// dependency-property change. Incremental dirty-row rendering arrives in
-/// Phase 3B.
+/// Phase 3B of epic #93: subscribes to
+/// <see cref="ScreenBuffer.ViewportInvalidated"/>, coalesces incremental
+/// repaints onto <see cref="DispatcherPriority.Render"/>, and only re-emits
+/// drawing instructions for rows the buffer flagged dirty. A separate
+/// cursor visual blinks at 500 ms intervals.
 /// </summary>
 /// <remarks>
 /// The control derives from <see cref="FrameworkElement"/> rather than
@@ -27,11 +30,19 @@ public class TerminalControl : FrameworkElement
     /// <summary>The default em-size used until <see cref="FontSize"/> is set.</summary>
     public const double DefaultFontSize = 14.0;
 
+    /// <summary>Cursor blink interval (one full on+off cycle takes twice this).</summary>
+    public static readonly TimeSpan CursorBlinkInterval = TimeSpan.FromMilliseconds(500);
+
     private readonly VisualCollection _children;
     private readonly List<DrawingVisual> _rowVisuals = new();
+    private readonly DrawingVisual _cursorVisual = new();
+    private readonly DispatcherTimer _cursorBlinkTimer;
 
     private CellMetrics? _metrics;
     private int _renderedRows;
+    private bool _renderPending;
+    private bool _cursorBlinkOn = true;
+    private EventHandler? _bufferInvalidationHandler;
 
     /// <summary>Identifies the <see cref="Buffer"/> dependency property.</summary>
     public static readonly DependencyProperty BufferProperty = DependencyProperty.Register(
@@ -41,7 +52,7 @@ public class TerminalControl : FrameworkElement
         new FrameworkPropertyMetadata(
             defaultValue: null,
             FrameworkPropertyMetadataOptions.AffectsMeasure | FrameworkPropertyMetadataOptions.AffectsRender,
-            propertyChangedCallback: OnVisualPropertyChanged));
+            propertyChangedCallback: OnBufferPropertyChanged));
 
     /// <summary>Identifies the <see cref="FontFamily"/> dependency property.</summary>
     public static readonly DependencyProperty FontFamilyProperty = DependencyProperty.Register(
@@ -71,7 +82,7 @@ public class TerminalControl : FrameworkElement
         new FrameworkPropertyMetadata(
             defaultValue: Color.FromRgb(0xE5, 0xE5, 0xE5),
             FrameworkPropertyMetadataOptions.AffectsRender,
-            propertyChangedCallback: OnVisualPropertyChanged));
+            propertyChangedCallback: OnAppearancePropertyChanged));
 
     /// <summary>Identifies the <see cref="Background"/> dependency property.</summary>
     public static readonly DependencyProperty BackgroundProperty = DependencyProperty.Register(
@@ -81,12 +92,17 @@ public class TerminalControl : FrameworkElement
         new FrameworkPropertyMetadata(
             defaultValue: Color.FromRgb(0x12, 0x12, 0x12),
             FrameworkPropertyMetadataOptions.AffectsRender,
-            propertyChangedCallback: OnVisualPropertyChanged));
+            propertyChangedCallback: OnAppearancePropertyChanged));
 
     /// <summary>Construct a control with no buffer attached.</summary>
     public TerminalControl()
     {
         _children = new VisualCollection(this);
+        _cursorBlinkTimer = new DispatcherTimer(DispatcherPriority.Render)
+        {
+            Interval = CursorBlinkInterval,
+        };
+        _cursorBlinkTimer.Tick += OnCursorBlinkTick;
     }
 
     /// <summary>The screen buffer driving the renderer. Null until set.</summary>
@@ -126,12 +142,17 @@ public class TerminalControl : FrameworkElement
 
     /// <summary>
     /// Cell metrics used by the most recent render pass. Null until the
-    /// first render. Exposed for diagnostics and unit tests; not for
-    /// general consumption.
+    /// first render. Exposed for diagnostics and unit tests.
     /// </summary>
     internal CellMetrics? Metrics => _metrics;
 
-    /// <summary>Visual child count; one <see cref="DrawingVisual"/> per rendered terminal row.</summary>
+    /// <summary>True when the cursor visual is currently in its "on" blink phase.</summary>
+    internal bool CursorBlinkOn => _cursorBlinkOn;
+
+    /// <summary>The cursor visual, exposed for test inspection.</summary>
+    internal DrawingVisual CursorVisual => _cursorVisual;
+
+    /// <summary>Visual child count; one <see cref="DrawingVisual"/> per row plus the cursor visual.</summary>
     protected override int VisualChildrenCount => _children.Count;
 
     /// <inheritdoc />
@@ -157,15 +178,63 @@ public class TerminalControl : FrameworkElement
     protected override void OnRender(DrawingContext drawingContext)
     {
         base.OnRender(drawingContext);
-        Repaint();
+
+        // When WPF re-renders (DP change with AffectsRender, initial
+        // layout, or RenderTargetBitmap.Render in tests) we resync the
+        // whole viewport. ViewportInvalidated handles deltas between
+        // these synchronous resync points.
+        FullRepaint();
     }
 
-    private static void OnVisualPropertyChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    /// <summary>
+    /// Run any pending dispatcher-coalesced repaint synchronously. Used
+    /// by tests to assert on rendered state after mutating the buffer
+    /// without having to spin a real WPF message pump.
+    /// </summary>
+    internal void FlushPendingRender()
     {
-        if (d is TerminalControl control)
+        if (!_renderPending)
         {
-            control.Repaint();
+            return;
         }
+        _renderPending = false;
+        IncrementalRepaint();
+    }
+
+    /// <summary>Advance the cursor blink one step. Exposed for unit tests.</summary>
+    internal void AdvanceCursorBlinkForTest()
+    {
+        _cursorBlinkOn = !_cursorBlinkOn;
+        UpdateCursorVisual();
+    }
+
+    private static void OnBufferPropertyChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        if (d is not TerminalControl control)
+        {
+            return;
+        }
+
+        if (e.OldValue is ScreenBuffer oldBuffer && control._bufferInvalidationHandler is not null)
+        {
+            oldBuffer.ViewportInvalidated -= control._bufferInvalidationHandler;
+        }
+
+        control._bufferInvalidationHandler = control.OnBufferViewportInvalidated;
+
+        if (e.NewValue is ScreenBuffer newBuffer)
+        {
+            newBuffer.ViewportInvalidated += control._bufferInvalidationHandler;
+            control._cursorBlinkOn = true;
+            control._cursorBlinkTimer.Start();
+        }
+        else
+        {
+            control._cursorBlinkTimer.Stop();
+        }
+
+        control._renderedRows = 0;
+        control.FullRepaint();
     }
 
     private static void OnMetricsPropertyChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
@@ -174,8 +243,62 @@ public class TerminalControl : FrameworkElement
         {
             control._metrics = null;
             control.InvalidateMeasure();
-            control.Repaint();
+            control._renderedRows = 0;
+            control.FullRepaint();
         }
+    }
+
+    private static void OnAppearancePropertyChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        if (d is TerminalControl control)
+        {
+            control.FullRepaint();
+        }
+    }
+
+    private void OnBufferViewportInvalidated(object? sender, EventArgs e)
+    {
+        var dispatcher = Dispatcher;
+        if (dispatcher is null)
+        {
+            // No dispatcher means the control was never bound to a UI
+            // thread (test-only scenario). Run inline.
+            IncrementalRepaint();
+            return;
+        }
+
+        if (_renderPending)
+        {
+            return;
+        }
+        _renderPending = true;
+
+        if (dispatcher.CheckAccess())
+        {
+            dispatcher.BeginInvoke(DispatcherPriority.Render, new Action(() =>
+            {
+                _renderPending = false;
+                IncrementalRepaint();
+            }));
+        }
+        else
+        {
+            dispatcher.BeginInvoke(DispatcherPriority.Render, new Action(() =>
+            {
+                _renderPending = false;
+                IncrementalRepaint();
+            }));
+        }
+    }
+
+    private void OnCursorBlinkTick(object? sender, EventArgs e)
+    {
+        if (Buffer is null)
+        {
+            return;
+        }
+        _cursorBlinkOn = !_cursorBlinkOn;
+        UpdateCursorVisual();
     }
 
     private void EnsureMetrics()
@@ -205,7 +328,7 @@ public class TerminalControl : FrameworkElement
         _metrics = new CellMetrics(glyphTypeface, FontSize, pixelsPerDip);
     }
 
-    private void Repaint()
+    private void FullRepaint()
     {
         var buffer = Buffer;
         if (buffer is null || buffer.Rows == 0 || buffer.Columns == 0)
@@ -223,6 +346,44 @@ public class TerminalControl : FrameworkElement
         {
             RenderRow(buffer, metrics, row, _rowVisuals[row - 1]);
         }
+
+        buffer.ClearDirty();
+        UpdateCursorVisual();
+    }
+
+    private void IncrementalRepaint()
+    {
+        var buffer = Buffer;
+        if (buffer is null || buffer.Rows == 0 || buffer.Columns == 0)
+        {
+            ClearVisuals();
+            return;
+        }
+
+        // A geometry change means the dirty-row map is stale — fall back
+        // to a full repaint to keep the visual tree consistent with the
+        // buffer.
+        if (buffer.Rows != _renderedRows)
+        {
+            FullRepaint();
+            return;
+        }
+
+        EnsureMetrics();
+        var metrics = _metrics!;
+        var dirty = buffer.DirtyRows;
+
+        for (var row = 1; row <= buffer.Rows; row++)
+        {
+            if (!dirty[row - 1])
+            {
+                continue;
+            }
+            RenderRow(buffer, metrics, row, _rowVisuals[row - 1]);
+        }
+
+        buffer.ClearDirty();
+        UpdateCursorVisual();
     }
 
     private void ClearVisuals()
@@ -230,13 +391,24 @@ public class TerminalControl : FrameworkElement
         _children.Clear();
         _rowVisuals.Clear();
         _renderedRows = 0;
+        using (_cursorVisual.RenderOpen())
+        {
+            // Drop any cached cursor content.
+        }
     }
 
     private void SyncVisualCount(int rows)
     {
-        if (rows == _renderedRows)
+        if (rows == _renderedRows && _children.Contains(_cursorVisual))
         {
             return;
+        }
+
+        // Detach the cursor while we rebuild row visuals; re-attach last
+        // so it stays the top-most child.
+        if (_children.Contains(_cursorVisual))
+        {
+            _children.Remove(_cursorVisual);
         }
 
         while (_rowVisuals.Count < rows)
@@ -253,7 +425,28 @@ public class TerminalControl : FrameworkElement
             _rowVisuals.RemoveAt(idx);
         }
 
+        _children.Add(_cursorVisual);
         _renderedRows = rows;
+    }
+
+    private void UpdateCursorVisual()
+    {
+        var buffer = Buffer;
+        using var dc = _cursorVisual.RenderOpen();
+
+        if (buffer is null || _metrics is null || !buffer.CursorVisible || !_cursorBlinkOn)
+        {
+            return;
+        }
+
+        var metrics = _metrics;
+        var x = (buffer.CursorColumn - 1) * metrics.CellWidth;
+        var y = (buffer.CursorRow - 1) * metrics.CellHeight;
+        var rect = new Rect(x, y, metrics.CellWidth, metrics.CellHeight);
+
+        var brush = new SolidColorBrush(Foreground);
+        brush.Freeze();
+        dc.DrawRectangle(brush, null, rect);
     }
 
     private void RenderRow(ScreenBuffer buffer, CellMetrics metrics, int row, DrawingVisual visual)
