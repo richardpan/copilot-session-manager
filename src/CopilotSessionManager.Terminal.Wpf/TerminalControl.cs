@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Windows;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
 using CopilotSessionManager.Terminal;
@@ -42,6 +43,7 @@ public class TerminalControl : FrameworkElement
     private int _renderedRows;
     private bool _renderPending;
     private bool _cursorBlinkOn = true;
+    private bool _suppressNextTextInput;
     private EventHandler? _bufferInvalidationHandler;
 
     /// <summary>Identifies the <see cref="Buffer"/> dependency property.</summary>
@@ -103,7 +105,28 @@ public class TerminalControl : FrameworkElement
             Interval = CursorBlinkInterval,
         };
         _cursorBlinkTimer.Tick += OnCursorBlinkTick;
+
+        // The control needs keyboard focus to receive key/text events,
+        // and we suppress the focus rectangle because the cursor visual
+        // is the user's focus affordance.
+        Focusable = true;
+        FocusVisualStyle = null;
     }
+
+    /// <summary>
+    /// Raised on the WPF dispatcher thread whenever the user produces
+    /// bytes — special keys, text input, or <see cref="Paste"/> — that
+    /// should be forwarded to the PTY input stream.
+    /// </summary>
+    public event EventHandler<TerminalInputEventArgs>? InputProduced;
+
+    /// <summary>
+    /// When <c>true</c>, cursor keys, Home and End emit the DECCKM
+    /// "application" sequences (<c>ESC O A</c> etc.) instead of the
+    /// normal-mode CSI sequences. Defaults to <c>false</c>; a future PR
+    /// will wire this to the parser's mode state.
+    /// </summary>
+    public bool UseApplicationCursorKeys { get; set; }
 
     /// <summary>The screen buffer driving the renderer. Null until set.</summary>
     public ScreenBuffer? Buffer
@@ -185,6 +208,251 @@ public class TerminalControl : FrameworkElement
         // these synchronous resync points.
         FullRepaint();
     }
+
+    /// <inheritdoc />
+    protected override void OnPreviewMouseDown(MouseButtonEventArgs e)
+    {
+        base.OnPreviewMouseDown(e);
+        // A click should hand the terminal keyboard focus so the user can
+        // start typing immediately.
+        if (Focusable && !IsKeyboardFocused)
+        {
+            Focus();
+        }
+    }
+
+    /// <inheritdoc />
+    protected override void OnPreviewKeyDown(KeyEventArgs e)
+    {
+        base.OnPreviewKeyDown(e);
+        if (e.Handled)
+        {
+            return;
+        }
+
+        var key = e.Key == Key.System ? e.SystemKey : e.Key;
+        if (DispatchKeyCore(key, Keyboard.Modifiers))
+        {
+            e.Handled = true;
+        }
+    }
+
+    /// <inheritdoc />
+    protected override void OnTextInput(TextCompositionEventArgs e)
+    {
+        base.OnTextInput(e);
+
+        if (DispatchTextInputCore(e.Text, Keyboard.Modifiers))
+        {
+            e.Handled = true;
+        }
+    }
+
+    /// <summary>
+    /// Write <paramref name="text"/> to the PTY input stream, wrapping it
+    /// in bracketed-paste delimiters when the buffer has DEC private mode
+    /// 2004 enabled. Safe to call from any thread that has access to the
+    /// WPF dispatcher; the event is raised inline.
+    /// </summary>
+    public void Paste(string text)
+    {
+        if (string.IsNullOrEmpty(text))
+        {
+            return;
+        }
+        var bracketed = Buffer?.BracketedPasteEnabled ?? false;
+        var bytes = VtKeyEncoder.EncodePaste(text, bracketed);
+        EmitInput(bytes);
+    }
+
+    /// <summary>
+    /// Test hook: invoke the key-dispatch path without going through the
+    /// WPF input pipeline. Returns <c>true</c> when input bytes were
+    /// produced.
+    /// </summary>
+    internal bool DispatchKeyForTest(Key key, ModifierKeys modifiers)
+        => DispatchKeyCore(key, modifiers);
+
+    /// <summary>
+    /// Test hook: invoke the text-input dispatch path without WPF event
+    /// plumbing. Returns <c>true</c> when input bytes were produced.
+    /// </summary>
+    internal bool DispatchTextInputForTest(string text, ModifierKeys modifiers)
+        => DispatchTextInputCore(text, modifiers);
+
+    private bool DispatchKeyCore(Key key, ModifierKeys wpfModifiers)
+    {
+        var modifiers = MapModifiers(wpfModifiers);
+        var tkey = MapKey(key);
+        if (tkey != TerminalKey.None)
+        {
+            var bytes = VtKeyEncoder.Encode(tkey, modifiers, UseApplicationCursorKeys);
+            if (bytes is not null && bytes.Length > 0)
+            {
+                EmitInput(bytes);
+                if (tkey is TerminalKey.Enter or TerminalKey.Tab or TerminalKey.Backspace or TerminalKey.Escape)
+                {
+                    _suppressNextTextInput = true;
+                }
+                return true;
+            }
+        }
+
+        var ctrl = (modifiers & TerminalKeyModifiers.Control) != 0;
+        var alt = (modifiers & TerminalKeyModifiers.Alt) != 0;
+        if (!ctrl && !alt)
+        {
+            return false;
+        }
+
+        var ch = TryGetCharFromKey(key);
+        if (ch is null)
+        {
+            return false;
+        }
+
+        byte[]? bytes2 = null;
+        if (ctrl)
+        {
+            bytes2 = VtKeyEncoder.EncodeControlChar(ch.Value);
+            if (bytes2 is not null && alt)
+            {
+                var prefixed = new byte[bytes2.Length + 1];
+                prefixed[0] = 0x1B;
+                Array.Copy(bytes2, 0, prefixed, 1, bytes2.Length);
+                bytes2 = prefixed;
+            }
+        }
+        else if (alt)
+        {
+            bytes2 = VtKeyEncoder.EncodeText(ch.Value.ToString(), altHeld: true);
+        }
+
+        if (bytes2 is null || bytes2.Length == 0)
+        {
+            return false;
+        }
+        EmitInput(bytes2);
+        _suppressNextTextInput = true;
+        return true;
+    }
+
+    private bool DispatchTextInputCore(string? text, ModifierKeys wpfModifiers)
+    {
+        if (_suppressNextTextInput)
+        {
+            _suppressNextTextInput = false;
+            return true;
+        }
+
+        if (string.IsNullOrEmpty(text))
+        {
+            return false;
+        }
+
+        var modifiers = MapModifiers(wpfModifiers);
+        var altHeld = (modifiers & TerminalKeyModifiers.Alt) != 0;
+        var bytes = VtKeyEncoder.EncodeText(text, altHeld);
+        if (bytes.Length == 0)
+        {
+            return false;
+        }
+        EmitInput(bytes);
+        return true;
+    }
+
+
+    private void EmitInput(byte[] bytes)
+    {
+        if (bytes is null || bytes.Length == 0)
+        {
+            return;
+        }
+        InputProduced?.Invoke(this, new TerminalInputEventArgs(bytes));
+    }
+
+    private static TerminalKeyModifiers MapModifiers(ModifierKeys mods)
+    {
+        var result = TerminalKeyModifiers.None;
+        if ((mods & ModifierKeys.Shift) != 0)
+        {
+            result |= TerminalKeyModifiers.Shift;
+        }
+        if ((mods & ModifierKeys.Alt) != 0)
+        {
+            result |= TerminalKeyModifiers.Alt;
+        }
+        if ((mods & ModifierKeys.Control) != 0)
+        {
+            result |= TerminalKeyModifiers.Control;
+        }
+        return result;
+    }
+
+    private static TerminalKey MapKey(Key key) => key switch
+    {
+        Key.Up => TerminalKey.Up,
+        Key.Down => TerminalKey.Down,
+        Key.Left => TerminalKey.Left,
+        Key.Right => TerminalKey.Right,
+        Key.Home => TerminalKey.Home,
+        Key.End => TerminalKey.End,
+        Key.PageUp => TerminalKey.PageUp,
+        Key.PageDown => TerminalKey.PageDown,
+        Key.Insert => TerminalKey.Insert,
+        Key.Delete => TerminalKey.Delete,
+        Key.Tab => TerminalKey.Tab,
+        Key.Enter => TerminalKey.Enter,
+        Key.Back => TerminalKey.Backspace,
+        Key.Escape => TerminalKey.Escape,
+        Key.F1 => TerminalKey.F1,
+        Key.F2 => TerminalKey.F2,
+        Key.F3 => TerminalKey.F3,
+        Key.F4 => TerminalKey.F4,
+        Key.F5 => TerminalKey.F5,
+        Key.F6 => TerminalKey.F6,
+        Key.F7 => TerminalKey.F7,
+        Key.F8 => TerminalKey.F8,
+        Key.F9 => TerminalKey.F9,
+        Key.F10 => TerminalKey.F10,
+        Key.F11 => TerminalKey.F11,
+        Key.F12 => TerminalKey.F12,
+        _ => TerminalKey.None,
+    };
+
+    private static char? TryGetCharFromKey(Key key)
+    {
+        if (key >= Key.A && key <= Key.Z)
+        {
+            return (char)('a' + (key - Key.A));
+        }
+        if (key >= Key.D0 && key <= Key.D9)
+        {
+            return (char)('0' + (key - Key.D0));
+        }
+        if (key >= Key.NumPad0 && key <= Key.NumPad9)
+        {
+            return (char)('0' + (key - Key.NumPad0));
+        }
+        return key switch
+        {
+            Key.Space => ' ',
+            Key.OemOpenBrackets => '[',
+            Key.OemCloseBrackets => ']',
+            Key.OemBackslash => '\\',
+            Key.Oem5 => '\\',
+            Key.OemMinus => '-',
+            Key.OemPlus => '=',
+            Key.OemSemicolon => ';',
+            Key.OemQuotes => '\'',
+            Key.OemComma => ',',
+            Key.OemPeriod => '.',
+            Key.OemQuestion => '/',
+            Key.OemTilde => '`',
+            _ => null,
+        };
+    }
+
 
     /// <summary>
     /// Run any pending dispatcher-coalesced repaint synchronously. Used
