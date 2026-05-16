@@ -208,6 +208,23 @@ public class TerminalControl : FrameworkElement
     /// </summary>
     internal CellMetrics? Metrics => _metrics;
 
+    /// <summary>
+    /// Convert a pixel viewport size to terminal rows and columns using the
+    /// current cell metrics, clamped to the minimum pseudo-console size.
+    /// </summary>
+    public (int Rows, int Cols) CellsForViewport(Size pixelSize)
+    {
+        var metrics = _metrics;
+        if (metrics is null)
+        {
+            return (2, 2);
+        }
+
+        return (
+            CellsForAxis(pixelSize.Height, metrics.CellHeight),
+            CellsForAxis(pixelSize.Width, metrics.CellWidth));
+    }
+
     /// <summary>True when the cursor visual is currently in its "on" blink phase.</summary>
     internal bool CursorBlinkOn => _cursorBlinkOn;
 
@@ -599,6 +616,15 @@ public class TerminalControl : FrameworkElement
         return (row, col);
     }
 
+    private static int CellsForAxis(double pixels, double cellSize)
+    {
+        if (!double.IsFinite(pixels) || !double.IsFinite(cellSize) || pixels <= 0 || cellSize <= 0)
+        {
+            return 2;
+        }
+
+        return Math.Max(2, (int)Math.Floor(pixels / cellSize));
+    }
 
     private void EmitInput(byte[] bytes)
     {

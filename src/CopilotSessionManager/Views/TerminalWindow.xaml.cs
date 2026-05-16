@@ -16,7 +16,11 @@ namespace CopilotSessionManager.Views;
 public partial class TerminalWindow : Window
 {
     private readonly ILogger<TerminalWindow>? _logger;
+    private readonly DispatcherTimer _resizeDebounceTimer;
     private TerminalSession? _session;
+    private Size _pendingTerminalSize;
+    private int _lastResizeRows;
+    private int _lastResizeCols;
 
     /// <summary>
     /// Initial pseudo-console dimensions. Tuned to fit the default window
@@ -34,6 +38,14 @@ public partial class TerminalWindow : Window
     {
         InitializeComponent();
         _logger = logger;
+        _lastResizeRows = InitialRows;
+        _lastResizeCols = InitialCols;
+        _resizeDebounceTimer = new DispatcherTimer(DispatcherPriority.Background)
+        {
+            Interval = TimeSpan.FromMilliseconds(100),
+        };
+        _resizeDebounceTimer.Tick += OnResizeDebounceTick;
+        Terminal.SizeChanged += OnTerminalSizeChanged;
         Loaded += OnLoaded;
         Closed += OnClosed;
     }
@@ -44,6 +56,8 @@ public partial class TerminalWindow : Window
         {
             var dispatcher = new WpfTerminalDispatcher(Dispatcher);
             _session = TerminalSession.Start("pwsh.exe -NoLogo", InitialRows, InitialCols, dispatcher);
+            _lastResizeRows = InitialRows;
+            _lastResizeCols = InitialCols;
             Terminal.Buffer = _session.Buffer;
             Terminal.InputProduced += OnInputProduced;
             _session.Exited += OnSessionExited;
@@ -69,6 +83,43 @@ public partial class TerminalWindow : Window
         }
     }
 
+    private void OnTerminalSizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        _pendingTerminalSize = e.NewSize;
+        _resizeDebounceTimer.Stop();
+        _resizeDebounceTimer.Start();
+    }
+
+    private void OnResizeDebounceTick(object? sender, EventArgs e)
+    {
+        _resizeDebounceTimer.Stop();
+        var session = _session;
+        if (session is null)
+        {
+            return;
+        }
+
+        var (rows, cols) = Terminal.CellsForViewport(_pendingTerminalSize);
+        rows = Math.Max(2, rows);
+        cols = Math.Max(2, cols);
+        if (rows == _lastResizeRows && cols == _lastResizeCols)
+        {
+            return;
+        }
+
+        try
+        {
+            session.Resize(rows, cols);
+            _lastResizeRows = rows;
+            _lastResizeCols = cols;
+            StatusText.Text = $"pwsh.exe session running ({cols}×{rows}).";
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogWarning(ex, "Failed to resize embedded terminal session.");
+        }
+    }
+
     private void OnSessionExited(object? sender, EventArgs e)
     {
         StatusText.Text = "Session exited.";
@@ -76,6 +127,8 @@ public partial class TerminalWindow : Window
 
     private void OnClosed(object? sender, EventArgs e)
     {
+        _resizeDebounceTimer.Stop();
+        Terminal.SizeChanged -= OnTerminalSizeChanged;
         if (_session is not null)
         {
             Terminal.InputProduced -= OnInputProduced;
