@@ -9,10 +9,26 @@
              d:DataContext="{d:DesignInstance Type=vm:TerminalTabsViewModel}"
              d:DesignHeight="320"
              d:DesignWidth="900"
-             Background="#1E1E1E">
+             Background="#1E1E1E"
+             Focusable="True">
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
     </UserControl.Resources>
+    <!--
+        Phase 6C (#159): Ctrl+Tab / Ctrl+Shift+Tab cycle the active tab.
+        The bindings target the UserControl's DataContext so they fire
+        only while focus lives inside the embedded terminal surface.
+        Standard TabControl Ctrl+Tab handling is suppressed by routing
+        the gesture through these commands.
+    -->
+    <UserControl.InputBindings>
+        <KeyBinding Key="Tab"
+                    Modifiers="Control"
+                    Command="{Binding CycleNextCommand}" />
+        <KeyBinding Key="Tab"
+                    Modifiers="Control+Shift"
+                    Command="{Binding CyclePreviousCommand}" />
+    </UserControl.InputBindings>
     <Grid>
         <!--
             Phase 6A scaffolding (issue #159): a stock TabControl bound to
@@ -21,8 +37,10 @@
             TerminalControl per tab, buffer bound to the tab's
             TerminalSession.Buffer.
 
-            Tab UX polish (close glyph, Ctrl+Tab cycling, middle-click close,
-            double-click new) lands in Phase 6C.
+            Phase 6C polish:
+              * Close glyph (×) on each header bound to CloseTabCommand.
+              * Middle-click on a tab header closes the tab (code-behind).
+              * Ctrl+Tab / Ctrl+Shift+Tab cycle the active tab.
         -->
         <TabControl x:Name="Tabs"
                     ItemsSource="{Binding Tabs}"
@@ -30,6 +48,11 @@
                     Background="#1E1E1E"
                     BorderBrush="#3F3F46"
                     BorderThickness="1">
+            <TabControl.Resources>
+                <Style TargetType="{x:Type TabItem}">
+                    <EventSetter Event="MouseDown" Handler="OnTabItemMouseDown" />
+                </Style>
+            </TabControl.Resources>
             <TabControl.ItemTemplate>
                 <DataTemplate DataType="{x:Type vm:TerminalTabViewModel}">
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
@@ -41,6 +64,49 @@
                         <TextBlock Text="{Binding DisplayName}"
                                    VerticalAlignment="Center"
                                    Foreground="#DCDCDC" />
+                        <Button x:Name="CloseButton"
+                                Margin="8,0,0,0"
+                                Padding="4,0"
+                                MinWidth="18"
+                                Height="16"
+                                VerticalAlignment="Center"
+                                Background="Transparent"
+                                BorderBrush="Transparent"
+                                BorderThickness="0"
+                                Foreground="#9F9F9F"
+                                FontSize="12"
+                                FontWeight="Bold"
+                                Cursor="Hand"
+                                Focusable="False"
+                                Content="&#x2715;"
+                                ToolTip="Close tab (middle-click also works)"
+                                AutomationProperties.Name="Close terminal tab"
+                                Command="{Binding DataContext.CloseTabCommand, RelativeSource={RelativeSource AncestorType={x:Type TabControl}}}"
+                                CommandParameter="{Binding}">
+                            <Button.Style>
+                                <Style TargetType="Button">
+                                    <Setter Property="Template">
+                                        <Setter.Value>
+                                            <ControlTemplate TargetType="Button">
+                                                <Border x:Name="Bd"
+                                                        Background="{TemplateBinding Background}"
+                                                        CornerRadius="2"
+                                                        Padding="{TemplateBinding Padding}">
+                                                    <ContentPresenter HorizontalAlignment="Center"
+                                                                      VerticalAlignment="Center" />
+                                                </Border>
+                                                <ControlTemplate.Triggers>
+                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                        <Setter TargetName="Bd" Property="Background" Value="#5A1D1D" />
+                                                        <Setter Property="Foreground" Value="#FFFFFF" />
+                                                    </Trigger>
+                                                </ControlTemplate.Triggers>
+                                            </ControlTemplate>
+                                        </Setter.Value>
+                                    </Setter>
+                                </Style>
+                            </Button.Style>
+                        </Button>
                     </StackPanel>
                 </DataTemplate>
             </TabControl.ItemTemplate>

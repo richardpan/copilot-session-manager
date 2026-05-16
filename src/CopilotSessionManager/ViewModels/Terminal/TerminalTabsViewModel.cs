@@ -3,6 +3,7 @@ using System.Collections.ObjectModel;
 using System.Linq;
 using System.Windows.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using CopilotSessionManager.Core.Models;
 using CopilotSessionManager.Terminal.Hosting;
 
@@ -148,6 +149,55 @@ public sealed partial class TerminalTabsViewModel : ObservableObject, IDisposabl
         {
             Close(tab);
         }
+    }
+
+    /// <summary>
+    /// Phase 6C (#159): close glyph / middle-click / external callers
+    /// share this command. Tolerates a null parameter (no-op) so the
+    /// XAML <c>CommandParameter</c> binding can fail gracefully during
+    /// teardown without throwing.
+    /// </summary>
+    [RelayCommand]
+    private void CloseTab(TerminalTabViewModel? tab)
+    {
+        if (tab is null)
+        {
+            return;
+        }
+        Close(tab);
+    }
+
+    /// <summary>
+    /// Phase 6C (#159): Ctrl+Tab cycles forward through the open tabs
+    /// (wraps from the last tab back to the first). No-op when fewer
+    /// than two tabs are open so the keybinding doesn't spuriously
+    /// flicker the active tab.
+    /// </summary>
+    [RelayCommand]
+    private void CycleNext()
+    {
+        if (Tabs.Count < 2)
+        {
+            return;
+        }
+        var index = ActiveTab is null ? -1 : Tabs.IndexOf(ActiveTab);
+        ActiveTab = Tabs[(index + 1 + Tabs.Count) % Tabs.Count];
+    }
+
+    /// <summary>
+    /// Phase 6C (#159): Ctrl+Shift+Tab cycles backwards through the
+    /// open tabs (wraps from the first tab to the last). No-op when
+    /// fewer than two tabs are open.
+    /// </summary>
+    [RelayCommand]
+    private void CyclePrevious()
+    {
+        if (Tabs.Count < 2)
+        {
+            return;
+        }
+        var index = ActiveTab is null ? 0 : Tabs.IndexOf(ActiveTab);
+        ActiveTab = Tabs[(index - 1 + Tabs.Count) % Tabs.Count];
     }
 
     /// <inheritdoc />

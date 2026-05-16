@@ -260,6 +260,87 @@ public sealed class TerminalTabsViewModelTests : IDisposable
         }
     }
 
+    // ---- Phase 6C (#159): close glyph + cycle commands ----
+
+    [Fact]
+    public void CloseTabCommand_with_null_parameter_is_a_noop()
+    {
+        var sut = new TerminalTabsViewModel(_factory);
+        var alpha = sut.OpenOrActivate(NewSession("alpha"), "Alpha", Brushes.Red);
+
+        sut.CloseTabCommand.Execute(null);
+
+        sut.Tabs.Should().ContainSingle().Which.Should().BeSameAs(alpha);
+        alpha.IsDisposed.Should().BeFalse();
+    }
+
+    [Fact]
+    public void CloseTabCommand_routes_through_Close_and_disposes_the_tab()
+    {
+        var sut = new TerminalTabsViewModel(_factory);
+        var alpha = sut.OpenOrActivate(NewSession("alpha"), "Alpha", Brushes.Red);
+        var beta = sut.OpenOrActivate(NewSession("beta"), "Beta", Brushes.Blue);
+
+        sut.CloseTabCommand.Execute(alpha);
+
+        sut.Tabs.Should().ContainSingle().Which.Should().BeSameAs(beta);
+        sut.ActiveTab.Should().BeSameAs(beta);
+        alpha.IsDisposed.Should().BeTrue();
+    }
+
+    [Fact]
+    public void CycleNextCommand_advances_active_tab_and_wraps_at_the_end()
+    {
+        var sut = new TerminalTabsViewModel(_factory);
+        var alpha = sut.OpenOrActivate(NewSession("alpha"), "Alpha", Brushes.Red);
+        var beta = sut.OpenOrActivate(NewSession("beta"), "Beta", Brushes.Blue);
+        var gamma = sut.OpenOrActivate(NewSession("gamma"), "Gamma", Brushes.Green);
+        sut.ActiveTab = alpha;
+
+        sut.CycleNextCommand.Execute(null);
+        sut.ActiveTab.Should().BeSameAs(beta);
+
+        sut.CycleNextCommand.Execute(null);
+        sut.ActiveTab.Should().BeSameAs(gamma);
+
+        sut.CycleNextCommand.Execute(null);
+        sut.ActiveTab.Should().BeSameAs(alpha);
+    }
+
+    [Fact]
+    public void CyclePreviousCommand_steps_back_and_wraps_to_the_end()
+    {
+        var sut = new TerminalTabsViewModel(_factory);
+        var alpha = sut.OpenOrActivate(NewSession("alpha"), "Alpha", Brushes.Red);
+        var beta = sut.OpenOrActivate(NewSession("beta"), "Beta", Brushes.Blue);
+        var gamma = sut.OpenOrActivate(NewSession("gamma"), "Gamma", Brushes.Green);
+        sut.ActiveTab = alpha;
+
+        sut.CyclePreviousCommand.Execute(null);
+        sut.ActiveTab.Should().BeSameAs(gamma);
+
+        sut.CyclePreviousCommand.Execute(null);
+        sut.ActiveTab.Should().BeSameAs(beta);
+    }
+
+    [Fact]
+    public void Cycle_commands_are_noops_with_fewer_than_two_tabs()
+    {
+        var sut = new TerminalTabsViewModel(_factory);
+
+        // Empty strip.
+        sut.CycleNextCommand.Execute(null);
+        sut.CyclePreviousCommand.Execute(null);
+        sut.ActiveTab.Should().BeNull();
+
+        // Single tab.
+        var alpha = sut.OpenOrActivate(NewSession("alpha"), "Alpha", Brushes.Red);
+        sut.CycleNextCommand.Execute(null);
+        sut.ActiveTab.Should().BeSameAs(alpha);
+        sut.CyclePreviousCommand.Execute(null);
+        sut.ActiveTab.Should().BeSameAs(alpha);
+    }
+
     private static Session NewSession(string id) => new(
         Id: id,
         Cwd: @"C:\\ws\\fake",
