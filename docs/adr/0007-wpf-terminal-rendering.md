@@ -1,6 +1,6 @@
 # ADR-0007 — WPF terminal rendering strategy
 
-**Status:** Draft (2026-05-15).
+**Status:** Accepted (2026-05-15).
 **Context:** Phase 3 of epic [#93](https://github.com/richardpan/copilot-session-manager/issues/93) (ConPTY embedded terminal). Builds on [ADR-0001](./0001-conpty-for-embedded-terminal.md) (ConPTY), [ADR-0006](./0006-vt-parser-choice.md) (hand-rolled VT parser), and Phase 2 ([#164](https://github.com/richardpan/copilot-session-manager/issues/164), shipped through PRs #165–#168).
 
 Phases 1 and 2 produced everything *below* the renderer: a ConPTY host (`CopilotSessionManager.Native`), a VT100 parser (`VtParser`), a typed event stream (`VtEvent`), a screen-buffer model with dirty-row tracking (`ScreenBuffer`), and a deterministic conformance harness that replays captured byte streams against committed snapshots. Phase 3 puts a WPF `Control` on top of that pipeline.
