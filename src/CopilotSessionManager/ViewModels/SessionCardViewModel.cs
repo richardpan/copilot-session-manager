@@ -59,6 +59,7 @@ public sealed partial class SessionCardViewModel : ObservableObject
     private readonly IWrapUpStateStore? _wrapUpStateStore;
     private readonly IClipboardService? _clipboardService;
     private readonly AppSettings? _appSettings;
+    private readonly Action<SessionCardViewModel>? _openEmbeddedTerminal;
     private DateTimeOffset? _wrapUpRequestedAt;
 
     /// <summary>
@@ -311,11 +312,10 @@ public sealed partial class SessionCardViewModel : ObservableObject
     }
 
     /// <summary>
-    /// V1.3 (#149) canonical constructor adding the optional
-    /// <see cref="IWrapUpStateStore"/> + <see cref="IClipboardService"/>
-    /// + <see cref="AppSettings"/> trio that powers the "📝 Wrap up"
-    /// launcher button. All three are nullable so older call sites /
-    /// tests compile unchanged via the chained ctor above.
+    /// V1.3 (#149) ctor: chains into the V1.4 (#159) canonical with
+    /// <c>openEmbeddedTerminal: null</c> so cards built without the
+    /// embedded-tab callback fall through to the legacy external-PowerShell
+    /// path (same behaviour as pre-#159).
     /// </summary>
     public SessionCardViewModel(
         Session model,
@@ -343,6 +343,55 @@ public sealed partial class SessionCardViewModel : ObservableObject
         IWrapUpStateStore? wrapUpStateStore,
         IClipboardService? clipboardService,
         AppSettings? appSettings)
+        : this(model, label, timeProvider, modelCatalog, costCalculator,
+            fileLauncher, lockCleanup, sessionLauncher, logger,
+            openMergeWizard, issueLinks,
+            runningSessions, windowActivator, displayNameStore, displayNameOverride,
+            deletionService, confirmDelete,
+            starStore, isStarred,
+            onDeleted, docFreshness, readmeService,
+            wrapUpStateStore, clipboardService, appSettings,
+            openEmbeddedTerminal: null)
+    {
+    }
+
+    /// <summary>
+    /// V1.4 (#159) canonical constructor. Adds the optional
+    /// <paramref name="openEmbeddedTerminal"/> callback the host wires to
+    /// route <see cref="OpenCommand"/> into the in-app tabbed terminal
+    /// view instead of spawning an external PowerShell window. Nullable
+    /// so older call sites (and tests) keep compiling via the V1.3 chain
+    /// above; when null, <see cref="OpenCommand"/> falls back to the
+    /// legacy launcher path (same behaviour as
+    /// <see cref="OpenInExternalCommand"/>).
+    /// </summary>
+    public SessionCardViewModel(
+        Session model,
+        SessionType label,
+        TimeProvider timeProvider,
+        IModelCatalog? modelCatalog,
+        IModelCostCalculator? costCalculator,
+        IFileLauncher? fileLauncher,
+        ISessionLockCleanup? lockCleanup,
+        ISessionLauncher? sessionLauncher,
+        ILogger? logger,
+        Action<SessionCardViewModel>? openMergeWizard,
+        IssueLinksViewModel? issueLinks,
+        IRunningSessionRegistry? runningSessions,
+        IWindowActivator? windowActivator,
+        ISessionDisplayNameStore? displayNameStore,
+        string? displayNameOverride,
+        ISessionDeletionService? deletionService,
+        Func<SessionDeletionPrompt, bool>? confirmDelete,
+        ISessionStarStore? starStore,
+        bool isStarred,
+        Func<string, Task>? onDeleted,
+        IDocFreshnessService? docFreshness,
+        ISessionReadmeService? readmeService,
+        IWrapUpStateStore? wrapUpStateStore,
+        IClipboardService? clipboardService,
+        AppSettings? appSettings,
+        Action<SessionCardViewModel>? openEmbeddedTerminal)
     {
         ArgumentNullException.ThrowIfNull(model);
         ArgumentNullException.ThrowIfNull(timeProvider);
@@ -372,11 +421,13 @@ public sealed partial class SessionCardViewModel : ObservableObject
         _wrapUpStateStore = wrapUpStateStore;
         _clipboardService = clipboardService;
         _appSettings = appSettings;
+        _openEmbeddedTerminal = openEmbeddedTerminal;
 
         OpenUrlCommand = new AsyncRelayCommand<string?>(OpenUrlAsync, CanOpenUrl);
         CleanupStaleLocksCommand = new AsyncRelayCommand(CleanupStaleLocksAsync, CanCleanupStaleLocks);
         ResumeCommand = new AsyncRelayCommand(ResumeAsync, CanResume);
         OpenCommand = new AsyncRelayCommand(OpenAsync, CanOpen);
+        OpenInExternalCommand = new AsyncRelayCommand(OpenInExternalAsync, CanOpenInExternal);
         BeginRenameCommand = new RelayCommand(BeginRename, CanRename);
         CommitRenameCommand = new AsyncRelayCommand(CommitRenameAsync, () => _isEditingTitle);
         CancelRenameCommand = new RelayCommand(CancelRename, () => _isEditingTitle);
@@ -929,12 +980,24 @@ public sealed partial class SessionCardViewModel : ObservableObject
     public IAsyncRelayCommand ResumeCommand { get; }
 
     /// <summary>
-    /// Always-visible launch action (#104): activates an existing tracked
-    /// PowerShell window for this session if one is alive, otherwise spawns
-    /// a new one via <see cref="ISessionLauncher"/>. Disabled in unit tests
-    /// that don't wire a launcher.
+    /// Default launch action. Pre-#159 this was always the
+    /// external-PowerShell flow; with V1.4 (#159), when the host wires
+    /// <c>SessionsViewModel.SetOpenEmbeddedTerminalCallback</c> the
+    /// command instead routes into the in-app tabbed terminal view.
+    /// When neither callback nor launcher is wired the command is
+    /// disabled (unit-test fixtures).
     /// </summary>
     public IAsyncRelayCommand OpenCommand { get; private set; } = new AsyncRelayCommand(static () => Task.CompletedTask, static () => false);
+
+    /// <summary>
+    /// V1.4 (#159) secondary affordance: bypass the embedded tab view
+    /// and use the V1.1 reuse-or-spawn external PowerShell flow.
+    /// Bound from the row context menu "Open in external PowerShell"
+    /// entry. Always enabled when an <see cref="ISessionLauncher"/> is
+    /// wired, regardless of whether the embedded callback is also
+    /// available.
+    /// </summary>
+    public IAsyncRelayCommand OpenInExternalCommand { get; private set; } = new AsyncRelayCommand(static () => Task.CompletedTask, static () => false);
 
     /// <summary>
     /// Begins inline editing of the card title (#105). No-op when no
@@ -1082,15 +1145,51 @@ public sealed partial class SessionCardViewModel : ObservableObject
         }
     }
 
-    private bool CanOpen() => _sessionLauncher is not null;
+    private bool CanOpen() => _openEmbeddedTerminal is not null || _sessionLauncher is not null;
 
     /// <summary>
-    /// V1.1 launch flow (#104): if a previous launch's PID is still alive
-    /// and has a top-level window, bring that window forward. Otherwise
-    /// spawn a fresh <c>pwsh.exe</c> via the existing launcher and remember
-    /// its PID for next time.
+    /// V1.4 (#159): the default "Open" action now routes through the
+    /// in-app tabbed terminal view when the host has wired
+    /// <c>SessionsViewModel.SetOpenEmbeddedTerminalCallback</c>. If the
+    /// callback isn't wired (older hosts, tests, or the embedded path is
+    /// unavailable), falls back to the V1.1 reuse-or-spawn external
+    /// PowerShell flow that <see cref="OpenInExternalAsync"/> implements.
     /// </summary>
     private async Task OpenAsync()
+    {
+        if (_openEmbeddedTerminal is not null)
+        {
+            try
+            {
+                _openEmbeddedTerminal(this);
+                LastActionMessage = "Opened embedded terminal tab.";
+                // Mirror the V1.3 (#146) README freshness behaviour from
+                // the legacy path so opening either flavour of terminal
+                // bumps the per-session docs.
+                FireForgetReadmeRefresh(forceBypassThrottle: true);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to open embedded terminal for {SessionId}.", _model.Id);
+                LastActionMessage = $"Open failed: {ex.Message}";
+            }
+            return;
+        }
+
+        await OpenInExternalAsync().ConfigureAwait(true);
+    }
+
+    private bool CanOpenInExternal() => _sessionLauncher is not null;
+
+    /// <summary>
+    /// V1.4 (#159): secondary affordance that always uses the legacy
+    /// external-PowerShell launcher (reuse existing window via tracked
+    /// PID where possible). Pre-#159 this logic was the body of
+    /// <c>OpenAsync</c>; it's preserved verbatim so the right-click
+    /// "Open in external PowerShell" entry behaves exactly like the old
+    /// default click did.
+    /// </summary>
+    private async Task OpenInExternalAsync()
     {
         if (_sessionLauncher is null)
         {

@@ -44,6 +44,7 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
     private readonly ILoggerFactory? _loggerFactory;
     private readonly ILogger<SessionsViewModel> _logger;
     private Action<SessionCardViewModel>? _openMergeWizard;
+    private Action<SessionCardViewModel>? _openEmbeddedTerminal;
 
     #region IssueLinks
     private readonly IGitHubIssuesClient? _issuesClient;
@@ -627,6 +628,39 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
         ApplySnapshot(snapshot, labels, new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase), new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase), new Dictionary<string, DateTimeOffset>(StringComparer.OrdinalIgnoreCase));
     }
 
+    /// <summary>
+    /// V1.4 (#159): wires the callback the WPF host uses to route a
+    /// card's <see cref="SessionCardViewModel.OpenCommand"/> into the
+    /// embedded tabbed terminal view. Set once at startup by
+    /// <see cref="App"/>. Existing cards captured the previous (likely
+    /// null) callback, so when the callback changes from null to
+    /// non-null mid-flight we replay the current session snapshot to
+    /// rebuild every card with the new callback wired — the same
+    /// belt-and-braces approach <see cref="SetMergeWizardLauncher"/>
+    /// uses for the same reason.
+    /// </summary>
+    public void SetOpenEmbeddedTerminalCallback(Action<SessionCardViewModel>? callback)
+    {
+        _openEmbeddedTerminal = callback;
+        if (Sessions.Count == 0)
+        {
+            return;
+        }
+        var snapshot = new List<Session>(Sessions.Count);
+        foreach (var card in Sessions)
+        {
+            snapshot.Add(card.Model);
+        }
+        var labels = new Dictionary<string, SessionType>(StringComparer.OrdinalIgnoreCase);
+        foreach (var card in Sessions)
+        {
+            labels[card.Id] = card.Label;
+        }
+        Sessions.Clear();
+        _byId.Clear();
+        ApplySnapshot(snapshot, labels, new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase), new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase), new Dictionary<string, DateTimeOffset>(StringComparer.OrdinalIgnoreCase));
+    }
+
     public int TotalCount => Sessions.Count;
 
     public int ActiveCount
@@ -1091,7 +1125,8 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
                     readmeService: _readmeService,
                     wrapUpStateStore: _wrapUpStateStore,
                     clipboardService: _clipboardService,
-                    appSettings: _appSettings);
+                    appSettings: _appSettings,
+                    openEmbeddedTerminal: _openEmbeddedTerminal);
                 if (newWrapUps.TryGetValue(session.Id, out var wrapTs))
                 {
                     card.SetWrapUpRequestedAt(wrapTs);

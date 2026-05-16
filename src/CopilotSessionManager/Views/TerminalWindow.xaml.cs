@@ -1,6 +1,7 @@
 using System;
 using System.Windows;
 using System.Windows.Threading;
+using CopilotSessionManager.Services;
 using CopilotSessionManager.Terminal;
 using CopilotSessionManager.Terminal.Hosting;
 using Microsoft.Extensions.Logging;
@@ -143,33 +144,5 @@ public partial class TerminalWindow : Window
             }
             _session = null;
         }
-    }
-}
-
-/// <summary>
-/// WPF <see cref="Dispatcher"/>-backed implementation of
-/// <see cref="ITerminalDispatcher"/>. Lives here (rather than in the
-/// Hosting library) so the library can stay WPF-free and unit-testable.
-/// </summary>
-internal sealed class WpfTerminalDispatcher : ITerminalDispatcher
-{
-    private readonly Dispatcher _dispatcher;
-
-    public WpfTerminalDispatcher(Dispatcher dispatcher)
-    {
-        _dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
-    }
-
-    public void Post(Action action)
-    {
-        ArgumentNullException.ThrowIfNull(action);
-
-        if (_dispatcher.CheckAccess())
-        {
-            action();
-            return;
-        }
-
-        _dispatcher.BeginInvoke(action);
     }
 }

@@ -150,6 +150,14 @@ public partial class App : Application
                 // generated SESSION-DOCS.html.
                 var docsService = _host.Services.GetService<CopilotSessionManager.Core.Sessions.ISessionDocsService>();
                 sessionsForMerge.SetDocsService(docsService);
+
+                // V1.4 (#159): route SessionCardViewModel.OpenCommand into
+                // the in-app tabbed terminal view. The card supplies its
+                // own display-name override + tier accent so the tab
+                // header matches the dashboard row visually.
+                var tabsVm = _host.Services.GetRequiredService<ViewModels.Terminal.TerminalTabsViewModel>();
+                sessionsForMerge.SetOpenEmbeddedTerminalCallback(card =>
+                    tabsVm.OpenOrActivate(card.Model, card.DisplayName, card.ModelTierBrush));
             }
             catch (Exception mex)
             {
@@ -457,6 +465,16 @@ public partial class App : Application
         services.AddSingleton<SessionsViewModel>();
         services.AddSingleton<MainWindowViewModel>();
         services.AddTransient<OnboardingViewModel>();
+
+        // V1.4 (#159): embedded tabbed terminal view dependencies.
+        // The dispatcher and session factory are app-singletons so every
+        // tab shares the same WPF Dispatcher and pseudo-console wiring.
+        // TerminalTabsViewModel is registered as a singleton because the
+        // MainWindow hosts a single tab strip surface.
+        services.AddSingleton<Terminal.Hosting.ITerminalDispatcher>(
+            _ => new Services.WpfTerminalDispatcher(Current.Dispatcher));
+        services.AddSingleton<ViewModels.Terminal.ITerminalSessionFactory, Services.DefaultTerminalSessionFactory>();
+        services.AddSingleton<ViewModels.Terminal.TerminalTabsViewModel>();
 
         // Issue-link dialog factory (#70). The view-model layer has no
         // reference to Views, so we hand it a callback the WPF host owns.
