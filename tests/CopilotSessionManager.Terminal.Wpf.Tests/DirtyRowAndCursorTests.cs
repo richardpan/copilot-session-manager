@@ -157,7 +157,7 @@ public class DirtyRowAndCursorTests
         control.Buffer = buffer;
         Layout(control);
         ForceRender(control);
-        VisualTreeHelper.GetChildrenCount(control).Should().Be(5);
+        VisualTreeHelper.GetChildrenCount(control).Should().Be(6);
 
         buffer.Resize(7, 12);
         control.FlushPendingRender();
@@ -165,7 +165,7 @@ public class DirtyRowAndCursorTests
         Layout(control);
         ForceRender(control);
 
-        VisualTreeHelper.GetChildrenCount(control).Should().Be(8); // 7 rows + cursor
+        VisualTreeHelper.GetChildrenCount(control).Should().Be(9); // 7 rows + selection + cursor
     });
 
     private static TerminalControl NewControl() => new()
