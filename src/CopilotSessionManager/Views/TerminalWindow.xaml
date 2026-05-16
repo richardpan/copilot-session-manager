@@ -1,0 +1,45 @@
+<Window x:Class="CopilotSessionManager.Views.TerminalWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:terminal="clr-namespace:CopilotSessionManager.Terminal.Wpf;assembly=CopilotSessionManager.Terminal.Wpf"
+        Title="Embedded terminal (debug)"
+        Height="600"
+        Width="900"
+        WindowStartupLocation="CenterOwner"
+        Background="#1E1E1E"
+        Foreground="#DCDCDC">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0"
+                   Margin="8,6"
+                   Foreground="#DCDCDC"
+                   FontSize="11"
+                   TextWrapping="Wrap"
+                   Text="Phase 3E debug surface. Live pwsh session piped through ConPTY -&gt; VtParser -&gt; ScreenBuffer -&gt; TerminalControl. Click the terminal to give it focus, then type." />
+
+        <Border Grid.Row="1"
+                Margin="8"
+                BorderBrush="#3F3F46"
+                BorderThickness="1"
+                Background="#0C0C0C">
+            <terminal:TerminalControl x:Name="Terminal"
+                                      FontFamily="Cascadia Mono, Consolas, Lucida Console, Courier New"
+                                      FontSize="14"
+                                      Background="#0C0C0C"
+                                      Foreground="#DCDCDC" />
+        </Border>
+
+        <StatusBar Grid.Row="2"
+                   Background="#252526"
+                   Foreground="#DCDCDC">
+            <StatusBarItem>
+                <TextBlock x:Name="StatusText" Text="Idle." />
+            </StatusBarItem>
+        </StatusBar>
+    </Grid>
+</Window>

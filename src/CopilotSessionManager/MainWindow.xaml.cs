@@ -7,6 +7,7 @@ using System.Windows.Media;
 using CopilotSessionManager.Core.Models;
 using CopilotSessionManager.Core.Sessions;
 using CopilotSessionManager.ViewModels;
+using CopilotSessionManager.Views;
 using Microsoft.Extensions.Logging;
 
 namespace CopilotSessionManager;
@@ -232,6 +233,36 @@ public partial class MainWindow : Window
         {
             box.Clear();
             e.Handled = true;
+        }
+    }
+
+    /// <summary>
+    /// Debug menu entry (V1.4, #170 Phase 3E): open a modeless
+    /// <see cref="TerminalWindow"/> that hosts an embedded
+    /// <c>TerminalControl</c> wired to a fresh <c>pwsh -NoLogo</c> session
+    /// over ConPTY. Used for live validation of the end-to-end
+    /// terminal pipeline before Phase 4 turns this into the default
+    /// "Open terminal" affordance.
+    /// </summary>
+    private void OnOpenEmbeddedTerminalClicked(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var window = new TerminalWindow
+            {
+                Owner = this,
+            };
+            window.Show();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to open embedded terminal debug window.");
+            MessageBox.Show(
+                this,
+                $"Could not open the embedded terminal:{Environment.NewLine}{Environment.NewLine}{ex.Message}",
+                "Embedded terminal",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
         }
     }
 }

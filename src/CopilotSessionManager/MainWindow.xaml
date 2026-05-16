@@ -263,6 +263,16 @@
                           AutomationProperties.Name="Verbose logging"
                           AutomationProperties.HelpText="Toggle between Information and Debug log level. The setting is persisted across restarts." />
             </MenuItem>
+            <MenuItem Header="_Debug"
+                      Foreground="{DynamicResource TextPrimaryBrush}"
+                      AutomationProperties.Name="Debug menu"
+                      AutomationProperties.HelpText="Diagnostic tools for in-app validation of work-in-progress features.">
+                <MenuItem Header="Open embedded terminal (_pwsh)…"
+                          Click="OnOpenEmbeddedTerminalClicked"
+                          ToolTip="Phase 3E of #93 — launch a pwsh session inside an embedded terminal control for end-to-end ConPTY validation."
+                          AutomationProperties.Name="Open embedded terminal (pwsh)"
+                          AutomationProperties.HelpText="Opens a debug window hosting an embedded terminal control attached to a fresh pwsh -NoLogo session." />
+            </MenuItem>
         </Menu>
 
         <!--

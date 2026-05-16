@@ -3,6 +3,9 @@
   <ItemGroup>
     <ProjectReference Include="..\CopilotSessionManager.Core\CopilotSessionManager.Core.csproj" />
     <ProjectReference Include="..\CopilotSessionManager.Native\CopilotSessionManager.Native.csproj" />
+    <ProjectReference Include="..\CopilotSessionManager.Terminal\CopilotSessionManager.Terminal.csproj" />
+    <ProjectReference Include="..\CopilotSessionManager.Terminal.Hosting\CopilotSessionManager.Terminal.Hosting.csproj" />
+    <ProjectReference Include="..\CopilotSessionManager.Terminal.Wpf\CopilotSessionManager.Terminal.Wpf.csproj" />
   </ItemGroup>
 
   <ItemGroup>
