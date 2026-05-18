@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
@@ -39,6 +40,8 @@ public class TerminalControl : FrameworkElement
     private readonly DrawingVisual _selectionVisual = new();
     private readonly DrawingVisual _cursorVisual = new();
     private readonly DispatcherTimer _cursorBlinkTimer;
+    private readonly MenuItem _copyMenuItem;
+    private readonly MenuItem _pasteMenuItem;
 
     private CellMetrics? _metrics;
     private int _renderedRows;
@@ -126,6 +129,21 @@ public class TerminalControl : FrameworkElement
         // is the user's focus affordance.
         Focusable = true;
         FocusVisualStyle = null;
+
+        // Issue #180: right-click context menu with Copy and Paste.
+        // Enabled state is refreshed on ContextMenuOpening so the menu
+        // reflects the current selection and clipboard contents.
+        _copyMenuItem = new MenuItem { Header = "Copy" };
+        _copyMenuItem.Click += (_, _) => CopyToClipboard();
+        _pasteMenuItem = new MenuItem { Header = "Paste" };
+        _pasteMenuItem.Click += (_, _) => PasteFromClipboard();
+
+        var menu = new ContextMenu();
+        menu.Items.Add(_copyMenuItem);
+        menu.Items.Add(_pasteMenuItem);
+        ContextMenu = menu;
+        ContextMenuOpening += (_, _) => RefreshContextMenuEnabledState();
+        RefreshContextMenuEnabledState();
     }
 
     /// <summary>
@@ -678,6 +696,25 @@ public class TerminalControl : FrameworkElement
         }
         Paste(text);
     }
+
+    /// <summary>
+    /// Issue #180: Refresh the IsEnabled state of the right-click context
+    /// menu's Copy and Paste entries. Copy is enabled iff a non-empty
+    /// selection exists; Paste is enabled iff the clipboard reports
+    /// non-empty text. Called automatically on ContextMenuOpening; tests
+    /// may invoke directly to bypass WPF event plumbing.
+    /// </summary>
+    public void RefreshContextMenuEnabledState()
+    {
+        _copyMenuItem.IsEnabled = _selection is not null && !_selection.IsEmpty;
+        _pasteMenuItem.IsEnabled = !string.IsNullOrEmpty(_clipboard.GetText());
+    }
+
+    /// <summary>Test hook: the Copy entry on the right-click context menu.</summary>
+    internal MenuItem CopyMenuItem => _copyMenuItem;
+
+    /// <summary>Test hook: the Paste entry on the right-click context menu.</summary>
+    internal MenuItem PasteMenuItem => _pasteMenuItem;
 
     /// <summary>Test hook: drive a "mouse down at cell" event without WPF mouse plumbing.</summary>
     internal void DispatchMouseDownForTest(int row, int column)

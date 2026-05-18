@@ -1,5 +1,7 @@
 using System.Collections.Generic;
 using System.Text;
+using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using CopilotSessionManager.Terminal;
@@ -399,6 +401,104 @@ public class TerminalControlSelectionTests
 
         control.Selection!.Mode.Should().Be(SelectionMode.Stream);
         control.GetSelectedText().Should().Be("pha beta\r\ngamma delta\r\nepsilo");
+    });
+
+    // -- #180 right-click context menu (Copy / Paste) -------------------------
+
+    [Fact]
+    public void ContextMenu_has_Copy_and_Paste_entries() => StaRunner.Run(() =>
+    {
+        var control = NewControl();
+
+        control.ContextMenu.Should().NotBeNull();
+        control.ContextMenu!.Items.Count.Should().Be(2);
+        ((MenuItem)control.ContextMenu.Items[0]!).Header.Should().Be("Copy");
+        ((MenuItem)control.ContextMenu.Items[1]!).Header.Should().Be("Paste");
+    });
+
+    [Fact]
+    public void Copy_menu_item_disabled_when_selection_is_empty() => StaRunner.Run(() =>
+    {
+        var control = NewControlWithBuffer(rows: 4, columns: 12);
+        control.Clipboard = new FakeClipboard();
+        control.RefreshContextMenuEnabledState();
+
+        control.CopyMenuItem.IsEnabled.Should().BeFalse();
+    });
+
+    [Fact]
+    public void Copy_menu_item_enabled_when_selection_is_non_empty() => StaRunner.Run(() =>
+    {
+        var control = NewControlWithText(new[] { "hello world" });
+        control.Clipboard = new FakeClipboard();
+        control.BeginSelection(1, 1);
+        control.DispatchMouseDragForTest(1, 5);
+        control.RefreshContextMenuEnabledState();
+
+        control.CopyMenuItem.IsEnabled.Should().BeTrue();
+    });
+
+    [Fact]
+    public void Copy_menu_item_disabled_after_selection_cleared() => StaRunner.Run(() =>
+    {
+        var control = NewControlWithText(new[] { "hello world" });
+        control.Clipboard = new FakeClipboard();
+        control.BeginSelection(1, 1);
+        control.DispatchMouseDragForTest(1, 5);
+        control.RefreshContextMenuEnabledState();
+        control.CopyMenuItem.IsEnabled.Should().BeTrue();
+
+        control.ClearSelection();
+        control.RefreshContextMenuEnabledState();
+
+        control.CopyMenuItem.IsEnabled.Should().BeFalse();
+    });
+
+    [Fact]
+    public void Paste_menu_item_enabled_when_clipboard_has_text() => StaRunner.Run(() =>
+    {
+        var control = NewControlWithBuffer(rows: 4, columns: 12);
+        control.Clipboard = new FakeClipboard { Text = "ready" };
+        control.RefreshContextMenuEnabledState();
+
+        control.PasteMenuItem.IsEnabled.Should().BeTrue();
+    });
+
+    [Fact]
+    public void Paste_menu_item_disabled_when_clipboard_empty() => StaRunner.Run(() =>
+    {
+        var control = NewControlWithBuffer(rows: 4, columns: 12);
+        control.Clipboard = new FakeClipboard { Text = null };
+        control.RefreshContextMenuEnabledState();
+
+        control.PasteMenuItem.IsEnabled.Should().BeFalse();
+    });
+
+    [Fact]
+    public void Copy_menu_item_click_invokes_CopyToClipboard() => StaRunner.Run(() =>
+    {
+        var control = NewControlWithText(new[] { "hello world" });
+        var clip = new FakeClipboard();
+        control.Clipboard = clip;
+        control.BeginSelection(1, 1);
+        control.DispatchMouseDragForTest(1, 5);
+
+        control.CopyMenuItem.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+
+        clip.Text.Should().Be("hello");
+    });
+
+    [Fact]
+    public void Paste_menu_item_click_invokes_PasteFromClipboard() => StaRunner.Run(() =>
+    {
+        var control = NewControlWithBuffer(rows: 4, columns: 12);
+        var captured = HookInputBytes(control);
+        control.Clipboard = new FakeClipboard { Text = "abc" };
+
+        control.PasteMenuItem.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+
+        captured.Should().NotBeEmpty();
+        Encoding.UTF8.GetString(captured[^1]).Should().Contain("abc");
     });
 
     private static TerminalControl NewControl() => new()
