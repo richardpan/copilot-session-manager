@@ -381,6 +381,91 @@ public sealed class TerminalTabsViewModelTests : IDisposable
         sut.Tabs.Should().HaveCount(1);
     }
 
+    [Fact]
+    public async Task DetachTab_invokes_callback_with_session_id_and_closes_the_tab()
+    {
+        var sut = new TerminalTabsViewModel(_factory);
+        var tab = sut.OpenOrActivate(NewSession("alpha"), "Alpha", Brushes.Red);
+        sut.OpenOrActivate(NewSession("beta"), "Beta", Brushes.Blue);
+
+        string? captured = null;
+        sut.SetDetachToExternalCallback(id =>
+        {
+            captured = id;
+            return Task.CompletedTask;
+        });
+
+        await sut.DetachTabCommand.ExecuteAsync(tab);
+
+        captured.Should().Be("alpha");
+        sut.Tabs.Should().HaveCount(1);
+        sut.Tabs.Should().NotContain(t => t.SessionId == "alpha");
+        tab.IsDisposed.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task DetachTab_with_null_tab_is_a_no_op()
+    {
+        var sut = new TerminalTabsViewModel(_factory);
+        sut.OpenOrActivate(NewSession("alpha"), "Alpha", Brushes.Red);
+
+        var invoked = false;
+        sut.SetDetachToExternalCallback(_ =>
+        {
+            invoked = true;
+            return Task.CompletedTask;
+        });
+
+        await sut.DetachTabCommand.ExecuteAsync(null);
+
+        invoked.Should().BeFalse();
+        sut.Tabs.Should().HaveCount(1);
+    }
+
+    [Fact]
+    public async Task DetachTab_without_callback_leaves_the_tab_open()
+    {
+        var sut = new TerminalTabsViewModel(_factory);
+        var tab = sut.OpenOrActivate(NewSession("alpha"), "Alpha", Brushes.Red);
+
+        await sut.DetachTabCommand.ExecuteAsync(tab);
+
+        sut.Tabs.Should().HaveCount(1);
+        tab.IsDisposed.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task DetachTab_leaves_the_tab_open_when_the_callback_throws()
+    {
+        var sut = new TerminalTabsViewModel(_factory);
+        var tab = sut.OpenOrActivate(NewSession("alpha"), "Alpha", Brushes.Red);
+        sut.SetDetachToExternalCallback(_ => throw new InvalidOperationException("external launcher boom"));
+
+        await sut.DetachTabCommand.ExecuteAsync(tab);
+
+        sut.Tabs.Should().HaveCount(1);
+        tab.IsDisposed.Should().BeFalse();
+    }
+
+    [Fact]
+    public void DetachTab_can_execute_only_when_both_tab_and_callback_are_present()
+    {
+        var sut = new TerminalTabsViewModel(_factory);
+        var tab = sut.OpenOrActivate(NewSession("alpha"), "Alpha", Brushes.Red);
+
+        sut.DetachTabCommand.CanExecute(tab).Should().BeFalse("no callback wired");
+        sut.DetachTabCommand.CanExecute(null).Should().BeFalse("no tab supplied");
+
+        sut.SetDetachToExternalCallback(_ => Task.CompletedTask);
+
+        sut.DetachTabCommand.CanExecute(tab).Should().BeTrue();
+        sut.DetachTabCommand.CanExecute(null).Should().BeFalse("still no tab supplied");
+
+        sut.SetDetachToExternalCallback(null);
+
+        sut.DetachTabCommand.CanExecute(tab).Should().BeFalse("callback was cleared");
+    }
+
     private static Session NewSession(string id) => new(
         Id: id,
         Cwd: @"C:\\ws\\fake",

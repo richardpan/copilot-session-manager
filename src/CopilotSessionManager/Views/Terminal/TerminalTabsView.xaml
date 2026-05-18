@@ -52,10 +52,38 @@
                 <Style TargetType="{x:Type TabItem}">
                     <EventSetter Event="MouseDown" Handler="OnTabItemMouseDown" />
                 </Style>
+                <!--
+                    Phase 5 of #93: right-click context menu on the tab
+                    header. "Detach to external window" tears down the
+                    embedded ConPTY and re-launches the session in an
+                    external PowerShell window (the legacy launcher).
+                    DetachTabCommand auto-disables itself when the host
+                    has not wired the detach callback. The menu is
+                    parented to a sentinel TextBlock so we can reach the
+                    TabControl's DataContext (the TerminalTabsViewModel)
+                    via PlacementTarget rather than the tab's own
+                    DataContext (the TerminalTabViewModel).
+                -->
+                <ContextMenu x:Key="TabHeaderContextMenu">
+                    <MenuItem Header="Detach to external window"
+                              Command="{Binding PlacementTarget.Tag.DetachTabCommand, RelativeSource={RelativeSource AncestorType={x:Type ContextMenu}}}"
+                              CommandParameter="{Binding}"
+                              AutomationProperties.Name="Detach this terminal tab to an external PowerShell window"
+                              AutomationProperties.HelpText="Closes the embedded terminal tab and re-launches the session in a standalone PowerShell window. The dashboard session itself is unaffected." />
+                    <MenuItem Header="Close tab"
+                              Command="{Binding PlacementTarget.Tag.CloseTabCommand, RelativeSource={RelativeSource AncestorType={x:Type ContextMenu}}}"
+                              CommandParameter="{Binding}"
+                              AutomationProperties.Name="Close this terminal tab"
+                              AutomationProperties.HelpText="Closes the embedded terminal tab. Same as middle-clicking the tab header or clicking the X glyph." />
+                </ContextMenu>
             </TabControl.Resources>
             <TabControl.ItemTemplate>
                 <DataTemplate DataType="{x:Type vm:TerminalTabViewModel}">
-                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <StackPanel Orientation="Horizontal"
+                                VerticalAlignment="Center"
+                                Background="Transparent"
+                                ContextMenu="{StaticResource TabHeaderContextMenu}"
+                                Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType={x:Type TabControl}}}">
                         <Border Width="6"
                                 Height="14"
                                 Margin="0,0,8,0"

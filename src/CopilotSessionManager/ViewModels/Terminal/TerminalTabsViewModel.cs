@@ -1,6 +1,7 @@
 using System;
 using System.Collections.ObjectModel;
 using System.Linq;
+using System.Threading.Tasks;
 using System.Windows.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -36,6 +37,18 @@ public sealed partial class TerminalTabsViewModel : ObservableObject, IDisposabl
     private const int DefaultCols = 100;
 
     private readonly ITerminalSessionFactory _sessionFactory;
+
+    /// <summary>
+    /// Phase 5 of #93 epic: host-provided hook that re-launches the
+    /// session in an external PowerShell window. The tabs view-model
+    /// only owns the embedded surface, so detaching to the legacy
+    /// external launcher is delegated to the host (which can locate
+    /// the matching <c>SessionCardViewModel</c> and invoke its
+    /// <c>OpenInExternalCommand</c>). Null when the host has not
+    /// wired the callback yet; in that case <see cref="DetachTabCommand"/>
+    /// is disabled.
+    /// </summary>
+    private Func<string, Task>? _detachToExternal;
 
     /// <summary>Construct a tabs view-model around the supplied session factory.</summary>
     public TerminalTabsViewModel(ITerminalSessionFactory sessionFactory)
@@ -224,6 +237,51 @@ public sealed partial class TerminalTabsViewModel : ObservableObject, IDisposabl
         var index = ActiveTab is null ? 0 : Tabs.IndexOf(ActiveTab);
         ActiveTab = Tabs[(index - 1 + Tabs.Count) % Tabs.Count];
     }
+
+    /// <summary>
+    /// Phase 5 of #93 epic: host calls this once at startup to register
+    /// the detach-to-external-window callback. Pass <c>null</c> to clear
+    /// the hook (e.g. during shutdown). The callback receives the
+    /// dashboard session id and should re-launch the session in an
+    /// external PowerShell window; if it throws or hangs the tab is
+    /// left open so the user does not lose the embedded session.
+    /// </summary>
+    public void SetDetachToExternalCallback(Func<string, Task>? callback)
+    {
+        _detachToExternal = callback;
+        DetachTabCommand.NotifyCanExecuteChanged();
+    }
+
+    /// <summary>
+    /// Phase 5 of #93 epic: detach <paramref name="tab"/> from the
+    /// embedded strip into an external PowerShell window. Invokes the
+    /// host-registered <see cref="SetDetachToExternalCallback"/>; on
+    /// success the embedded tab is closed so the ConPTY is torn down
+    /// cleanly. If the callback throws the tab is left open and the
+    /// exception is swallowed (logged elsewhere) - we never want a
+    /// detach failure to lose the user's session.
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(CanDetachTab))]
+    private async Task DetachTabAsync(TerminalTabViewModel? tab)
+    {
+        if (tab is null || _detachToExternal is null)
+        {
+            return;
+        }
+        try
+        {
+            await _detachToExternal(tab.SessionId).ConfigureAwait(true);
+        }
+        catch
+        {
+            // Best-effort: leave the embedded tab in place so the user
+            // can retry. The external launcher logs its own failures.
+            return;
+        }
+        Close(tab);
+    }
+
+    private bool CanDetachTab(TerminalTabViewModel? tab) => tab is not null && _detachToExternal is not null;
 
     /// <inheritdoc />
     public void Dispose() => CloseAll();
