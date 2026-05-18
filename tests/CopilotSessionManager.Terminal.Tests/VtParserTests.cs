@@ -270,6 +270,14 @@ public class VtParserTests
         ParseAll(input).Should().Equal(new SetBracketedPaste(enabled));
     }
 
+    [Theory]
+    [InlineData("\u001B[?1h", true)]
+    [InlineData("\u001B[?1l", false)]
+    public void Mode1MapsToApplicationCursorKeys(string input, bool enabled)
+    {
+        ParseAll(input).Should().Equal(new SetApplicationCursorKeys(enabled));
+    }
+
     [Fact]
     public void UnknownDecPrivateModeFallsBackToSetMode()
     {

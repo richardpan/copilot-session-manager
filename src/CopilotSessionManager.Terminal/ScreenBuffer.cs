@@ -76,6 +76,23 @@ public sealed class ScreenBuffer
     /// <summary>Whether bracketed-paste mode is enabled (DEC 2004).</summary>
     public bool BracketedPasteEnabled { get; private set; }
 
+    /// <summary>
+    /// Whether DECCKM (DEC private mode 1) is enabled. When <c>true</c>
+    /// the host should encode cursor / Home / End keys as the
+    /// application-mode SS3 sequences. Defaults to <c>false</c>;
+    /// PSReadLine, vim and similar tools flip this on init via
+    /// <c>ESC [ ? 1 h</c>. Subscribe to
+    /// <see cref="ApplicationCursorKeysChanged"/> to react.
+    /// </summary>
+    public bool ApplicationCursorKeys { get; private set; }
+
+    /// <summary>
+    /// Raised after <see cref="ApplicationCursorKeys"/> changes value.
+    /// Fires on the buffer's mutation thread; consumers that touch UI
+    /// state should marshal to the UI dispatcher themselves.
+    /// </summary>
+    public event EventHandler? ApplicationCursorKeysChanged;
+
     /// <summary>Number of lines currently held in the scroll-back ring.</summary>
     public int ScrollbackLineCount => _scrollback.Count;
 
@@ -260,6 +277,13 @@ public sealed class ScreenBuffer
             case SetBracketedPaste(var enabled):
                 BracketedPasteEnabled = enabled;
                 break;
+            case SetApplicationCursorKeys(var ackEnabled):
+                if (ApplicationCursorKeys != ackEnabled)
+                {
+                    ApplicationCursorKeys = ackEnabled;
+                    ApplicationCursorKeysChanged?.Invoke(this, EventArgs.Empty);
+                }
+                break;
             case SetMode:
                 break;
 
@@ -323,6 +347,11 @@ public sealed class ScreenBuffer
         _primarySaved = null;
         _alternateSaved = null;
         BracketedPasteEnabled = false;
+        if (ApplicationCursorKeys)
+        {
+            ApplicationCursorKeys = false;
+            ApplicationCursorKeysChanged?.Invoke(this, EventArgs.Empty);
+        }
         WindowTitle = string.Empty;
         _scrollback.Clear();
         for (var i = 0; i < _dirtyRows.Length; i++)

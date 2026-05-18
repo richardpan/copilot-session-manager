@@ -626,6 +626,9 @@ public sealed class VtParser : IVtParser
             {
                 switch (mode)
                 {
+                    case 1:
+                        _emit(new SetApplicationCursorKeys(enabled));
+                        continue;
                     case 25:
                         _emit(new SetCursorVisibility(enabled));
                         continue;
