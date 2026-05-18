@@ -285,7 +285,28 @@ public class TerminalControl : FrameworkElement
         {
             return;
         }
-        BeginSelection(cell.Value.Row, cell.Value.Column);
+
+        // Issue #178: triple-click selects the row, double-click
+        // selects the word under the cursor, Shift+click extends the
+        // current selection (anchor sticks, focus moves). Bare click
+        // falls through to the prior begin-selection behaviour.
+        var shift = (Keyboard.Modifiers & ModifierKeys.Shift) == ModifierKeys.Shift;
+        if (e.ClickCount >= 3)
+        {
+            SelectRow(cell.Value.Row);
+        }
+        else if (e.ClickCount == 2)
+        {
+            SelectWord(cell.Value.Row, cell.Value.Column);
+        }
+        else if (shift)
+        {
+            ExtendSelectionTo(cell.Value.Row, cell.Value.Column);
+        }
+        else
+        {
+            BeginSelection(cell.Value.Row, cell.Value.Column);
+        }
         CaptureMouse();
         e.Handled = true;
     }
@@ -519,6 +540,74 @@ public class TerminalControl : FrameworkElement
         row = Math.Clamp(row, 1, buffer.Rows);
         column = Math.Clamp(column, 1, buffer.Columns);
         SetSelection(_selection with { FocusRow = row, FocusColumn = column });
+    }
+
+    /// <summary>
+    /// Issue #178: Shift+click. Extend the current selection so its
+    /// focus is at (<paramref name="row"/>, <paramref name="column"/>),
+    /// keeping the existing anchor in place. If no selection exists,
+    /// this behaves like <see cref="BeginSelection"/> at the supplied
+    /// cell. Enters drag-extend mode so a subsequent mouse-move
+    /// continues to move the focus.
+    /// </summary>
+    public void ExtendSelectionTo(int row, int column)
+    {
+        var buffer = Buffer;
+        if (buffer is null)
+        {
+            return;
+        }
+        row = Math.Clamp(row, 1, buffer.Rows);
+        column = Math.Clamp(column, 1, buffer.Columns);
+
+        if (_selection is null)
+        {
+            BeginSelection(row, column);
+            return;
+        }
+
+        _selecting = true;
+        SetSelection(_selection with { FocusRow = row, FocusColumn = column });
+    }
+
+    /// <summary>
+    /// Issue #178: double-click. Select the maximal whitespace-bounded
+    /// run of cells covering (<paramref name="row"/>,
+    /// <paramref name="column"/>). Whitespace under the cursor yields a
+    /// single-cell selection. Selection stays "live" so the user can
+    /// drag to extend it word-by-word? No, drag just extends per cell;
+    /// that's good enough for the common case.
+    /// </summary>
+    public void SelectWord(int row, int column)
+    {
+        var buffer = Buffer;
+        if (buffer is null)
+        {
+            return;
+        }
+        row = Math.Clamp(row, 1, buffer.Rows);
+        column = Math.Clamp(column, 1, buffer.Columns);
+
+        var (start, end) = WordBoundaryFinder.FindWord(buffer, row, column);
+        _selecting = true;
+        SetSelection(new TerminalSelection(row, start, row, end));
+    }
+
+    /// <summary>
+    /// Issue #178: triple-click. Select the entire <paramref name="row"/>
+    /// from column 1 through the buffer's last column. Selection stays
+    /// live so drag continues to extend per cell.
+    /// </summary>
+    public void SelectRow(int row)
+    {
+        var buffer = Buffer;
+        if (buffer is null)
+        {
+            return;
+        }
+        row = Math.Clamp(row, 1, buffer.Rows);
+        _selecting = true;
+        SetSelection(new TerminalSelection(row, 1, row, buffer.Columns));
     }
 
     /// <summary>Finalize the selection (mouse-up). Keeps the selection visible.</summary>

@@ -188,6 +188,121 @@ public class TerminalControlSelectionTests
         control.Selection.Should().BeNull();
     });
 
+    // -- #178: shift-extend, double-click word, triple-click row --------
+
+    [Fact]
+    public void ExtendSelectionTo_keeps_anchor_and_moves_focus_on_existing_selection() => StaRunner.Run(() =>
+    {
+        var control = NewControlWithText(new[] { "hello world here" });
+        control.DispatchMouseDownForTest(1, 1);
+        control.DispatchMouseDragForTest(1, 5);
+        control.DispatchMouseUpForTest();
+
+        control.GetSelectedText().Should().Be("hello");
+
+        control.ExtendSelectionTo(1, 11);
+
+        control.Selection.Should().NotBeNull();
+        control.Selection!.AnchorRow.Should().Be(1);
+        control.Selection.AnchorColumn.Should().Be(1, "anchor must not move on extend");
+        control.Selection.FocusRow.Should().Be(1);
+        control.Selection.FocusColumn.Should().Be(11);
+        control.GetSelectedText().Should().Be("hello world");
+    });
+
+    [Fact]
+    public void ExtendSelectionTo_starts_a_new_selection_when_none_exists() => StaRunner.Run(() =>
+    {
+        var control = NewControlWithText(new[] { "abcdef" });
+        control.Selection.Should().BeNull();
+
+        control.ExtendSelectionTo(1, 3);
+
+        control.Selection.Should().NotBeNull();
+        control.Selection!.AnchorColumn.Should().Be(3);
+        control.Selection.FocusColumn.Should().Be(3);
+    });
+
+    [Fact]
+    public void ExtendSelectionTo_continues_to_track_subsequent_drag_updates() => StaRunner.Run(() =>
+    {
+        var control = NewControlWithText(new[] { "hello world here" });
+        control.DispatchMouseDownForTest(1, 1);
+        control.DispatchMouseDragForTest(1, 5);
+        control.DispatchMouseUpForTest();
+
+        control.ExtendSelectionTo(1, 11);
+        // The shift-click leaves the control in drag-extend mode, so a
+        // subsequent mouse-move continues to move the focus end.
+        control.DispatchMouseDragForTest(1, 13);
+
+        control.Selection!.AnchorColumn.Should().Be(1);
+        control.Selection.FocusColumn.Should().Be(13);
+    });
+
+    [Fact]
+    public void SelectWord_selects_the_word_under_the_cursor() => StaRunner.Run(() =>
+    {
+        var control = NewControlWithText(new[] { "the quick brown fox" });
+        control.SelectWord(1, 6);
+
+        control.Selection.Should().NotBeNull();
+        control.Selection!.AnchorRow.Should().Be(1);
+        control.Selection.FocusRow.Should().Be(1);
+        control.GetSelectedText().Should().Be("quick");
+    });
+
+    [Fact]
+    public void SelectWord_on_whitespace_yields_single_cell_selection() => StaRunner.Run(() =>
+    {
+        var control = NewControlWithText(new[] { "a b c" });
+        control.SelectWord(1, 2);
+
+        control.Selection.Should().NotBeNull();
+        control.Selection!.AnchorColumn.Should().Be(2);
+        control.Selection.FocusColumn.Should().Be(2);
+    });
+
+    [Fact]
+    public void SelectRow_spans_the_whole_row_width() => StaRunner.Run(() =>
+    {
+        var control = NewControlWithBuffer(rows: 4, columns: 12);
+        control.SelectRow(2);
+
+        control.Selection.Should().NotBeNull();
+        control.Selection!.AnchorRow.Should().Be(2);
+        control.Selection.AnchorColumn.Should().Be(1);
+        control.Selection.FocusRow.Should().Be(2);
+        control.Selection.FocusColumn.Should().Be(12);
+    });
+
+    [Fact]
+    public void SelectRow_followed_by_drag_extends_to_other_rows() => StaRunner.Run(() =>
+    {
+        var control = NewControlWithBuffer(rows: 6, columns: 10);
+        control.SelectRow(2);
+        control.DispatchMouseDragForTest(4, 3);
+
+        // SelectRow leaves the control in selecting mode so dragging
+        // continues the selection per cell (the row anchor stays).
+        control.Selection!.AnchorRow.Should().Be(2);
+        control.Selection.AnchorColumn.Should().Be(1);
+        control.Selection.FocusRow.Should().Be(4);
+        control.Selection.FocusColumn.Should().Be(3);
+    });
+
+    [Fact]
+    public void Existing_selection_control_tests_still_pass_after_178_changes() => StaRunner.Run(() =>
+    {
+        // Sanity guard: the shift / double / triple paths must not have
+        // broken the bare-click happy path.
+        var control = NewControlWithText(new[] { "hello world" });
+        control.DispatchMouseDownForTest(1, 1);
+        control.DispatchMouseDragForTest(1, 5);
+        control.DispatchMouseUpForTest();
+        control.GetSelectedText().Should().Be("hello");
+    });
+
     private static TerminalControl NewControl() => new()
     {
         FontFamily = new FontFamily("Cascadia Mono, Consolas, Courier New"),
