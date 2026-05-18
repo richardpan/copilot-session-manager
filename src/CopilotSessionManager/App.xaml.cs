@@ -171,6 +171,22 @@ public partial class App : Application
                 // is held as a field so its subscriptions live for the
                 // lifetime of the App.
                 _tabsCoordinator = new Services.DashboardTerminalTabsCoordinator(sessionsForMerge, tabsVm);
+
+                // V1.4 #93 Phase 5: hook "Detach to external window" on
+                // the tab context menu. The tabs view-model only owns
+                // the embedded surface, so we map the session id back
+                // to its dashboard card here and trigger the legacy
+                // external launcher via the card's existing command.
+                // On success the tabs VM tears down the embedded tab.
+                tabsVm.SetDetachToExternalCallback(async id =>
+                {
+                    var card = sessionsForMerge.Sessions.FirstOrDefault(c => string.Equals(c.Model.Id, id, StringComparison.Ordinal));
+                    if (card is null)
+                    {
+                        return;
+                    }
+                    await card.OpenInExternalCommand.ExecuteAsync(null).ConfigureAwait(true);
+                });
             }
             catch (Exception mex)
             {
