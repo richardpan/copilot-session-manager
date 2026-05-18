@@ -341,6 +341,46 @@ public sealed class TerminalTabsViewModelTests : IDisposable
         sut.ActiveTab.Should().BeSameAs(alpha);
     }
 
+    // ---- Phase 6D (#159): CloseByDashboardId lifecycle hook ----
+
+    [Fact]
+    public void CloseByDashboardId_closes_the_matching_tab_and_returns_true()
+    {
+        var sut = new TerminalTabsViewModel(_factory);
+        var alpha = sut.OpenOrActivate(NewSession("alpha"), "Alpha", Brushes.Red);
+        var beta = sut.OpenOrActivate(NewSession("beta"), "Beta", Brushes.Blue);
+
+        var closed = sut.CloseByDashboardId("alpha");
+
+        closed.Should().BeTrue();
+        sut.Tabs.Should().ContainSingle().Which.Should().BeSameAs(beta);
+        alpha.IsDisposed.Should().BeTrue();
+    }
+
+    [Fact]
+    public void CloseByDashboardId_returns_false_when_no_tab_matches()
+    {
+        var sut = new TerminalTabsViewModel(_factory);
+        var alpha = sut.OpenOrActivate(NewSession("alpha"), "Alpha", Brushes.Red);
+
+        sut.CloseByDashboardId("ghost").Should().BeFalse();
+        sut.Tabs.Should().ContainSingle().Which.Should().BeSameAs(alpha);
+        alpha.IsDisposed.Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void CloseByDashboardId_returns_false_for_blank_input(string? id)
+    {
+        var sut = new TerminalTabsViewModel(_factory);
+        sut.OpenOrActivate(NewSession("alpha"), "Alpha", Brushes.Red);
+
+        sut.CloseByDashboardId(id).Should().BeFalse();
+        sut.Tabs.Should().HaveCount(1);
+    }
+
     private static Session NewSession(string id) => new(
         Id: id,
         Cwd: @"C:\\ws\\fake",

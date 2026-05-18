@@ -736,6 +736,7 @@
                 <DataGrid x:Name="SessionsGrid"
                           Grid.Row="0"
                   ItemsSource="{Binding Sessions.VisibleSessions}"
+                  SelectedItem="{Binding Sessions.SelectedCard, Mode=TwoWay}"
                   PreviewMouseLeftButtonDown="DataGrid_PreviewMouseLeftButtonDown"
                   AutoGenerateColumns="False"
                   CanUserAddRows="False"
