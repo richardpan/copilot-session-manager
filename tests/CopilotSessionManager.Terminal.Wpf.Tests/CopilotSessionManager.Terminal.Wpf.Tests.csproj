@@ -26,4 +26,8 @@
     <ProjectReference Include="..\..\src\CopilotSessionManager.Terminal.Wpf\CopilotSessionManager.Terminal.Wpf.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Content Include="baselines\**\*.png" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>
