@@ -217,6 +217,75 @@ public class TerminalControlKeyboardTests
         control.Focusable.Should().BeTrue("the terminal must accept keyboard focus to receive key events");
     });
 
+    // -- #177: DECCKM auto-flip ----------------------------------------
+
+    [Fact]
+    public void Setting_Buffer_syncs_initial_application_cursor_keys_state() => StaRunner.Run(() =>
+    {
+        var control = NewControl();
+        var buffer = new ScreenBuffer(10, 20);
+        buffer.Apply(new SetApplicationCursorKeys(true));
+
+        control.UseApplicationCursorKeys.Should().BeFalse("baseline before buffer is wired");
+
+        control.Buffer = buffer;
+
+        control.UseApplicationCursorKeys.Should().BeTrue("buffer's state must propagate when wired");
+    });
+
+    [Fact]
+    public void Buffer_application_cursor_keys_changes_propagate_onto_control() => StaRunner.Run(() =>
+    {
+        var control = NewControl();
+        var buffer = new ScreenBuffer(10, 20);
+        control.Buffer = buffer;
+        control.UseApplicationCursorKeys.Should().BeFalse();
+
+        buffer.Apply(new SetApplicationCursorKeys(true));
+        control.UseApplicationCursorKeys.Should().BeTrue();
+
+        buffer.Apply(new SetApplicationCursorKeys(false));
+        control.UseApplicationCursorKeys.Should().BeFalse();
+    });
+
+    [Fact]
+    public void Application_cursor_keys_is_active_after_DECCKM_set_on_attached_buffer() => StaRunner.Run(() =>
+    {
+        var control = NewControl();
+        var buffer = new ScreenBuffer(10, 20);
+        control.Buffer = buffer;
+        var captured = HookInput(control);
+
+        // Real-world path: PSReadLine sends ESC [ ? 1 h via the parser.
+        buffer.Apply(new SetApplicationCursorKeys(true));
+
+        control.DispatchKeyForTest(Key.Up, ModifierKeys.None).Should().BeTrue();
+        captured.Single().Should().Be("\u001BOA");
+    });
+
+    [Fact]
+    public void Swapping_Buffer_unsubscribes_from_the_old_buffers_app_cursor_keys() => StaRunner.Run(() =>
+    {
+        var control = NewControl();
+        var first = new ScreenBuffer(10, 20);
+        var second = new ScreenBuffer(10, 20);
+        control.Buffer = first;
+
+        first.Apply(new SetApplicationCursorKeys(true));
+        control.UseApplicationCursorKeys.Should().BeTrue();
+
+        control.Buffer = second;
+        // second's flag is the new source of truth (false); first's
+        // continued mode flips must NOT leak onto the control.
+        control.UseApplicationCursorKeys.Should().BeFalse();
+
+        first.Apply(new SetApplicationCursorKeys(false));
+        control.UseApplicationCursorKeys.Should().BeFalse("first is no longer attached");
+
+        second.Apply(new SetApplicationCursorKeys(true));
+        control.UseApplicationCursorKeys.Should().BeTrue("second drives the control now");
+    });
+
     private static TerminalControl NewControl() => new()
     {
         FontSize = 14.0,

@@ -84,6 +84,16 @@ public sealed record SetUseAlternateScreen(bool Use) : VtEvent;
 public sealed record SetBracketedPaste(bool Enabled) : VtEvent;
 
 /// <summary>
+/// CSI <c>?1 h</c> / <c>?1 l</c> — DEC private mode 1, DECCKM. When
+/// enabled, cursor keys emit the "application" SS3 sequences
+/// (<c>ESC O A</c> ...) instead of normal-mode CSI sequences.
+/// Consumers (e.g. <c>TerminalControl</c>) typically mirror this onto
+/// the keyboard encoder so PSReadLine / vim navigation round-trips
+/// correctly without the host having to poll.
+/// </summary>
+public sealed record SetApplicationCursorKeys(bool Enabled) : VtEvent;
+
+/// <summary>
 /// Catch-all for mode-set / mode-reset sequences whose number we do not
 /// have a typed event for. Consumers can ignore these or log them.
 /// </summary>

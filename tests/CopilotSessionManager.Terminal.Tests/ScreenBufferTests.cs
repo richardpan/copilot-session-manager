@@ -520,6 +520,79 @@ public class ScreenBufferTests
         buf.BracketedPasteEnabled.Should().BeFalse();
     }
 
+    // -- #177: DECCKM / application cursor keys -------------------------
+
+    [Fact]
+    public void ApplicationCursorKeysFlagDefaultsToFalse()
+    {
+        var buf = NewBuffer();
+        buf.ApplicationCursorKeys.Should().BeFalse();
+    }
+
+    [Fact]
+    public void ApplicationCursorKeysFlagTracksDecMode1()
+    {
+        var buf = NewBuffer();
+        buf.ApplyAll(Parse("\u001B[?1h"));
+        buf.ApplicationCursorKeys.Should().BeTrue();
+        buf.ApplyAll(Parse("\u001B[?1l"));
+        buf.ApplicationCursorKeys.Should().BeFalse();
+    }
+
+    [Fact]
+    public void ApplicationCursorKeysChangedFiresOnTransitionsOnly()
+    {
+        var buf = NewBuffer();
+        var changes = 0;
+        buf.ApplicationCursorKeysChanged += (_, _) => changes++;
+
+        buf.ApplyAll(Parse("\u001B[?1h"));
+        changes.Should().Be(1);
+
+        // Idempotent set: no transition, no event.
+        buf.ApplyAll(Parse("\u001B[?1h"));
+        changes.Should().Be(1);
+
+        buf.ApplyAll(Parse("\u001B[?1l"));
+        changes.Should().Be(2);
+    }
+
+    [Fact]
+    public void ResetClearsApplicationCursorKeysAndFiresEvent()
+    {
+        var buf = NewBuffer();
+        buf.ApplyAll(Parse("\u001B[?1h"));
+        buf.ApplicationCursorKeys.Should().BeTrue();
+
+        var changes = 0;
+        buf.ApplicationCursorKeysChanged += (_, _) => changes++;
+
+        buf.ApplyAll(Parse("\u001Bc"));
+
+        buf.ApplicationCursorKeys.Should().BeFalse();
+        changes.Should().Be(1);
+    }
+
+    [Fact]
+    public void ApplicationCursorKeysFlagFlipsOnBothPrimaryAndAlternateScreens()
+    {
+        var buf = NewBuffer();
+        buf.ApplyAll(Parse("\u001B[?1h"));
+        buf.ApplicationCursorKeys.Should().BeTrue();
+
+        // Enter the alternate screen, flip DECCKM off, leave alt.
+        buf.ApplyAll(Parse("\u001B[?1049h"));
+        buf.UsingAlternateScreen.Should().BeTrue();
+        buf.ApplyAll(Parse("\u001B[?1l"));
+        buf.ApplicationCursorKeys.Should().BeFalse();
+
+        buf.ApplyAll(Parse("\u001B[?1049l"));
+        buf.UsingAlternateScreen.Should().BeFalse();
+        // DECCKM is screen-independent (per xterm) - the flag we tracked
+        // last is what sticks.
+        buf.ApplicationCursorKeys.Should().BeFalse();
+    }
+
     // -- realistic scenario --------------------------------------------
 
     [Fact]

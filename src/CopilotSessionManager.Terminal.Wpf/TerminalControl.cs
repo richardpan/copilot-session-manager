@@ -49,6 +49,7 @@ public class TerminalControl : FrameworkElement
     private TerminalSelection? _selection;
     private ITerminalClipboard _clipboard = new WpfClipboard();
     private EventHandler? _bufferInvalidationHandler;
+    private EventHandler? _bufferAppCursorKeysHandler;
 
     /// <summary>Identifies the <see cref="Buffer"/> dependency property.</summary>
     public static readonly DependencyProperty BufferProperty = DependencyProperty.Register(
@@ -137,8 +138,12 @@ public class TerminalControl : FrameworkElement
     /// <summary>
     /// When <c>true</c>, cursor keys, Home and End emit the DECCKM
     /// "application" sequences (<c>ESC O A</c> etc.) instead of the
-    /// normal-mode CSI sequences. Defaults to <c>false</c>; a future PR
-    /// will wire this to the parser's mode state.
+    /// normal-mode CSI sequences. Defaults to <c>false</c>. When a
+    /// <see cref="Buffer"/> is attached the control mirrors the
+    /// buffer's <c>ApplicationCursorKeys</c> here automatically so
+    /// PSReadLine / vim / etc. round-trip correctly when they flip
+    /// DECCKM on init (issue #177). Manual setters still work for
+    /// callers that drive the control without a buffer.
     /// </summary>
     public bool UseApplicationCursorKeys { get; set; }
 
@@ -747,16 +752,29 @@ public class TerminalControl : FrameworkElement
             return;
         }
 
-        if (e.OldValue is ScreenBuffer oldBuffer && control._bufferInvalidationHandler is not null)
+        if (e.OldValue is ScreenBuffer oldBuffer)
         {
-            oldBuffer.ViewportInvalidated -= control._bufferInvalidationHandler;
+            if (control._bufferInvalidationHandler is not null)
+            {
+                oldBuffer.ViewportInvalidated -= control._bufferInvalidationHandler;
+            }
+            if (control._bufferAppCursorKeysHandler is not null)
+            {
+                oldBuffer.ApplicationCursorKeysChanged -= control._bufferAppCursorKeysHandler;
+            }
         }
 
         control._bufferInvalidationHandler = control.OnBufferViewportInvalidated;
+        control._bufferAppCursorKeysHandler = control.OnBufferApplicationCursorKeysChanged;
 
         if (e.NewValue is ScreenBuffer newBuffer)
         {
             newBuffer.ViewportInvalidated += control._bufferInvalidationHandler;
+            newBuffer.ApplicationCursorKeysChanged += control._bufferAppCursorKeysHandler;
+            // Sync initial state so callers that set the buffer after
+            // the parser has already toggled DECCKM still get the
+            // right keyboard mode without needing a fresh flip.
+            control.UseApplicationCursorKeys = newBuffer.ApplicationCursorKeys;
             control._cursorBlinkOn = true;
             control._cursorBlinkTimer.Start();
         }
@@ -831,6 +849,31 @@ public class TerminalControl : FrameworkElement
         }
         _cursorBlinkOn = !_cursorBlinkOn;
         UpdateCursorVisual();
+    }
+
+    /// <summary>
+    /// Issue #177: bridge <see cref="ScreenBuffer.ApplicationCursorKeys"/>
+    /// onto <see cref="UseApplicationCursorKeys"/> so the keyboard
+    /// encoder honours DECCKM mode flips driven by the host application
+    /// (PSReadLine, vim, ...) without callers having to poll. Reads the
+    /// flag back from the sender so a stale fire on a swapped-out
+    /// buffer still uses that buffer's current state.
+    /// </summary>
+    private void OnBufferApplicationCursorKeysChanged(object? sender, EventArgs e)
+    {
+        if (sender is not ScreenBuffer buffer)
+        {
+            return;
+        }
+
+        var dispatcher = Dispatcher;
+        if (dispatcher is null || dispatcher.CheckAccess())
+        {
+            UseApplicationCursorKeys = buffer.ApplicationCursorKeys;
+            return;
+        }
+
+        dispatcher.BeginInvoke(new Action(() => UseApplicationCursorKeys = buffer.ApplicationCursorKeys));
     }
 
     private void EnsureMetrics()
