@@ -4,13 +4,13 @@
 
 [![Platform](https://img.shields.io/badge/platform-Windows-0078D4?logo=windows)](https://github.com/richardpan/copilot-session-manager)
 [![.NET](https://img.shields.io/badge/.NET-8.0-512BD4?logo=dotnet)](https://dotnet.microsoft.com/)
-[![Release](https://img.shields.io/badge/release-v1.3.0-success)](https://github.com/richardpan/copilot-session-manager/releases/tag/v1.3.0)
-[![Tests](https://img.shields.io/badge/tests-1082%20passing-brightgreen)]()
+[![Release](https://img.shields.io/badge/release-v1.4.0-success)](https://github.com/richardpan/copilot-session-manager/releases/tag/v1.4.0)
+[![Tests](https://img.shields.io/badge/tests-1493%20passing-brightgreen)]()
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 ---
 
-![Copilot Session Manager v1.3.0 dashboard mockup](docs/images/dashboard.png)
+![Copilot Session Manager v1.4.0 dashboard mockup](docs/images/dashboard.png)
 
 > *The dashboard at a glance — search, filter by label · tier · producer, color-coded status pills, per-session **Docs / Open / Rename / Delete** actions, and live token / turn counts. **Mockup with synthetic example data**; the source HTML is at [`docs/images/dashboard-mockup.html`](docs/images/dashboard-mockup.html).*
 
@@ -76,8 +76,8 @@ Copilot Session Manager solves all of these problems with a native Windows app t
 
 **Windows 10 (1809+) or Windows 11, x64.**
 
-1. Download `copilot-session-manager-v1.3.0-win-x64.zip` from the
-   [v1.3.0 release page](https://github.com/richardpan/copilot-session-manager/releases/tag/v1.3.0).
+1. Download `copilot-session-manager-v1.4.0-win-x64.zip` from the
+   [v1.4.0 release page](https://github.com/richardpan/copilot-session-manager/releases/tag/v1.4.0).
 2. Right-click the zip → **Properties** → tick **Unblock** → **OK**
    (Windows quarantine flag for downloaded executables).
 3. Extract anywhere (e.g. `%LOCALAPPDATA%\Programs\copilot-session-manager\`).
@@ -102,7 +102,8 @@ and walks you through anything missing.
 
 ## Key Features
 
-V1.3.0 ships the dashboard and the full session lifecycle. Everything
+V1.4.0 ships the dashboard, the full session lifecycle, and the
+embedded ConPTY terminal with tabbed multi-session view. Everything
 listed below works in the released build.
 
 ### Dashboard
@@ -266,17 +267,22 @@ and the join-key contract.
 
 ### PowerShell Integration
 
-V1.3.0 launches an **external** PowerShell window per `▶ Open` click,
-then tracks its `HWND` via Win32 P/Invoke (`GetWindowThreadProcessId`,
-`EnumWindows`) and uses `SetForegroundWindow` + `ShowWindow(SW_RESTORE)`
-to focus the existing window on subsequent clicks instead of spawning
-a duplicate. PowerShell 7+ (`pwsh`) is preferred, with fallback to
-Windows PowerShell 5.1.
+V1.4.0 ships an **embedded ConPTY terminal** with a tabbed multi-session
+view ([#93](https://github.com/richardpan/copilot-session-manager/issues/93),
+[#159](https://github.com/richardpan/copilot-session-manager/issues/159)).
+Clicking `▶ Open` on a card opens (or focuses) a tab in the dashboard's
+terminal panel rather than spawning an external console. The renderer is
+a custom WPF surface backed by a hand-rolled VT parser and a 1000-line
+scroll-back screen buffer; mouse selection, Ctrl+C / Ctrl+V, Alt+drag
+block selection, right-click Copy / Paste, double-/triple-click word
+and row selection, and auto-resize are all wired up.
 
-An embedded ConPTY-based terminal (no external windows at all) is on
-the V1.x roadmap — see
-[ADR-0001 — embedded ConPTY](docs/adr/0001-conpty-embedded-terminal.md)
-and [#93](https://github.com/richardpan/copilot-session-manager/issues/93).
+An **external** PowerShell window remains available via the row context
+menu's "Open in external window" and "Detach to external window" entries
+for sessions you want to pop out (PowerShell 7+ preferred, falling back
+to Windows PowerShell 5.1). The window's `HWND` is tracked via Win32
+P/Invoke so subsequent clicks focus the existing window instead of
+spawning duplicates.
 
 ### Generated Session Docs Flow
 
@@ -347,9 +353,9 @@ dotnet run   --project src\CopilotSessionManager
 dotnet publish src\CopilotSessionManager\CopilotSessionManager.csproj `
   -c Release -r win-x64 --self-contained true `
   -p:IncludeNativeLibrariesForSelfExtract=true `
-  -o publish\v1.3.0
-Compress-Archive -Path publish\v1.3.0\* `
-  -DestinationPath publish\copilot-session-manager-v1.3.0-win-x64.zip
+  -o publish\v1.4.0
+Compress-Archive -Path publish\v1.4.0\* `
+  -DestinationPath publish\copilot-session-manager-v1.4.0-win-x64.zip
 ```
 
 ---
@@ -429,7 +435,7 @@ copilot-session-manager/
 
 ## Roadmap & Issues
 
-- 🎯 **Latest release:** [v1.3.0](https://github.com/richardpan/copilot-session-manager/releases/tag/v1.3.0)
+- 🎯 **Latest release:** [v1.4.0](https://github.com/richardpan/copilot-session-manager/releases/tag/v1.4.0)
 - 📋 **All issues:** [github.com/richardpan/copilot-session-manager/issues](https://github.com/richardpan/copilot-session-manager/issues)
 - 🏷️ **Labels:** `v1` · `v2` · `enhancement` · `ux` · `cost-tracking` · `collaboration` · `lifecycle` · `documentation`
 
