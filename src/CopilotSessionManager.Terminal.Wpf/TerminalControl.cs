@@ -290,7 +290,11 @@ public class TerminalControl : FrameworkElement
         // selects the word under the cursor, Shift+click extends the
         // current selection (anchor sticks, focus moves). Bare click
         // falls through to the prior begin-selection behaviour.
+        // Issue #179: bare Alt+click begins a rectangular (block)
+        // selection that drag extends per cell. Shift wins over Alt
+        // (extending an existing selection keeps its mode).
         var shift = (Keyboard.Modifiers & ModifierKeys.Shift) == ModifierKeys.Shift;
+        var alt = (Keyboard.Modifiers & ModifierKeys.Alt) == ModifierKeys.Alt;
         if (e.ClickCount >= 3)
         {
             SelectRow(cell.Value.Row);
@@ -302,6 +306,10 @@ public class TerminalControl : FrameworkElement
         else if (shift)
         {
             ExtendSelectionTo(cell.Value.Row, cell.Value.Column);
+        }
+        else if (alt)
+        {
+            BeginSelection(cell.Value.Row, cell.Value.Column, SelectionMode.Rectangle);
         }
         else
         {
@@ -510,9 +518,19 @@ public class TerminalControl : FrameworkElement
 
     /// <summary>
     /// Begin a fresh selection anchored at the given 1-based cell. The
-    /// focus starts equal to the anchor (empty selection).
+    /// focus starts equal to the anchor (empty selection). Equivalent to
+    /// <see cref="BeginSelection(int, int, SelectionMode)"/> with
+    /// <see cref="SelectionMode.Stream"/>.
     /// </summary>
-    public void BeginSelection(int row, int column)
+    public void BeginSelection(int row, int column) => BeginSelection(row, column, SelectionMode.Stream);
+
+    /// <summary>
+    /// Issue #179: begin a fresh selection anchored at the given 1-based
+    /// cell with an explicit <paramref name="mode"/>. The focus starts
+    /// equal to the anchor; subsequent <see cref="UpdateSelection(int,
+    /// int)"/> calls preserve the mode via record-with semantics.
+    /// </summary>
+    public void BeginSelection(int row, int column, SelectionMode mode)
     {
         var buffer = Buffer;
         if (buffer is null)
@@ -522,7 +540,7 @@ public class TerminalControl : FrameworkElement
         row = Math.Clamp(row, 1, buffer.Rows);
         column = Math.Clamp(column, 1, buffer.Columns);
         _selecting = true;
-        SetSelection(new TerminalSelection(row, column, row, column));
+        SetSelection(new TerminalSelection(row, column, row, column) { Mode = mode });
     }
 
     /// <summary>Update the focus end of an in-progress selection.</summary>
@@ -546,7 +564,7 @@ public class TerminalControl : FrameworkElement
     /// Issue #178: Shift+click. Extend the current selection so its
     /// focus is at (<paramref name="row"/>, <paramref name="column"/>),
     /// keeping the existing anchor in place. If no selection exists,
-    /// this behaves like <see cref="BeginSelection"/> at the supplied
+    /// this behaves like <see cref="BeginSelection(int, int)"/> at the supplied
     /// cell. Enters drag-extend mode so a subsequent mouse-move
     /// continues to move the focus.
     /// </summary>
@@ -1119,19 +1137,35 @@ public class TerminalControl : FrameworkElement
         }
 
         var metrics = _metrics;
-        var norm = sel.Normalize();
-        var startRow = Math.Clamp(norm.AnchorRow, 1, buffer.Rows);
-        var endRow = Math.Clamp(norm.FocusRow, 1, buffer.Rows);
-        var startCol = Math.Clamp(norm.AnchorColumn, 1, buffer.Columns);
-        var endCol = Math.Clamp(norm.FocusColumn, 1, buffer.Columns);
-
         var brush = new SolidColorBrush(SelectionBrush);
         brush.Freeze();
 
-        for (var row = startRow; row <= endRow; row++)
+        if (sel.Mode == SelectionMode.Rectangle)
         {
-            var first = row == startRow ? startCol : 1;
-            var last = row == endRow ? endCol : buffer.Columns;
+            var startRow = Math.Clamp(Math.Min(sel.AnchorRow, sel.FocusRow), 1, buffer.Rows);
+            var endRow = Math.Clamp(Math.Max(sel.AnchorRow, sel.FocusRow), 1, buffer.Rows);
+            var startCol = Math.Clamp(Math.Min(sel.AnchorColumn, sel.FocusColumn), 1, buffer.Columns);
+            var endCol = Math.Clamp(Math.Max(sel.AnchorColumn, sel.FocusColumn), 1, buffer.Columns);
+            var x = (startCol - 1) * metrics.CellWidth;
+            var width = (endCol - startCol + 1) * metrics.CellWidth;
+            for (var row = startRow; row <= endRow; row++)
+            {
+                var y = (row - 1) * metrics.CellHeight;
+                dc.DrawRectangle(brush, null, new Rect(x, y, width, metrics.CellHeight));
+            }
+            return;
+        }
+
+        var norm = sel.Normalize();
+        var streamStartRow = Math.Clamp(norm.AnchorRow, 1, buffer.Rows);
+        var streamEndRow = Math.Clamp(norm.FocusRow, 1, buffer.Rows);
+        var streamStartCol = Math.Clamp(norm.AnchorColumn, 1, buffer.Columns);
+        var streamEndCol = Math.Clamp(norm.FocusColumn, 1, buffer.Columns);
+
+        for (var row = streamStartRow; row <= streamEndRow; row++)
+        {
+            var first = row == streamStartRow ? streamStartCol : 1;
+            var last = row == streamEndRow ? streamEndCol : buffer.Columns;
             var x = (first - 1) * metrics.CellWidth;
             var y = (row - 1) * metrics.CellHeight;
             var width = (last - first + 1) * metrics.CellWidth;

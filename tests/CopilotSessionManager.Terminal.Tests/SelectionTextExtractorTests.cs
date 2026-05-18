@@ -73,6 +73,76 @@ public class SelectionTextExtractorTests
         SelectionTextExtractor.Extract(buffer, sel).Should().Be("ab");
     }
 
+    // -- #179 rectangular (block) selection -----------------------------------
+
+    [Fact]
+    public void Rectangle_selection_extracts_same_column_slice_per_row()
+    {
+        var buffer = NewBufferWithText(new[]
+        {
+            "alpha beta",
+            "gamma delta",
+            "epsilon zeta",
+        });
+        // Columns 3..6 from each row: "pha ", "mma ", "silo" — trailing
+        // spaces trimmed per row to match stream-mode behaviour.
+        var sel = new TerminalSelection(1, 3, 3, 6) { Mode = SelectionMode.Rectangle };
+        SelectionTextExtractor.Extract(buffer, sel)
+            .Should().Be("pha\r\nmma\r\nsilo");
+    }
+
+    [Fact]
+    public void Rectangle_selection_normalizes_reversed_corners()
+    {
+        var buffer = NewBufferWithText(new[]
+        {
+            "alpha beta",
+            "gamma delta",
+            "epsilon zeta",
+        });
+        // Anchor at bottom-right, focus at top-left -> same rectangle.
+        var sel = new TerminalSelection(3, 6, 1, 3) { Mode = SelectionMode.Rectangle };
+        SelectionTextExtractor.Extract(buffer, sel)
+            .Should().Be("pha\r\nmma\r\nsilo");
+    }
+
+    [Fact]
+    public void Rectangle_selection_trims_trailing_spaces_per_row()
+    {
+        var buffer = NewBufferWithText(new[]
+        {
+            "ab",
+            "cd",
+        }, columns: 20);
+        // Slice columns 1..10: each row has two letters followed by 8 spaces; trimmed.
+        var sel = new TerminalSelection(1, 1, 2, 10) { Mode = SelectionMode.Rectangle };
+        SelectionTextExtractor.Extract(buffer, sel)
+            .Should().Be("ab\r\ncd");
+    }
+
+    [Fact]
+    public void Rectangle_selection_single_column_yields_one_cell_per_row()
+    {
+        var buffer = NewBufferWithText(new[]
+        {
+            "abc",
+            "def",
+            "ghi",
+        });
+        var sel = new TerminalSelection(1, 2, 3, 2) { Mode = SelectionMode.Rectangle };
+        SelectionTextExtractor.Extract(buffer, sel)
+            .Should().Be("b\r\ne\r\nh");
+    }
+
+    [Fact]
+    public void Rectangle_selection_clamped_to_buffer_bounds()
+    {
+        var buffer = NewBufferWithText(new[] { "abc", "def" });
+        var sel = new TerminalSelection(-3, -3, 999, 999) { Mode = SelectionMode.Rectangle };
+        SelectionTextExtractor.Extract(buffer, sel)
+            .Should().Be("abc\r\ndef");
+    }
+
     private static ScreenBuffer NewBufferWithText(string[] rows, int? columns = null)
     {
         var cols = columns ?? GetMaxLength(rows);
