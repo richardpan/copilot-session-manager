@@ -303,6 +303,104 @@ public class TerminalControlSelectionTests
         control.GetSelectedText().Should().Be("hello");
     });
 
+    // -- #179 Alt+drag block (rectangular) selection --------------------------
+
+    [Fact]
+    public void BeginSelection_with_Rectangle_mode_sets_Mode() => StaRunner.Run(() =>
+    {
+        var control = NewControlWithBuffer(rows: 6, columns: 12);
+        control.BeginSelection(2, 3, SelectionMode.Rectangle);
+
+        control.Selection.Should().NotBeNull();
+        control.Selection!.Mode.Should().Be(SelectionMode.Rectangle);
+    });
+
+    [Fact]
+    public void BeginSelection_default_overload_defaults_to_Stream_mode() => StaRunner.Run(() =>
+    {
+        var control = NewControlWithBuffer(rows: 6, columns: 12);
+        control.BeginSelection(2, 3);
+
+        control.Selection!.Mode.Should().Be(SelectionMode.Stream);
+    });
+
+    [Fact]
+    public void Rectangle_selection_preserves_mode_through_drag() => StaRunner.Run(() =>
+    {
+        var control = NewControlWithBuffer(rows: 6, columns: 12);
+        control.BeginSelection(2, 3, SelectionMode.Rectangle);
+        control.DispatchMouseDragForTest(5, 9);
+
+        control.Selection.Should().NotBeNull();
+        control.Selection!.Mode.Should().Be(SelectionMode.Rectangle);
+        control.Selection.AnchorRow.Should().Be(2);
+        control.Selection.AnchorColumn.Should().Be(3);
+        control.Selection.FocusRow.Should().Be(5);
+        control.Selection.FocusColumn.Should().Be(9);
+    });
+
+    [Fact]
+    public void Rectangle_selection_GetSelectedText_yields_column_slices_per_row() => StaRunner.Run(() =>
+    {
+        var control = NewControlWithText(new[]
+        {
+            "alpha beta",
+            "gamma delta",
+            "epsilon zeta",
+        });
+        control.BeginSelection(1, 3, SelectionMode.Rectangle);
+        control.DispatchMouseDragForTest(3, 6);
+        control.DispatchMouseUpForTest();
+
+        control.GetSelectedText().Should().Be("pha\r\nmma\r\nsilo");
+    });
+
+    [Fact]
+    public void Rectangle_selection_reversed_drag_yields_normalized_text() => StaRunner.Run(() =>
+    {
+        var control = NewControlWithText(new[]
+        {
+            "alpha beta",
+            "gamma delta",
+            "epsilon zeta",
+        });
+        // Drag from bottom-right corner up to top-left of the same block.
+        control.BeginSelection(3, 6, SelectionMode.Rectangle);
+        control.DispatchMouseDragForTest(1, 3);
+        control.DispatchMouseUpForTest();
+
+        control.GetSelectedText().Should().Be("pha\r\nmma\r\nsilo");
+    });
+
+    [Fact]
+    public void Rectangle_selection_single_column_yields_one_glyph_per_row() => StaRunner.Run(() =>
+    {
+        var control = NewControlWithText(new[] { "abc", "def", "ghi" });
+        control.BeginSelection(1, 2, SelectionMode.Rectangle);
+        control.DispatchMouseDragForTest(3, 2);
+
+        control.GetSelectedText().Should().Be("b\r\ne\r\nh");
+    });
+
+    [Fact]
+    public void Stream_selection_unaffected_by_block_changes() => StaRunner.Run(() =>
+    {
+        // Regression guard: a plain BeginSelection -> drag should still
+        // produce the legacy reading-order text (full middle rows, etc).
+        var control = NewControlWithText(new[]
+        {
+            "alpha beta",
+            "gamma delta",
+            "epsilon zeta",
+        });
+        control.BeginSelection(1, 3);
+        control.DispatchMouseDragForTest(3, 6);
+        control.DispatchMouseUpForTest();
+
+        control.Selection!.Mode.Should().Be(SelectionMode.Stream);
+        control.GetSelectedText().Should().Be("pha beta\r\ngamma delta\r\nepsilo");
+    });
+
     private static TerminalControl NewControl() => new()
     {
         FontFamily = new FontFamily("Cascadia Mono, Consolas, Courier New"),

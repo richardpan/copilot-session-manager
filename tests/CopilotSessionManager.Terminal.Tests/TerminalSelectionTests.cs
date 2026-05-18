@@ -41,4 +41,27 @@ public class TerminalSelectionTests
         var sel = new TerminalSelection(10, 3, 1, 9);
         sel.Normalize().Normalize().Should().Be(sel.Normalize());
     }
+
+    [Fact]
+    public void Mode_defaults_to_Stream()
+    {
+        new TerminalSelection(1, 1, 2, 2).Mode.Should().Be(SelectionMode.Stream);
+    }
+
+    [Fact]
+    public void Mode_round_trips_via_with_init()
+    {
+        var sel = new TerminalSelection(1, 1, 2, 2) { Mode = SelectionMode.Rectangle };
+        sel.Mode.Should().Be(SelectionMode.Rectangle);
+
+        var moved = sel with { FocusRow = 5, FocusColumn = 7 };
+        moved.Mode.Should().Be(SelectionMode.Rectangle);
+    }
+
+    [Fact]
+    public void Normalize_preserves_Mode()
+    {
+        var sel = new TerminalSelection(5, 2, 3, 8) { Mode = SelectionMode.Rectangle };
+        sel.Normalize().Mode.Should().Be(SelectionMode.Rectangle);
+    }
 }
