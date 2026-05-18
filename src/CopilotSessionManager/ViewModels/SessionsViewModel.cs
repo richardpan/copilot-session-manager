@@ -45,6 +45,7 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
     private readonly ILogger<SessionsViewModel> _logger;
     private Action<SessionCardViewModel>? _openMergeWizard;
     private Action<SessionCardViewModel>? _openEmbeddedTerminal;
+    private Action<string>? _tabClosedOnDelete;
 
     #region IssueLinks
     private readonly IGitHubIssuesClient? _issuesClient;
@@ -660,6 +661,32 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
         _byId.Clear();
         ApplySnapshot(snapshot, labels, new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase), new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase), new Dictionary<string, DateTimeOffset>(StringComparer.OrdinalIgnoreCase));
     }
+
+    /// <summary>
+    /// Phase 6D (#159) lifecycle hook: when a session card is removed
+    /// from the dashboard (delete confirmed), invoke
+    /// <paramref name="callback"/> with the removed session id so the
+    /// host can close any embedded terminal tab tied to it. The
+    /// callback runs after the card has been removed from
+    /// <see cref="Sessions"/>; exceptions are logged and swallowed at
+    /// the call site.
+    /// </summary>
+    public void SetTabClosedOnDeleteCallback(Action<string>? callback)
+    {
+        _tabClosedOnDelete = callback;
+    }
+
+    /// <summary>
+    /// Phase 6D (#159): currently-selected card in the dashboard
+    /// DataGrid. Bound TwoWay to <c>DataGrid.SelectedItem</c> in the
+    /// view so the host can drive selection programmatically and react
+    /// to user-driven selection changes via
+    /// <see cref="System.ComponentModel.INotifyPropertyChanged"/>.
+    /// May be <c>null</c> when no row is selected or when the grid is
+    /// empty.
+    /// </summary>
+    [ObservableProperty]
+    private SessionCardViewModel? _selectedCard;
 
     public int TotalCount => Sessions.Count;
 
@@ -1393,11 +1420,26 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
         {
             if (_byId.TryGetValue(sessionId, out var card))
             {
+                if (ReferenceEquals(SelectedCard, card))
+                {
+                    SelectedCard = null;
+                }
                 Sessions.Remove(card);
                 _byId.Remove(sessionId);
                 RebuildVisible();
                 OnPropertyChanged(nameof(TotalCount));
                 OnPropertyChanged(nameof(ActiveCount));
+                if (_tabClosedOnDelete is not null)
+                {
+                    try
+                    {
+                        _tabClosedOnDelete(sessionId);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Tab-close-on-delete callback threw for {SessionId}.", sessionId);
+                    }
+                }
             }
         });
         return Task.CompletedTask;

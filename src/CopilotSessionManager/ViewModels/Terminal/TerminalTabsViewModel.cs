@@ -152,6 +152,31 @@ public sealed partial class TerminalTabsViewModel : ObservableObject, IDisposabl
     }
 
     /// <summary>
+    /// Phase 6D (#159) lifecycle hook: close the tab (if any) whose
+    /// <see cref="TerminalTabViewModel.SessionId"/> matches the supplied
+    /// dashboard session id. No-op when no such tab exists or
+    /// <paramref name="sessionId"/> is blank, so the
+    /// <c>SessionsViewModel</c> can call this unconditionally from its
+    /// post-delete hook without first checking whether the deleted
+    /// card had an embedded terminal open.
+    /// </summary>
+    /// <returns><c>true</c> when a tab was closed, otherwise <c>false</c>.</returns>
+    public bool CloseByDashboardId(string? sessionId)
+    {
+        if (string.IsNullOrWhiteSpace(sessionId))
+        {
+            return false;
+        }
+        var match = Tabs.FirstOrDefault(t => string.Equals(t.SessionId, sessionId, StringComparison.Ordinal));
+        if (match is null)
+        {
+            return false;
+        }
+        Close(match);
+        return true;
+    }
+
+    /// <summary>
     /// Phase 6C (#159): close glyph / middle-click / external callers
     /// share this command. Tolerates a null parameter (no-op) so the
     /// XAML <c>CommandParameter</c> binding can fail gracefully during

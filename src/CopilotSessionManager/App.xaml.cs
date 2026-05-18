@@ -32,6 +32,7 @@ public partial class App : Application
     private MutexSingleInstanceCoordinator? _singleInstance;
     private ITrayIconService? _trayIcon;
     private TrayCoordinator? _trayCoordinator;
+    private Services.DashboardTerminalTabsCoordinator? _tabsCoordinator;
     private bool _userRequestedQuit;
     private const string HighContrastThemeSource = "Themes/HighContrast.xaml";
 
@@ -158,6 +159,18 @@ public partial class App : Application
                 var tabsVm = _host.Services.GetRequiredService<ViewModels.Terminal.TerminalTabsViewModel>();
                 sessionsForMerge.SetOpenEmbeddedTerminalCallback(card =>
                     tabsVm.OpenOrActivate(card.Model, card.DisplayName, card.ModelTierBrush));
+
+                // V1.4 (#159) Phase 6D: tie the embedded tab lifecycle to
+                // the session card lifecycle - when a session is deleted
+                // from the dashboard, close its tab too.
+                sessionsForMerge.SetTabClosedOnDeleteCallback(id => tabsVm.CloseByDashboardId(id));
+
+                // V1.4 (#159) Phase 6D: two-way sync between dashboard
+                // selection and the active embedded tab so the user can
+                // drive selection from either surface. The coordinator
+                // is held as a field so its subscriptions live for the
+                // lifetime of the App.
+                _tabsCoordinator = new Services.DashboardTerminalTabsCoordinator(sessionsForMerge, tabsVm);
             }
             catch (Exception mex)
             {
@@ -210,6 +223,8 @@ public partial class App : Application
 
         _trayCoordinator?.Dispose();
         _trayCoordinator = null;
+        _tabsCoordinator?.Dispose();
+        _tabsCoordinator = null;
         _trayIcon?.Dispose();
         _trayIcon = null;
 
