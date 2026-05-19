@@ -309,4 +309,185 @@ public sealed class SessionDocsServiceTests : IDisposable
         html.Should().NotContain("file:///" + folder.Replace('\\', '/') + "/files/ui mockup.html",
             "raw spaces inside an href value would yield a malformed URL");
     }
+
+    // ─────────────────────────────────────────────────────────────────────
+    //  V1.5 (#196): drop-in fragment plumbing
+    // ─────────────────────────────────────────────────────────────────────
+
+    [Theory]
+    [InlineData("SESSION-DOCS.architecture.md", "architecture")]
+    [InlineData("SESSION-DOCS.token-burn.md", "token-burn")]
+    [InlineData("SESSION-DOCS.01-arch.md", "01-arch")]
+    [InlineData("session-docs.UPPER.HTML", "UPPER")]
+    public void TryParseFragmentFileName_AcceptsValidFragments(string fileName, string expectedName)
+    {
+        var ok = SessionDocsService.TryParseFragmentFileName(fileName, out var name, out _);
+        ok.Should().BeTrue();
+        name.Should().Be(expectedName);
+    }
+
+    [Theory]
+    [InlineData("SESSION-DOCS.md")]
+    [InlineData("SESSION-DOCS.html")]
+    [InlineData("SESSION-DOCS..md")]
+    [InlineData("SESSION-DOCS.txt")]
+    [InlineData("SESSION-DOCS.foo.txt")]
+    [InlineData("SESSION-README.md")]
+    [InlineData("")]
+    [InlineData("plan.md")]
+    public void TryParseFragmentFileName_RejectsNonFragmentFileNames(string fileName)
+    {
+        var ok = SessionDocsService.TryParseFragmentFileName(fileName, out _, out _);
+        ok.Should().BeFalse();
+    }
+
+    [Fact]
+    public void TryParseFragmentFileName_RoutesByExtension()
+    {
+        SessionDocsService.TryParseFragmentFileName("SESSION-DOCS.x.md", out _, out var mdKind)
+            .Should().BeTrue();
+        mdKind.ToString().Should().Be("Markdown");
+
+        SessionDocsService.TryParseFragmentFileName("SESSION-DOCS.x.html", out _, out var htmlKind)
+            .Should().BeTrue();
+        htmlKind.ToString().Should().Be("Html");
+    }
+
+    [Theory]
+    [InlineData("architecture", "Architecture")]
+    [InlineData("token-burn", "Token Burn")]
+    [InlineData("01-architecture", "01 Architecture")]
+    [InlineData("system_overview", "System Overview")]
+    [InlineData("foo.bar.baz", "Foo Bar Baz")]
+    public void PrettifyFragmentName_PreservesNumericPrefixesAndTitleCasesWords(string input, string expected)
+    {
+        SessionDocsService.PrettifyFragmentName(input).Should().Be(expected);
+    }
+
+    [Theory]
+    [InlineData("architecture", "architecture")]
+    [InlineData("Token-Burn", "token-burn")]
+    [InlineData("01-arch v2", "01-arch-v2")]
+    [InlineData("with/slash", "withslash")]
+    public void SlugifyAnchor_ProducesUrlSafeLowercaseSlug(string input, string expected)
+    {
+        SessionDocsService.SlugifyAnchor(input).Should().Be(expected);
+    }
+
+    [Fact]
+    public async Task EnsureAsync_RendersMarkdownFragmentAsInlineSection()
+    {
+        var folder = CreateSessionFolder("abc");
+        await File.WriteAllTextAsync(
+            Path.Combine(folder, "SESSION-DOCS.architecture.md"),
+            "## Layers\n\n- presentation\n- domain\n- data\n");
+
+        var sut = CreateSut();
+        var htmlPath = await sut.EnsureAsync(BuildSession("abc"));
+        var html = await File.ReadAllTextAsync(htmlPath);
+
+        html.Should().Contain("id=\"fragment-architecture\"",
+            "the markdown fragment gets its own anchored section");
+        html.Should().Contain(">Architecture<",
+            "the fragment heading is title-cased from the slug");
+        html.Should().Contain("SESSION-DOCS.architecture.md",
+            "the fragment section labels the source file in its badge");
+        html.Should().Contain("<li><a href=\"#fragment-architecture\">Architecture</a></li>",
+            "the TOC must link to the fragment anchor");
+        html.Should().Contain("<li>presentation</li>",
+            "Markdig must inline-render the fragment markdown body");
+    }
+
+    [Fact]
+    public async Task EnsureAsync_EmbedsHtmlFragmentViaSandboxedIframe_PointingAtSiblingFile()
+    {
+        var folder = CreateSessionFolder("abc");
+        await File.WriteAllTextAsync(
+            Path.Combine(folder, "SESSION-DOCS.diagram.html"),
+            "<html><body><svg></svg></body></html>");
+
+        var sut = CreateSut();
+        var htmlPath = await sut.EnsureAsync(BuildSession("abc"));
+        var html = await File.ReadAllTextAsync(htmlPath);
+
+        html.Should().Contain("<iframe class=\"fragment-frame\"",
+            "html fragments must be embedded via an iframe so their <style>/<script> don't bleed");
+        html.Should().Contain("src=\"SESSION-DOCS.diagram.html\"",
+            "the iframe must point at the sibling file by name, not at the embedded body");
+        html.Should().Contain("sandbox=\"allow-scripts allow-same-origin allow-popups\"",
+            "the iframe must declare an explicit sandbox policy");
+        html.Should().NotContain("<svg></svg>",
+            "html fragment body content must NOT be inlined into the parent document");
+    }
+
+    [Fact]
+    public async Task EnsureAsync_OrdersFragmentsByName()
+    {
+        var folder = CreateSessionFolder("abc");
+        await File.WriteAllTextAsync(Path.Combine(folder, "SESSION-DOCS.02-tokens.md"), "tokens");
+        await File.WriteAllTextAsync(Path.Combine(folder, "SESSION-DOCS.01-architecture.md"), "arch");
+        await File.WriteAllTextAsync(Path.Combine(folder, "SESSION-DOCS.03-research.html"), "<html />");
+
+        var sut = CreateSut();
+        var htmlPath = await sut.EnsureAsync(BuildSession("abc"));
+        var html = await File.ReadAllTextAsync(htmlPath);
+
+        var archIndex = html.IndexOf("fragment-01-architecture", StringComparison.Ordinal);
+        var tokensIndex = html.IndexOf("fragment-02-tokens", StringComparison.Ordinal);
+        var researchIndex = html.IndexOf("fragment-03-research", StringComparison.Ordinal);
+
+        archIndex.Should().BeGreaterThan(0);
+        tokensIndex.Should().BeGreaterThan(archIndex,
+            "fragments must render in alphanumeric order — 02 after 01");
+        researchIndex.Should().BeGreaterThan(tokensIndex,
+            "fragments must render in alphanumeric order — 03 after 02");
+    }
+
+    [Fact]
+    public async Task EnsureAsync_IgnoresMainSessionDocsMdAndGeneratedHtml_AsFragments()
+    {
+        var folder = CreateSessionFolder("abc");
+        var sut = CreateSut();
+
+        // Run once to scaffold SESSION-DOCS.md and generate SESSION-DOCS.html.
+        var htmlPath = await sut.EnsureAsync(BuildSession("abc"));
+        File.Exists(htmlPath).Should().BeTrue();
+
+        // Bump a source so the second EnsureAsync regenerates.
+        await Task.Delay(1100); // mtimes are second-resolution on some FS — keep it generous
+        await File.WriteAllTextAsync(Path.Combine(folder, "plan.md"), "p");
+
+        var html = await File.ReadAllTextAsync(htmlPath);
+        html.Should().NotContain("id=\"fragment-md\"", "the main SESSION-DOCS.md must NOT be treated as a fragment");
+        html.Should().NotContain("id=\"fragment-html\"", "the generated SESSION-DOCS.html must NOT be treated as a fragment");
+    }
+
+    [Fact]
+    public async Task EnsureAsync_RegeneratesHtml_WhenFragmentMtimeIsNewer()
+    {
+        var folder = CreateSessionFolder("abc");
+        var sut = CreateSut();
+
+        // First render — no fragments yet.
+        var htmlPath = await sut.EnsureAsync(BuildSession("abc"));
+        var first = await File.ReadAllTextAsync(htmlPath);
+        first.Should().NotContain("fragment-architecture",
+            "no fragment has been added at this point");
+
+        // Wait for clock to tick past the html mtime, then add a fragment.
+        await Task.Delay(1100);
+        await File.WriteAllTextAsync(
+            Path.Combine(folder, "SESSION-DOCS.architecture.md"),
+            "# Layers");
+
+        // Second EnsureAsync MUST observe the new fragment as a "newer source"
+        // and regenerate — otherwise dropping in a fragment would have no
+        // effect until something else got touched.
+        var htmlPathAgain = await sut.EnsureAsync(BuildSession("abc"));
+        htmlPathAgain.Should().Be(htmlPath);
+        var second = await File.ReadAllTextAsync(htmlPath);
+
+        second.Should().Contain("fragment-architecture",
+            "adding a fragment file must make NeedsRegeneration return true");
+    }
 }
