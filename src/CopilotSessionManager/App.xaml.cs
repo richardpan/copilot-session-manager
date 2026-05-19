@@ -465,6 +465,14 @@ public partial class App : Application
             return result;
         });
 
+        // V1.5 (#196): keep SESSION-DOCS.html fresh in the background so
+        // the rendered view never goes stale just because the user hasn't
+        // clicked the (now plan.md-routed) Docs button. The refresher
+        // depends on ISessionDocsService + ISessionDiscoveryService both
+        // registered above via AddSessionDiscovery's transitive chain.
+        services.AddSingleton<Services.SessionDocsBackgroundRefresher>();
+        services.AddHostedService(sp => sp.GetRequiredService<Services.SessionDocsBackgroundRefresher>());
+
         // UI infrastructure — the dispatcher must wrap the WPF UI thread.
         services.AddSingleton<IUiDispatcher>(_ => new WpfDispatcher(Current.Dispatcher));
         services.AddSingleton(TimeProvider.System);

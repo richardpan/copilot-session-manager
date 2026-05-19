@@ -261,6 +261,15 @@ public sealed class SessionDocsService : ISessionDocsService
             yield return planMd;
         }
 
+        // V1.5 (#196): drop-in fragments — SESSION-DOCS.<name>.md and
+        // SESSION-DOCS.<name>.html at the session folder root. Each one
+        // contributes its own <section> to the rendered HTML and counts
+        // toward the staleness check so adding/editing one schedules a regen.
+        foreach (var fragment in EnumerateFragmentFiles(folder))
+        {
+            yield return fragment.AbsolutePath;
+        }
+
         // files/, research/, checkpoints/.
         foreach (var sub in new[] { "files", "research", "checkpoints" })
         {
@@ -291,6 +300,167 @@ public sealed class SessionDocsService : ISessionDocsService
                 yield return entry;
             }
         }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    //  Drop-in fragment discovery (V1.5 #196)
+    // ─────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// V1.5 (#196): file-name prefix used to detect drop-in documentation
+    /// fragments. A file matching
+    /// <c>SESSION-DOCS.&lt;name&gt;.&lt;md|html&gt;</c> at the session folder root
+    /// becomes its own section in the rendered HTML. The main
+    /// <c>SESSION-DOCS.md</c> source and the rendered
+    /// <c>SESSION-DOCS.html</c> output are intentionally excluded.
+    /// </summary>
+    public const string FragmentFilePrefix = "SESSION-DOCS.";
+
+    /// <summary>
+    /// V1.5 (#196): the kinds of drop-in fragments csm understands.
+    /// <list type="bullet">
+    ///   <item><c>Markdown</c> — Markdig-rendered inline as a section body.</item>
+    ///   <item><c>Html</c> — embedded via a sandboxed sibling <c>&lt;iframe&gt;</c>.</item>
+    /// </list>
+    /// </summary>
+    public enum FragmentKind { Markdown, Html }
+
+    /// <summary>V1.5 (#196): one drop-in fragment discovered in the session folder.</summary>
+    public sealed record FragmentEntry(
+        string Name,
+        string DisplayTitle,
+        string AbsolutePath,
+        string FileName,
+        FragmentKind Kind);
+
+    /// <summary>V1.5 (#196): enumerate the drop-in fragments at the root of <paramref name="folder"/>.</summary>
+    public List<FragmentEntry> EnumerateFragmentFiles(string folder)
+    {
+        var results = new List<FragmentEntry>();
+        if (!Directory.Exists(folder))
+        {
+            return results;
+        }
+
+        string[] entries;
+        try
+        {
+            entries = Directory.GetFiles(folder, FragmentFilePrefix + "*", SearchOption.TopDirectoryOnly);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            _logger.LogWarning(ex, "Could not enumerate fragments under {Folder}.", folder);
+            return results;
+        }
+
+        foreach (var path in entries)
+        {
+            var fileName = Path.GetFileName(path);
+            if (TryParseFragmentFileName(fileName, out var name, out var kind))
+            {
+                results.Add(new FragmentEntry(
+                    Name: name,
+                    DisplayTitle: PrettifyFragmentName(name),
+                    AbsolutePath: path,
+                    FileName: fileName,
+                    Kind: kind));
+            }
+        }
+
+        // Deterministic ordering: by display title, ASCII-insensitive,
+        // so the user can guide ordering with numeric prefixes
+        // (SESSION-DOCS.01-arch.md, SESSION-DOCS.02-tokens.md, …).
+        return results
+            .OrderBy(f => f.Name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    /// <summary>
+    /// V1.5 (#196): parses <c>SESSION-DOCS.&lt;name&gt;.&lt;ext&gt;</c>. Returns
+    /// <c>false</c> for the main <c>SESSION-DOCS.md</c> / generated
+    /// <c>SESSION-DOCS.html</c> as well as anything with an unsupported
+    /// extension or an empty <c>&lt;name&gt;</c> slot.
+    /// </summary>
+    public static bool TryParseFragmentFileName(
+        string fileName,
+        out string name,
+        out FragmentKind kind)
+    {
+        name = string.Empty;
+        kind = default;
+
+        if (string.IsNullOrWhiteSpace(fileName))
+        {
+            return false;
+        }
+
+        if (!fileName.StartsWith(FragmentFilePrefix, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        // Reject the bare SESSION-DOCS.md / SESSION-DOCS.html sources.
+        if (string.Equals(fileName, DocsMarkdownFileName, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(fileName, DocsHtmlFileName, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        var ext = Path.GetExtension(fileName);
+        if (string.Equals(ext, ".md", StringComparison.OrdinalIgnoreCase))
+        {
+            kind = FragmentKind.Markdown;
+        }
+        else if (string.Equals(ext, ".html", StringComparison.OrdinalIgnoreCase))
+        {
+            kind = FragmentKind.Html;
+        }
+        else
+        {
+            return false;
+        }
+
+        // Middle slice: everything between the prefix and the extension.
+        var middle = fileName.Substring(
+            FragmentFilePrefix.Length,
+            fileName.Length - FragmentFilePrefix.Length - ext.Length);
+
+        if (string.IsNullOrWhiteSpace(middle))
+        {
+            return false;
+        }
+
+        name = middle;
+        return true;
+    }
+
+    /// <summary>
+    /// V1.5 (#196): turn a slug like <c>token-burn</c> or <c>01-architecture</c>
+    /// into a human-readable section title (<c>Token Burn</c>,
+    /// <c>01 Architecture</c>). Leading numeric prefixes are preserved
+    /// so users can use them to control ordering without polluting the title.
+    /// </summary>
+    public static string PrettifyFragmentName(string name)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+
+        var parts = name.Split(new[] { '-', '_', '.' }, StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length == 0)
+        {
+            return name;
+        }
+
+        for (var i = 0; i < parts.Length; i++)
+        {
+            var p = parts[i];
+            // Pure-digit chunks stay as-is so "01" doesn't become "01" via TextInfo.
+            if (!p.All(char.IsDigit) && p.Length > 0 && char.IsLetter(p[0]))
+            {
+                parts[i] = char.ToUpper(p[0], CultureInfo.InvariantCulture) + p.Substring(1);
+            }
+        }
+
+        return string.Join(' ', parts);
     }
 
     private static bool ShouldSkipFile(string fullPath, string folder)
@@ -342,11 +512,12 @@ public sealed class SessionDocsService : ISessionDocsService
         var planMd = await ReadTextSafelyAsync(Path.Combine(folder, "plan.md"), cancellationToken)
             .ConfigureAwait(false);
 
+        var fragments = await LoadFragmentsAsync(folder, cancellationToken).ConfigureAwait(false);
         var mockups = EnumerateMockups(folder);
         var filesIndex = EnumerateFilesIndex(folder, mockups);
         var checkpoints = await GetCheckpointsAsync(session.Id, cancellationToken).ConfigureAwait(false);
 
-        var html = RenderHtml(session, docsMd, planMd, mockups, filesIndex, checkpoints);
+        var html = RenderHtml(session, docsMd, planMd, fragments, mockups, filesIndex, checkpoints);
 
         var temp = htmlPath + ".tmp";
         try
@@ -360,6 +531,50 @@ public sealed class SessionDocsService : ISessionDocsService
             TryDeleteTemp(temp);
             throw;
         }
+    }
+
+    private async Task<List<LoadedFragment>> LoadFragmentsAsync(
+        string folder,
+        CancellationToken cancellationToken)
+    {
+        var entries = EnumerateFragmentFiles(folder);
+        var loaded = new List<LoadedFragment>(entries.Count);
+        foreach (var entry in entries)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            // Markdown fragments get inlined, so we have to read them.
+            // HTML fragments are embedded via <iframe src=…> against the
+            // sibling file on disk — we still bail if the file is too
+            // large since a multi-MB iframe page is rarely intentional.
+            string? body = null;
+            if (entry.Kind == FragmentKind.Markdown)
+            {
+                body = await ReadTextSafelyAsync(entry.AbsolutePath, cancellationToken).ConfigureAwait(false);
+            }
+            else
+            {
+                try
+                {
+                    var size = new FileInfo(entry.AbsolutePath).Length;
+                    if (size > MaxRenderableFileBytes)
+                    {
+                        _logger.LogWarning(
+                            "Fragment {Path} exceeds {Max} bytes; skipping.",
+                            entry.AbsolutePath, MaxRenderableFileBytes);
+                        continue;
+                    }
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    _logger.LogWarning(ex, "Could not stat fragment {Path}; skipping.", entry.AbsolutePath);
+                    continue;
+                }
+            }
+
+            loaded.Add(new LoadedFragment(entry, body));
+        }
+        return loaded;
     }
 
     private async Task<string?> ReadTextSafelyAsync(string path, CancellationToken cancellationToken)
@@ -529,6 +744,7 @@ public sealed class SessionDocsService : ISessionDocsService
         Session session,
         string? docsMd,
         string? planMd,
+        IReadOnlyList<LoadedFragment> fragments,
         IReadOnlyList<MockupEntry> mockups,
         IReadOnlyList<FileEntry> filesIndex,
         IReadOnlyList<CheckpointEntry> checkpoints)
@@ -553,6 +769,11 @@ public sealed class SessionDocsService : ISessionDocsService
         sb.AppendLine("<h2>Contents</h2>");
         sb.AppendLine("<ul>");
         sb.AppendLine("<li><a href=\"#overview\">Overview</a></li>");
+        foreach (var f in fragments)
+        {
+            sb.Append("<li><a href=\"#fragment-").Append(SlugifyAnchor(f.Entry.Name)).Append("\">")
+                .Append(HtmlEncode(f.Entry.DisplayTitle)).AppendLine("</a></li>");
+        }
         sb.AppendLine("<li><a href=\"#mockups\">Mockups</a></li>");
         sb.AppendLine("<li><a href=\"#files\">Files</a></li>");
         sb.AppendLine("<li><a href=\"#plan\">Plan</a></li>");
@@ -598,6 +819,44 @@ public sealed class SessionDocsService : ISessionDocsService
             sb.AppendLine("<p class=\"empty\">SESSION-DOCS.md not yet created — click 📚 Docs in the app to scaffold it.</p>");
         }
         sb.AppendLine("</section>");
+
+        // V1.5 (#196): drop-in fragments. Markdown is inlined; HTML is
+        // embedded via a sibling <iframe src=…> so the host page stays
+        // safe even if the fragment has its own <style> / <script>.
+        foreach (var f in fragments)
+        {
+            var anchor = SlugifyAnchor(f.Entry.Name);
+            sb.Append("<section id=\"fragment-").Append(anchor).AppendLine("\" class=\"curated fragment\">");
+            sb.Append("<h2>").Append(HtmlEncode(f.Entry.DisplayTitle))
+                .Append(" <span class=\"auto-badge\">").Append(HtmlEncode(f.Entry.FileName))
+                .AppendLine("</span></h2>");
+
+            if (f.Entry.Kind == FragmentKind.Markdown)
+            {
+                if (!string.IsNullOrWhiteSpace(f.Body))
+                {
+                    sb.AppendLine("<div class=\"rendered-md\">");
+                    sb.AppendLine(Markdown.ToHtml(f.Body!, _markdownPipeline));
+                    sb.AppendLine("</div>");
+                }
+                else
+                {
+                    sb.Append("<p class=\"empty\">(<code>").Append(HtmlEncode(f.Entry.FileName))
+                        .AppendLine("</code> is empty or unreadable.)</p>");
+                }
+            }
+            else
+            {
+                sb.Append("<iframe class=\"fragment-frame\" loading=\"lazy\" src=\"")
+                    .Append(HtmlEncode(f.Entry.FileName))
+                    .AppendLine("\" sandbox=\"allow-scripts allow-same-origin allow-popups\"></iframe>");
+                sb.Append("<p class=\"fragment-link\"><a target=\"_blank\" rel=\"noopener\" href=\"")
+                    .Append(HtmlEncode(f.Entry.FileName))
+                    .AppendLine("\">Open fragment in new tab ↗</a></p>");
+            }
+
+            sb.AppendLine("</section>");
+        }
 
         // Mockups
         sb.AppendLine("<section id=\"mockups\" class=\"auto\">");
@@ -787,6 +1046,33 @@ public sealed class SessionDocsService : ISessionDocsService
 
     private sealed record CheckpointEntry(int Number, string Title, string FilePath, string? Body);
 
+    /// <summary>V1.5 (#196): fragment metadata + (for markdown) eagerly-loaded body.</summary>
+    public sealed record LoadedFragment(FragmentEntry Entry, string? Body);
+
+    /// <summary>
+    /// V1.5 (#196): produce a stable, URL-safe anchor for a fragment name.
+    /// Drops anything that is not [A-Za-z0-9_-] so it can sit inside an
+    /// <c>id="fragment-…"</c> attribute and a <c>#fragment-…</c> link.
+    /// </summary>
+    public static string SlugifyAnchor(string name)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        var sb = new StringBuilder(name.Length);
+        foreach (var c in name)
+        {
+            if (char.IsLetterOrDigit(c) || c == '-' || c == '_')
+            {
+                sb.Append(char.ToLowerInvariant(c));
+            }
+            else if (c == ' ' || c == '.')
+            {
+                sb.Append('-');
+            }
+        }
+        var result = sb.ToString();
+        return string.IsNullOrEmpty(result) ? "fragment" : result;
+    }
+
     // Catppuccin-mocha-aligned palette to match csm's WPF theme.
     private const string InlineCss = @"
 * { box-sizing: border-box; }
@@ -846,6 +1132,25 @@ header.session-header { padding-bottom: 12px; border-bottom: 1px solid #313244; 
 
 .empty { color: #7f849c; font-style: italic; }
 .warn { color: #f9e2af; font-size: 11px; }
+
+/* V1.5 (#196): drop-in fragment sections. */
+section.fragment {
+    border: 1px solid #313244;
+    border-radius: 8px;
+    padding: 16px 20px;
+    margin: 18px 0;
+    background: #181825;
+}
+section.fragment > h2 { margin-top: 0; }
+.fragment-frame {
+    width: 100%;
+    height: 540px;
+    border: 1px solid #313244;
+    border-radius: 6px;
+    background: #11111b;
+}
+.fragment-link { margin: 8px 0 0; font-size: 12px; }
+.fragment-link a { color: #89b4fa; }
 
 .mockup-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
 .mockup-card {
