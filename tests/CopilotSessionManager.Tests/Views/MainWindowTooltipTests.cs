@@ -122,16 +122,18 @@ public class MainWindowTooltipTests
     }
 
     [Fact]
-    public void PerRow_DocsButton_TooltipMentionsScaffoldingOnFirstClick()
+    public void PerRow_DocsButton_TooltipMentionsPlanMarkdownInDefaultEditor()
     {
         var xaml = ReadMainWindowXaml();
 
-        xaml.Should().Contain("\"Open session documentation\"",
-            "the Docs tooltip must use 'Open session documentation' as its bold heading");
-        xaml.Should().Contain("scaffolds an empty SESSION-DOCS.md",
-            "the Docs tooltip must explain the first-click scaffolding behaviour");
-        xaml.Should().Contain("never overwrites your edits",
-            "the Docs tooltip must reassure the user that csm preserves their edits");
+        xaml.Should().Contain("\"Open session plan\"",
+            "V1.5: the Docs tooltip heading was retitled to 'Open session plan'");
+        xaml.Should().Contain("plan.md in your default editor",
+            "the Docs tooltip must explain that plan.md opens in the user's default .md handler");
+        xaml.Should().Contain("auto-maintained by Copilot",
+            "the Docs tooltip must explain plan.md is kept fresh by Copilot itself (no regen step)");
+        xaml.Should().Contain("falls back to generating SESSION-DOCS.html",
+            "the Docs tooltip must document the SESSION-DOCS.html fallback path for sessions without a plan.md");
     }
 
     [Fact]
