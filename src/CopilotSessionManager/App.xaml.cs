@@ -160,6 +160,15 @@ public partial class App : Application
                 sessionsForMerge.SetOpenEmbeddedTerminalCallback(card =>
                     tabsVm.OpenOrActivate(card.Model, card.DisplayName, card.ModelTierBrush));
 
+                // V1.5: route the dashboard's "+ New session" affordance
+                // into a fresh embedded tab by default. Right-clicking
+                // the button keeps the V1.3 external-PowerShell launch
+                // available via NewSessionExternalCommand.
+                var newTabAccent = (System.Windows.Media.Brush?)Application.Current.TryFindResource("PrimaryActionBrush")
+                    ?? System.Windows.Media.Brushes.SteelBlue;
+                sessionsForMerge.SetOpenNewEmbeddedCopilotTabCallback(() =>
+                    tabsVm.OpenNewCopilotTab("New session", newTabAccent));
+
                 // V1.4 (#159) Phase 6D: tie the embedded tab lifecycle to
                 // the session card lifecycle - when a session is deleted
                 // from the dashboard, close its tab too.

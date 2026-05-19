@@ -108,6 +108,34 @@ public sealed partial class TerminalTabsViewModel : ObservableObject, IDisposabl
     }
 
     /// <summary>
+    /// V1.5 — open a brand-new Copilot session in its own embedded
+    /// tab. Used by the dashboard's "New session" affordance when the
+    /// default (embedded) route is taken. The CLI mints a fresh session
+    /// id inside the tab; the dashboard's discovery watcher then picks
+    /// the new session up and surfaces it as a card a few seconds
+    /// later. The tab itself is keyed off a synthetic
+    /// <see cref="TerminalTabViewModel.SessionId"/> (prefixed with
+    /// <c>__new__</c>) so it never collides with a real session id and
+    /// each click adds a separate tab (no find-or-create dedupe).
+    /// </summary>
+    /// <param name="displayName">Tab header text (e.g. "New session").</param>
+    /// <param name="tierAccent">Accent brush for the tab-header stripe.</param>
+    /// <returns>The newly opened, now-active tab.</returns>
+    public TerminalTabViewModel OpenNewCopilotTab(string displayName, Brush tierAccent)
+    {
+        ArgumentNullException.ThrowIfNull(displayName);
+        ArgumentNullException.ThrowIfNull(tierAccent);
+
+        var terminalSession = _sessionFactory.CreateNewCopilotSession(DefaultRows, DefaultCols);
+        var syntheticId = $"__new__{Guid.NewGuid():N}";
+        var tab = new TerminalTabViewModel(syntheticId, displayName, tierAccent, terminalSession);
+        Tabs.Add(tab);
+        ActiveTab = tab;
+        OnPropertyChanged(nameof(IsEmpty));
+        return tab;
+    }
+
+    /// <summary>
     /// Close <paramref name="tab"/>: remove it from <see cref="Tabs"/>,
     /// dispose it, and pick a sensible neighbour as the new active tab.
     /// No-op when the tab is not in the strip.

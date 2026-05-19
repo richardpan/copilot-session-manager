@@ -102,6 +102,83 @@ public class SessionsViewModelNewSessionTests
         vm.StatusMessage.Should().Contain("pwsh missing");
     }
 
+    [Fact]
+    public async Task NewSessionAsync_PrefersEmbeddedCallback_WhenWired()
+    {
+        var launcher = new RecordingLauncher();
+        var vm = CreateSut(launcher);
+        var embeddedCalls = 0;
+        vm.SetOpenNewEmbeddedCopilotTabCallback(() => embeddedCalls++);
+
+        await vm.NewSessionAsync();
+
+        embeddedCalls.Should().Be(1, "embedded route is the new default when a callback is wired");
+        launcher.NewCalls.Should().Be(0, "external launcher must not be invoked when the embedded callback handles the request");
+        vm.StatusMessage.Should().Contain("embedded tab");
+    }
+
+    [Fact]
+    public async Task NewSessionAsync_FallsBackToExternal_WhenNoEmbeddedCallback()
+    {
+        var launcher = new RecordingLauncher();
+        var vm = CreateSut(launcher);
+
+        await vm.NewSessionAsync();
+
+        launcher.NewCalls.Should().Be(1, "external launcher remains the fallback when no embedded callback is wired");
+        vm.StatusMessage.Should().Contain("Launched new Copilot session");
+    }
+
+    [Fact]
+    public async Task NewSessionExternalAsync_AlwaysInvokesExternalLauncher_EvenWithEmbeddedWired()
+    {
+        var launcher = new RecordingLauncher();
+        var vm = CreateSut(launcher);
+        var embeddedCalls = 0;
+        vm.SetOpenNewEmbeddedCopilotTabCallback(() => embeddedCalls++);
+
+        await vm.NewSessionExternalAsync();
+
+        embeddedCalls.Should().Be(0, "the external command must bypass the embedded callback");
+        launcher.NewCalls.Should().Be(1);
+        vm.StatusMessage.Should().Contain("Launched new Copilot session");
+    }
+
+    [Fact]
+    public async Task NewSessionAsync_EmbeddedCallbackThrows_PostsFriendlyError()
+    {
+        var launcher = new RecordingLauncher();
+        var vm = CreateSut(launcher);
+        vm.SetOpenNewEmbeddedCopilotTabCallback(() => throw new InvalidOperationException("tabs not ready"));
+
+        await vm.NewSessionAsync();
+
+        vm.StatusMessage.Should().Contain("Could not open embedded session");
+        vm.StatusMessage.Should().Contain("tabs not ready");
+        launcher.NewCalls.Should().Be(0, "embedded callback failure must not silently fall through to the external launcher");
+    }
+
+    [Fact]
+    public void NewSessionCommand_EnabledWithEmbeddedCallback_EvenWithoutLauncher()
+    {
+        var vm = CreateSut(launcher: null);
+        vm.NewSessionCommand.CanExecute(null).Should().BeFalse("baseline: no launcher and no embedded callback");
+
+        vm.SetOpenNewEmbeddedCopilotTabCallback(() => { });
+
+        vm.NewSessionCommand.CanExecute(null).Should().BeTrue("embedded callback alone is enough");
+    }
+
+    [Fact]
+    public void NewSessionExternalCommand_DisabledWhenLauncherMissing()
+    {
+        var vm = CreateSut(launcher: null);
+        vm.SetOpenNewEmbeddedCopilotTabCallback(() => { });
+
+        vm.NewSessionExternalCommand.CanExecute(null).Should().BeFalse(
+            "the external entry never falls back to the embedded callback");
+    }
+
     private sealed class RecordingLauncher : ISessionLauncher
     {
         public int NewCalls { get; private set; }

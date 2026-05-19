@@ -216,6 +216,14 @@ public sealed class DashboardTerminalTabsCoordinatorTests : IDisposable
             return ts;
         }
 
+        public TerminalSession CreateNewCopilotSession(int rows, int cols)
+        {
+            var process = new FakeTerminalProcess();
+            var ts = new TerminalSession(process, new InlineDispatcher(), rows, cols);
+            _created.Add((process, ts));
+            return ts;
+        }
+
         public void Dispose()
         {
             foreach (var (proc, ts) in _created)

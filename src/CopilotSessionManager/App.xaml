@@ -41,6 +41,51 @@
             </Style>
             <Style TargetType="{x:Type MenuItem}">
                 <Setter Property="FocusVisualStyle" Value="{StaticResource A11yFocusVisual}" />
+                <!--
+                    Top-level menu items inherit Foreground from the parent
+                    Menu, but submenu items pop up against the system-default
+                    light popup background. Without an explicit dark Foreground
+                    on the items, the inherited light TextPrimaryBrush makes
+                    them unreadable. Pin Background/Foreground to theme brushes
+                    so both the top-bar header and the popup items remain
+                    readable, then add a hover highlight that matches the rest
+                    of the dashboard.
+                -->
+                <Setter Property="Background" Value="{DynamicResource SurfaceAltBrush}" />
+                <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
+                <Style.Triggers>
+                    <Trigger Property="IsHighlighted" Value="True">
+                        <Setter Property="Background" Value="{DynamicResource SurfaceHoverBrush}" />
+                        <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+                    </Trigger>
+                    <Trigger Property="IsEnabled" Value="False">
+                        <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}" />
+                    </Trigger>
+                </Style.Triggers>
+            </Style>
+            <!--
+                Style the popup container itself so submenu chrome matches the
+                MenuItem theming above and the popup border / background no
+                longer rely on system Window colors.
+            -->
+            <Style TargetType="{x:Type ContextMenu}">
+                <Setter Property="Background" Value="{DynamicResource SurfaceAltBrush}" />
+                <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
+                <Setter Property="BorderThickness" Value="1" />
+            </Style>
+            <!--
+                Top-level Menu bar styling — pin Foreground so the cascading
+                inheritance into MenuItem headers stays predictable across
+                themes.
+            -->
+            <Style TargetType="{x:Type Menu}">
+                <Setter Property="Background" Value="{DynamicResource SurfaceAltBrush}" />
+                <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+            </Style>
+            <Style TargetType="{x:Type Separator}">
+                <Setter Property="Background" Value="{DynamicResource BorderBrush}" />
             </Style>
             <Style TargetType="{x:Type TextBox}">
                 <Setter Property="FocusVisualStyle" Value="{StaticResource A11yFocusVisual}" />

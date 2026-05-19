@@ -466,6 +466,46 @@ public sealed class TerminalTabsViewModelTests : IDisposable
         sut.DetachTabCommand.CanExecute(tab).Should().BeFalse("callback was cleared");
     }
 
+    [Fact]
+    public void OpenNewCopilotTab_appends_tab_with_synthetic_id_and_activates_it()
+    {
+        var sut = new TerminalTabsViewModel(_factory);
+
+        var tab = sut.OpenNewCopilotTab("New session", Brushes.SteelBlue);
+
+        sut.Tabs.Should().ContainSingle().Which.Should().BeSameAs(tab);
+        sut.ActiveTab.Should().BeSameAs(tab);
+        tab.DisplayName.Should().Be("New session");
+        tab.SessionId.Should().StartWith("__new__");
+        _factory.CreateNewCopilotSessionCallCount.Should().Be(1);
+        _factory.CreateCallCount.Should().Be(0, "OpenNewCopilotTab must not reach the Session-bound factory path");
+    }
+
+    [Fact]
+    public void OpenNewCopilotTab_does_not_dedupe_so_repeated_clicks_add_more_tabs()
+    {
+        var sut = new TerminalTabsViewModel(_factory);
+
+        var first = sut.OpenNewCopilotTab("New session", Brushes.SteelBlue);
+        var second = sut.OpenNewCopilotTab("New session", Brushes.SteelBlue);
+
+        sut.Tabs.Should().HaveCount(2);
+        sut.Tabs.Should().NotContain(t => ReferenceEquals(t, first) && ReferenceEquals(t, second));
+        first.SessionId.Should().NotBe(second.SessionId, "synthetic ids must be unique per tab");
+        sut.ActiveTab.Should().BeSameAs(second);
+    }
+
+    [Fact]
+    public void OpenNewCopilotTab_throws_on_null_arguments()
+    {
+        var sut = new TerminalTabsViewModel(_factory);
+
+        sut.Invoking(s => s.OpenNewCopilotTab(null!, Brushes.SteelBlue))
+            .Should().Throw<ArgumentNullException>();
+        sut.Invoking(s => s.OpenNewCopilotTab("New session", null!))
+            .Should().Throw<ArgumentNullException>();
+    }
+
     private static Session NewSession(string id) => new(
         Id: id,
         Cwd: @"C:\\ws\\fake",
@@ -485,10 +525,22 @@ public sealed class TerminalTabsViewModelTests : IDisposable
     {
         private readonly System.Collections.Generic.List<(FakeTerminalProcess Process, TerminalSession Session)> _created = new();
 
-        public int CreateCallCount => _created.Count;
+        public int CreateCallCount { get; private set; }
+
+        public int CreateNewCopilotSessionCallCount { get; private set; }
 
         public TerminalSession Create(Session session, int rows, int cols)
         {
+            CreateCallCount++;
+            var process = new FakeTerminalProcess();
+            var ts = new TerminalSession(process, new InlineDispatcher(), rows, cols);
+            _created.Add((process, ts));
+            return ts;
+        }
+
+        public TerminalSession CreateNewCopilotSession(int rows, int cols)
+        {
+            CreateNewCopilotSessionCallCount++;
             var process = new FakeTerminalProcess();
             var ts = new TerminalSession(process, new InlineDispatcher(), rows, cols);
             _created.Add((process, ts));

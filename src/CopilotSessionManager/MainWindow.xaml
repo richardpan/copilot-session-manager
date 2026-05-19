@@ -368,16 +368,28 @@
                             FontWeight="SemiBold"
                             ToolTipService.ShowDuration="25000"
                             AutomationProperties.Name="New Copilot session"
-                            AutomationProperties.HelpText="Launches a fresh PowerShell window running copilot so the CLI mints a new session id."
+                            AutomationProperties.HelpText="Opens a fresh copilot session in an embedded terminal tab. Right-click for an external PowerShell window instead."
                             Command="{Binding Sessions.NewSessionCommand}">
+                        <Button.ContextMenu>
+                            <ContextMenu>
+                                <MenuItem Header="Open in embedded tab (default)"
+                                          Command="{Binding Sessions.NewSessionCommand}"
+                                          AutomationProperties.Name="Open new Copilot session in embedded tab"
+                                          AutomationProperties.HelpText="Opens a fresh copilot session inside the dashboard's embedded terminal tab strip." />
+                                <MenuItem Header="Open in external PowerShell window"
+                                          Command="{Binding Sessions.NewSessionExternalCommand}"
+                                          AutomationProperties.Name="Open new Copilot session in external PowerShell window"
+                                          AutomationProperties.HelpText="Launches a standalone PowerShell window running copilot — bypasses the embedded tabbed terminal." />
+                            </ContextMenu>
+                        </Button.ContextMenu>
                         <Button.ToolTip>
                             <ToolTip MaxWidth="380">
                                 <StackPanel>
                                     <TextBlock FontWeight="SemiBold" Text="Start a new Copilot session" />
                                     <TextBlock TextWrapping="Wrap" Margin="0,4,0,0"
-                                               Text="Launches a fresh PowerShell window in your user home and runs `copilot` (no --resume), so the CLI mints a brand-new session id." />
+                                               Text="Opens a fresh copilot session inside an embedded terminal tab so the CLI mints a brand-new session id." />
                                     <TextBlock TextWrapping="Wrap" Margin="0,6,0,0" FontStyle="Italic" Foreground="{DynamicResource TextSecondaryBrush}"
-                                               Text="The new session appears in the dashboard within a few seconds — there's no need to refresh." />
+                                               Text="Right-click to launch in an external PowerShell window instead. The new session appears in the dashboard within a few seconds — no refresh needed." />
                                 </StackPanel>
                             </ToolTip>
                         </Button.ToolTip>
@@ -754,7 +766,7 @@
                   BorderThickness="0"
                   Foreground="{DynamicResource TextPrimaryBrush}"
                   RowHeight="40"
-                  RowDetailsVisibilityMode="VisibleWhenSelected"
+                  RowDetailsVisibilityMode="Collapsed"
                   LoadingRowDetails="DataGrid_LoadingRowDetails"
                   RowStyle="{StaticResource SessionRowStyle}"
                   CellStyle="{StaticResource SessionCellStyle}"
