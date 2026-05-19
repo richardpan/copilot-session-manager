@@ -45,6 +45,7 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
     private readonly ILogger<SessionsViewModel> _logger;
     private Action<SessionCardViewModel>? _openMergeWizard;
     private Action<SessionCardViewModel>? _openEmbeddedTerminal;
+    private Action? _openNewEmbeddedCopilotTab;
     private Action<string>? _tabClosedOnDelete;
 
     #region IssueLinks
@@ -663,6 +664,21 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
     }
 
     /// <summary>
+    /// V1.5 — host hook for opening a brand-new Copilot session inside
+    /// the embedded tabbed terminal view. Wired by <see cref="App"/>
+    /// to a <c>TerminalTabsViewModel.OpenNewCopilotTab(...)</c> call.
+    /// When set, <see cref="NewSessionAsync"/> uses this in preference
+    /// to the external PowerShell launcher; right-clicking the New
+    /// session button still routes to the external launcher via
+    /// <see cref="NewSessionExternalAsync"/>.
+    /// </summary>
+    public void SetOpenNewEmbeddedCopilotTabCallback(Action? callback)
+    {
+        _openNewEmbeddedCopilotTab = callback;
+        NewSessionCommand.NotifyCanExecuteChanged();
+    }
+
+    /// <summary>
     /// Phase 6D (#159) lifecycle hook: when a session card is removed
     /// from the dashboard (delete confirmed), invoke
     /// <paramref name="callback"/> with the removed session id so the
@@ -833,8 +849,45 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
     /// FileSystemWatcher debounce. Disabled when no launcher is wired
     /// (test ctors).
     /// </summary>
+    /// <summary>
+    /// V1.5 — the default "New session" affordance now opens a brand-new
+    /// Copilot session inside the embedded tabbed terminal view when the
+    /// host has wired <see cref="SetOpenNewEmbeddedCopilotTabCallback"/>.
+    /// If the embedded callback isn't wired (older hosts, tests), falls
+    /// back to the V1.3 external-PowerShell flow that
+    /// <see cref="NewSessionExternalAsync"/> still exposes via the
+    /// right-click menu.
+    /// </summary>
     [RelayCommand(CanExecute = nameof(CanNewSession))]
     public async Task NewSessionAsync(CancellationToken cancellationToken = default)
+    {
+        if (_openNewEmbeddedCopilotTab is not null)
+        {
+            try
+            {
+                _openNewEmbeddedCopilotTab();
+                StatusMessage = "Opened new Copilot session in embedded tab. Refreshing…";
+                ScheduleDeferredRefresh(cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to open new embedded Copilot session.");
+                StatusMessage = $"Could not open embedded session: {ex.Message}";
+            }
+            return;
+        }
+
+        await NewSessionExternalAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// V1.5 — explicit external-PowerShell launch path for "New session".
+    /// Wired to the right-click context menu entry on the New session
+    /// button so users can still opt out of the embedded default. Same
+    /// behaviour as the pre-V1.5 default click.
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(CanNewSessionExternal))]
+    public async Task NewSessionExternalAsync(CancellationToken cancellationToken = default)
     {
         if (_sessionLauncher is null)
         {
@@ -848,24 +901,7 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
             StatusMessage = result.ProcessId is int pid
                 ? $"Launched new Copilot session (pid {pid}). Refreshing…"
                 : "Launched new Copilot session. Refreshing…";
-            // Defer the rescan: the CLI needs a moment to write the new
-            // session-state directory before discovery can pick it up.
-            _ = Task.Run(async () =>
-            {
-                try
-                {
-                    await Task.Delay(TimeSpan.FromSeconds(3), cancellationToken).ConfigureAwait(false);
-                    await RefreshAsync(cancellationToken).ConfigureAwait(false);
-                }
-                catch (OperationCanceledException)
-                {
-                    // Cancelled — nothing to do.
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, "Post-launch refresh failed.");
-                }
-            }, cancellationToken);
+            ScheduleDeferredRefresh(cancellationToken);
         }
         catch (Exception ex)
         {
@@ -874,7 +910,35 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
         }
     }
 
-    private bool CanNewSession() => _sessionLauncher is not null;
+    /// <summary>
+    /// Defer a dashboard rescan by ~3 seconds so the Copilot CLI has time
+    /// to write its new <c>session-state</c> directory before discovery
+    /// runs again. Shared by both <see cref="NewSessionAsync"/> and
+    /// <see cref="NewSessionExternalAsync"/>.
+    /// </summary>
+    private void ScheduleDeferredRefresh(CancellationToken cancellationToken)
+    {
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await Task.Delay(TimeSpan.FromSeconds(3), cancellationToken).ConfigureAwait(false);
+                await RefreshAsync(cancellationToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                // Cancelled — nothing to do.
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Post-launch refresh failed.");
+            }
+        }, cancellationToken);
+    }
+
+    private bool CanNewSession() => _openNewEmbeddedCopilotTab is not null || _sessionLauncher is not null;
+
+    private bool CanNewSessionExternal() => _sessionLauncher is not null;
 
     /// <summary>
     /// Persists <paramref name="type"/> as the user-assigned label for

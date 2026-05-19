@@ -141,8 +141,10 @@ public class MainWindowTooltipTests
 
         xaml.Should().Contain("\"Start a new Copilot session\"",
             "the + New session tooltip must use 'Start a new Copilot session' as its bold heading");
-        xaml.Should().Contain("no --resume",
-            "the + New session tooltip must explain that the launch omits --resume so a fresh id is minted");
+        xaml.Should().Contain("embedded terminal tab",
+            "the + New session tooltip must describe the default embedded-tab launch route");
+        xaml.Should().Contain("Right-click to launch in an external PowerShell window",
+            "the + New session tooltip must point users at the right-click context menu for the external fallback");
     }
 
     [Fact]
