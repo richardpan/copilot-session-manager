@@ -451,6 +451,12 @@ public static class CoreServiceCollectionExtensions
         services.TryAddSingleton<ISessionFolderReader, SessionFolderReader>();
         services.TryAddSingleton<ISessionDocsService, SessionDocsService>();
 
+        // V1.5 (#198): default section provider — small "Session info" panel.
+        // First-party providers can register additional ISessionDocsSectionProvider
+        // singletons via TryAddEnumerable to contribute extra slots.
+        services.TryAddEnumerable(
+            ServiceDescriptor.Singleton<ISessionDocsSectionProvider, SessionMetadataSectionProvider>());
+
         return services;
     }
 
