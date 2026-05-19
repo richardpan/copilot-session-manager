@@ -490,4 +490,278 @@ public sealed class SessionDocsServiceTests : IDisposable
         second.Should().Contain("fragment-architecture",
             "adding a fragment file must make NeedsRegeneration return true");
     }
+
+    // ─────────────────────────────────────────────────────────────────────
+    //  V1.5 (#198): ISessionDocsSectionProvider integration tests
+    // ─────────────────────────────────────────────────────────────────────
+
+    private SessionDocsService CreateSutWithProviders(
+        IEnumerable<ISessionDocsSectionProvider> providers,
+        TimeSpan? providerTimeout = null) => new(
+        _folders.Object,
+        TimeProvider.System,
+        NullLogger<SessionDocsService>.Instance,
+        providers,
+        providerTimeout);
+
+    [Fact]
+    public async Task EnsureAsync_NoSectionProviders_RendersExistingSectionsUnchanged()
+    {
+        var folder = CreateSessionFolder("abc");
+        var baseline = CreateSut();
+        var baselinePath = await baseline.EnsureAsync(BuildSession("abc"));
+        var baselineHtml = await File.ReadAllTextAsync(baselinePath);
+
+        // Recreate folder + tweak a different session id so the second
+        // render is independent of the first generator's stale check.
+        var folder2 = CreateSessionFolder("def");
+        var withEmpty = CreateSutWithProviders(Array.Empty<ISessionDocsSectionProvider>());
+        var emptyPath = await withEmpty.EnsureAsync(BuildSession("def", summary: "My Session"));
+        var emptyHtml = await File.ReadAllTextAsync(emptyPath);
+
+        // Strip the session-id chips so we can compare structurally.
+        baselineHtml.Replace("id abc", "id X").Should().Be(emptyHtml.Replace("id def", "id X"),
+            "an empty provider list must not change the rendered output");
+    }
+
+    [Fact]
+    public async Task EnsureAsync_SectionProvider_AppendsSectionAndTocEntry_AtRequestedPlacement()
+    {
+        var folder = CreateSessionFolder("abc");
+        var provider = new FakeSectionProvider("git-status", order: 10, sections: _ => new[]
+        {
+            new DocsSection(
+                Anchor: "git-status",
+                Title: "Git status",
+                HtmlBody: "<p class=\"git\">branch: main · clean</p>",
+                Placement: SectionPlacement.AfterPlan,
+                Subtitle: "From git"),
+        });
+
+        var sut = CreateSutWithProviders(new[] { provider });
+        var htmlPath = await sut.EnsureAsync(BuildSession("abc"));
+        var html = await File.ReadAllTextAsync(htmlPath);
+
+        html.Should().Contain("<li><a href=\"#git-status\">Git status</a></li>",
+            "TOC must include an entry for the provider section");
+        html.Should().Contain("id=\"git-status\"", "section must use the requested anchor");
+        html.Should().Contain("<p class=\"git\">branch: main · clean</p>",
+            "HtmlBody is emitted verbatim — providers own escaping");
+        html.Should().Contain("From git", "Subtitle renders as the auto-badge");
+
+        // Slot check: section sits between Plan and Checkpoints in the body.
+        var planIdx = html.IndexOf("id=\"plan\"", StringComparison.Ordinal);
+        var providerIdx = html.IndexOf("id=\"git-status\"", StringComparison.Ordinal);
+        var checkpointsIdx = html.IndexOf("id=\"checkpoints\"", StringComparison.Ordinal);
+        planIdx.Should().BeLessThan(providerIdx, "AfterPlan must follow the Plan section");
+        providerIdx.Should().BeLessThan(checkpointsIdx, "AfterPlan must precede Checkpoints");
+    }
+
+    [Theory]
+    [InlineData(SectionPlacement.AfterOverview, "overview", "fragment-")] // appears between Overview and Fragments
+    [InlineData(SectionPlacement.AfterMockups, "mockups", "files")]
+    [InlineData(SectionPlacement.AfterFiles, "files", "plan")]
+    [InlineData(SectionPlacement.End, "checkpoints", null)] // after the last built-in
+    public async Task EnsureAsync_SectionProviderPlacement_SlotsAtCorrectBoundary(
+        SectionPlacement placement, string previousAnchor, string? nextAnchorPrefix)
+    {
+        var folder = CreateSessionFolder("abc");
+
+        // Add a fragment file so AfterOverview / AfterFragments tests have
+        // a distinguishable boundary.
+        await File.WriteAllTextAsync(
+            Path.Combine(folder, "SESSION-DOCS.notes.md"), "# notes\n");
+
+        var provider = new FakeSectionProvider("custom", order: 0, sections: _ => new[]
+        {
+            new DocsSection(
+                Anchor: "custom-section",
+                Title: "Custom",
+                HtmlBody: "<p>body</p>",
+                Placement: placement),
+        });
+
+        var sut = CreateSutWithProviders(new[] { provider });
+        var htmlPath = await sut.EnsureAsync(BuildSession("abc"));
+        var html = await File.ReadAllTextAsync(htmlPath);
+
+        var prevIdx = html.IndexOf("id=\"" + previousAnchor + "\"", StringComparison.Ordinal);
+        var customIdx = html.IndexOf("id=\"custom-section\"", StringComparison.Ordinal);
+        prevIdx.Should().BeGreaterThan(-1);
+        customIdx.Should().BeGreaterThan(prevIdx,
+            $"custom section must appear after #{previousAnchor} for placement {placement}");
+
+        if (nextAnchorPrefix is not null)
+        {
+            var nextIdx = html.IndexOf("id=\"" + nextAnchorPrefix, StringComparison.Ordinal);
+            nextIdx.Should().BeGreaterThan(-1);
+            customIdx.Should().BeLessThan(nextIdx,
+                $"custom section must appear before id starting with '{nextAnchorPrefix}' for placement {placement}");
+        }
+    }
+
+    [Fact]
+    public async Task EnsureAsync_MultipleProviders_OrderedByProviderOrderThenName()
+    {
+        var folder = CreateSessionFolder("abc");
+        var alpha = new FakeSectionProvider("alpha", order: 5, sections: _ => new[]
+        {
+            new DocsSection("alpha-1", "Alpha", "<p>a</p>", SectionPlacement.End),
+        });
+        var bravo = new FakeSectionProvider("bravo", order: 1, sections: _ => new[]
+        {
+            new DocsSection("bravo-1", "Bravo", "<p>b</p>", SectionPlacement.End),
+        });
+        // Same order as alpha — name should tie-break (alpha < charlie).
+        var charlie = new FakeSectionProvider("charlie", order: 5, sections: _ => new[]
+        {
+            new DocsSection("charlie-1", "Charlie", "<p>c</p>", SectionPlacement.End),
+        });
+
+        var sut = CreateSutWithProviders(new[] { alpha, bravo, charlie });
+        var htmlPath = await sut.EnsureAsync(BuildSession("abc"));
+        var html = await File.ReadAllTextAsync(htmlPath);
+
+        var bravoIdx = html.IndexOf("id=\"bravo-1\"", StringComparison.Ordinal);
+        var alphaIdx = html.IndexOf("id=\"alpha-1\"", StringComparison.Ordinal);
+        var charlieIdx = html.IndexOf("id=\"charlie-1\"", StringComparison.Ordinal);
+
+        bravoIdx.Should().BeLessThan(alphaIdx, "lower Order wins");
+        alphaIdx.Should().BeLessThan(charlieIdx, "name tie-breaks within the same Order");
+    }
+
+    [Fact]
+    public async Task EnsureAsync_ThrowingProvider_IsSkippedAndOtherProvidersStillRender()
+    {
+        var folder = CreateSessionFolder("abc");
+        var thrower = new FakeSectionProvider("thrower", order: 0, sections: _ =>
+            throw new InvalidOperationException("kaboom"));
+        var good = new FakeSectionProvider("good", order: 1, sections: _ => new[]
+        {
+            new DocsSection("good-section", "Good", "<p>still here</p>", SectionPlacement.End),
+        });
+
+        var sut = CreateSutWithProviders(new[] { thrower, good });
+        var htmlPath = await sut.EnsureAsync(BuildSession("abc"));
+        var html = await File.ReadAllTextAsync(htmlPath);
+
+        html.Should().Contain("id=\"good-section\"",
+            "a failing provider must not block other providers");
+        html.Should().Contain("still here");
+        html.Should().NotContain("kaboom", "provider exceptions must not leak into the rendered HTML");
+    }
+
+    [Fact]
+    public async Task EnsureAsync_SlowProvider_IsTimedOutAndSkipped()
+    {
+        var folder = CreateSessionFolder("abc");
+        var slow = new FakeSectionProvider(
+            "slow",
+            order: 0,
+            sectionsAsync: async ct =>
+            {
+                await Task.Delay(TimeSpan.FromSeconds(5), ct);
+                return new[]
+                {
+                    new DocsSection("never-rendered", "Should not appear", "<p>nope</p>", SectionPlacement.End),
+                };
+            });
+        var fast = new FakeSectionProvider("fast", order: 1, sections: _ => new[]
+        {
+            new DocsSection("fast-section", "Fast", "<p>here</p>", SectionPlacement.End),
+        });
+
+        var sut = CreateSutWithProviders(new[] { slow, fast }, providerTimeout: TimeSpan.FromMilliseconds(100));
+        var htmlPath = await sut.EnsureAsync(BuildSession("abc"));
+        var html = await File.ReadAllTextAsync(htmlPath);
+
+        html.Should().NotContain("never-rendered", "slow providers must time out cleanly");
+        html.Should().Contain("id=\"fast-section\"",
+            "a slow provider must not block other providers");
+    }
+
+    [Fact]
+    public async Task EnsureAsync_DuplicateAnchors_AreDisambiguated()
+    {
+        var folder = CreateSessionFolder("abc");
+        var a = new FakeSectionProvider("a", order: 0, sections: _ => new[]
+        {
+            new DocsSection("info", "Info A", "<p>a</p>", SectionPlacement.End),
+        });
+        var b = new FakeSectionProvider("b", order: 1, sections: _ => new[]
+        {
+            new DocsSection("info", "Info B", "<p>b</p>", SectionPlacement.End),
+        });
+
+        var sut = CreateSutWithProviders(new[] { a, b });
+        var htmlPath = await sut.EnsureAsync(BuildSession("abc"));
+        var html = await File.ReadAllTextAsync(htmlPath);
+
+        html.Should().Contain("id=\"info\"", "first collision wins the bare anchor");
+        html.Should().Contain("id=\"info-2\"", "second collision is suffixed");
+        html.Should().Contain("Info A");
+        html.Should().Contain("Info B");
+    }
+
+    [Fact]
+    public async Task EnsureAsync_SessionMetadataProvider_RendersDl_AtEnd()
+    {
+        var folder = CreateSessionFolder("abc");
+        var sut = CreateSutWithProviders(new[] { new SessionMetadataSectionProvider() });
+        var htmlPath = await sut.EnsureAsync(BuildSession("abc"));
+        var html = await File.ReadAllTextAsync(htmlPath);
+
+        html.Should().Contain("id=\"session-info\"", "reference provider must contribute its section");
+        html.Should().Contain("<dl class=\"session-info\">");
+        html.Should().Contain("<dt>Id</dt><dd>abc</dd>");
+        html.Should().Contain("<dt>Repository</dt><dd>owner/repo</dd>");
+        html.Should().Contain("<dt>Branch</dt><dd>main</dd>");
+        html.Should().Contain("Auto-derived from session metadata", "subtitle renders as the badge");
+
+        // Slot check: section appears after the Checkpoints section.
+        var checkpointsIdx = html.IndexOf("id=\"checkpoints\"", StringComparison.Ordinal);
+        var infoIdx = html.IndexOf("id=\"session-info\"", StringComparison.Ordinal);
+        infoIdx.Should().BeGreaterThan(checkpointsIdx, "End placement must follow Checkpoints");
+    }
+
+    [Fact]
+    public void SessionMetadataProvider_GetSectionsAsync_NullSession_Throws()
+    {
+        var provider = new SessionMetadataSectionProvider();
+        FluentActions.Invoking(() => provider.GetSectionsAsync(null!, CancellationToken.None).AsTask())
+            .Should().ThrowAsync<ArgumentNullException>();
+    }
+
+    /// <summary>Test double covering both sync and async provider shapes.</summary>
+    private sealed class FakeSectionProvider : ISessionDocsSectionProvider
+    {
+        private readonly Func<Session, IReadOnlyList<DocsSection>>? _sync;
+        private readonly Func<CancellationToken, Task<IReadOnlyList<DocsSection>>>? _async;
+
+        public FakeSectionProvider(string name, int order, Func<Session, IReadOnlyList<DocsSection>> sections)
+        {
+            Name = name;
+            Order = order;
+            _sync = sections;
+        }
+
+        public FakeSectionProvider(string name, int order, Func<CancellationToken, Task<IReadOnlyList<DocsSection>>> sectionsAsync)
+        {
+            Name = name;
+            Order = order;
+            _async = sectionsAsync;
+        }
+
+        public string Name { get; }
+        public int Order { get; }
+
+        public async ValueTask<IReadOnlyList<DocsSection>> GetSectionsAsync(Session session, CancellationToken cancellationToken)
+        {
+            if (_async is not null)
+            {
+                return await _async(cancellationToken).ConfigureAwait(false);
+            }
+            return _sync!(session);
+        }
+    }
 }

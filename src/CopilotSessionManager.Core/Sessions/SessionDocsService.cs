@@ -53,11 +53,18 @@ public sealed class SessionDocsService : ISessionDocsService
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<SessionDocsService> _logger;
     private readonly MarkdownPipeline _markdownPipeline;
+    private readonly IReadOnlyList<ISessionDocsSectionProvider> _sectionProviders;
+    private readonly TimeSpan _sectionProviderTimeout;
+
+    /// <summary>V1.5 (#198): default per-provider timeout for <see cref="ISessionDocsSectionProvider.GetSectionsAsync"/>.</summary>
+    public static readonly TimeSpan DefaultSectionProviderTimeout = TimeSpan.FromSeconds(2);
 
     public SessionDocsService(
         ISessionFolderReader folders,
         TimeProvider timeProvider,
-        ILogger<SessionDocsService> logger)
+        ILogger<SessionDocsService> logger,
+        IEnumerable<ISessionDocsSectionProvider>? sectionProviders = null,
+        TimeSpan? sectionProviderTimeout = null)
     {
         ArgumentNullException.ThrowIfNull(folders);
         ArgumentNullException.ThrowIfNull(timeProvider);
@@ -65,6 +72,10 @@ public sealed class SessionDocsService : ISessionDocsService
         _folders = folders;
         _timeProvider = timeProvider;
         _logger = logger;
+        _sectionProviders = sectionProviders is null
+            ? Array.Empty<ISessionDocsSectionProvider>()
+            : sectionProviders.ToArray();
+        _sectionProviderTimeout = sectionProviderTimeout ?? DefaultSectionProviderTimeout;
 
         _markdownPipeline = new MarkdownPipelineBuilder()
             .UseAdvancedExtensions()
@@ -516,8 +527,9 @@ public sealed class SessionDocsService : ISessionDocsService
         var mockups = EnumerateMockups(folder);
         var filesIndex = EnumerateFilesIndex(folder, mockups);
         var checkpoints = await GetCheckpointsAsync(session.Id, cancellationToken).ConfigureAwait(false);
+        var providerSections = await LoadProviderSectionsAsync(session, cancellationToken).ConfigureAwait(false);
 
-        var html = RenderHtml(session, docsMd, planMd, fragments, mockups, filesIndex, checkpoints);
+        var html = RenderHtml(session, docsMd, planMd, fragments, providerSections, mockups, filesIndex, checkpoints);
 
         var temp = htmlPath + ".tmp";
         try
@@ -575,6 +587,115 @@ public sealed class SessionDocsService : ISessionDocsService
             loaded.Add(new LoadedFragment(entry, body));
         }
         return loaded;
+    }
+
+    /// <summary>
+    /// V1.5 (#198): runs every registered <see cref="ISessionDocsSectionProvider"/>
+    /// in parallel with a per-provider timeout. Failures and timeouts are
+    /// logged and skipped — they never block the render. Returned sections
+    /// are bucketed by <see cref="SectionPlacement"/> for the renderer to
+    /// emit at the right slot.
+    /// </summary>
+    private async Task<IReadOnlyDictionary<SectionPlacement, List<ResolvedSection>>> LoadProviderSectionsAsync(
+        Session session,
+        CancellationToken cancellationToken)
+    {
+        var buckets = new Dictionary<SectionPlacement, List<ResolvedSection>>();
+        if (_sectionProviders.Count == 0)
+        {
+            return buckets;
+        }
+
+        var tasks = new List<Task<(ISessionDocsSectionProvider Provider, IReadOnlyList<DocsSection>? Sections)>>(_sectionProviders.Count);
+        foreach (var provider in _sectionProviders)
+        {
+            tasks.Add(RunProviderAsync(provider, session, cancellationToken));
+        }
+
+        var results = await Task.WhenAll(tasks).ConfigureAwait(false);
+        var seenAnchors = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (provider, sections) in results)
+        {
+            if (sections is null)
+            {
+                continue;
+            }
+
+            for (var i = 0; i < sections.Count; i++)
+            {
+                var section = sections[i];
+                if (section is null)
+                {
+                    continue;
+                }
+
+                var anchor = SlugifyAnchor(string.IsNullOrWhiteSpace(section.Anchor) ? provider.Name : section.Anchor);
+                if (!seenAnchors.Add(anchor))
+                {
+                    // Disambiguate duplicate anchors so the page never has colliding ids.
+                    var n = 2;
+                    string candidate;
+                    do
+                    {
+                        candidate = anchor + "-" + n.ToString(CultureInfo.InvariantCulture);
+                        n++;
+                    }
+                    while (!seenAnchors.Add(candidate));
+                    anchor = candidate;
+                }
+
+                if (!buckets.TryGetValue(section.Placement, out var list))
+                {
+                    list = new List<ResolvedSection>();
+                    buckets[section.Placement] = list;
+                }
+                list.Add(new ResolvedSection(provider, section, anchor, i));
+            }
+        }
+
+        // Stable per-bucket ordering: Provider.Order asc, Provider.Name asc, then the
+        // original index within that provider's returned list.
+        foreach (var list in buckets.Values)
+        {
+            list.Sort(static (a, b) =>
+            {
+                var cmp = a.Provider.Order.CompareTo(b.Provider.Order);
+                if (cmp != 0)
+                {
+                    return cmp;
+                }
+                cmp = StringComparer.OrdinalIgnoreCase.Compare(a.Provider.Name, b.Provider.Name);
+                return cmp != 0 ? cmp : a.ProviderIndex.CompareTo(b.ProviderIndex);
+            });
+        }
+
+        return buckets;
+    }
+
+    private async Task<(ISessionDocsSectionProvider Provider, IReadOnlyList<DocsSection>? Sections)> RunProviderAsync(
+        ISessionDocsSectionProvider provider,
+        Session session,
+        CancellationToken cancellationToken)
+    {
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        cts.CancelAfter(_sectionProviderTimeout);
+        try
+        {
+            var sections = await provider.GetSectionsAsync(session, cts.Token).ConfigureAwait(false);
+            return (provider, sections);
+        }
+        catch (OperationCanceledException) when (cts.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogWarning(
+                "Section provider {Provider} timed out after {Timeout}; skipping.",
+                provider.Name, _sectionProviderTimeout);
+            return (provider, null);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Section provider {Provider} threw; skipping.", provider.Name);
+            return (provider, null);
+        }
     }
 
     private async Task<string?> ReadTextSafelyAsync(string path, CancellationToken cancellationToken)
@@ -745,6 +866,7 @@ public sealed class SessionDocsService : ISessionDocsService
         string? docsMd,
         string? planMd,
         IReadOnlyList<LoadedFragment> fragments,
+        IReadOnlyDictionary<SectionPlacement, List<ResolvedSection>> providerSections,
         IReadOnlyList<MockupEntry> mockups,
         IReadOnlyList<FileEntry> filesIndex,
         IReadOnlyList<CheckpointEntry> checkpoints)
@@ -769,15 +891,21 @@ public sealed class SessionDocsService : ISessionDocsService
         sb.AppendLine("<h2>Contents</h2>");
         sb.AppendLine("<ul>");
         sb.AppendLine("<li><a href=\"#overview\">Overview</a></li>");
+        AppendTocEntries(sb, providerSections, SectionPlacement.AfterOverview);
         foreach (var f in fragments)
         {
             sb.Append("<li><a href=\"#fragment-").Append(SlugifyAnchor(f.Entry.Name)).Append("\">")
                 .Append(HtmlEncode(f.Entry.DisplayTitle)).AppendLine("</a></li>");
         }
+        AppendTocEntries(sb, providerSections, SectionPlacement.AfterFragments);
         sb.AppendLine("<li><a href=\"#mockups\">Mockups</a></li>");
+        AppendTocEntries(sb, providerSections, SectionPlacement.AfterMockups);
         sb.AppendLine("<li><a href=\"#files\">Files</a></li>");
+        AppendTocEntries(sb, providerSections, SectionPlacement.AfterFiles);
         sb.AppendLine("<li><a href=\"#plan\">Plan</a></li>");
+        AppendTocEntries(sb, providerSections, SectionPlacement.AfterPlan);
         sb.AppendLine("<li><a href=\"#checkpoints\">Checkpoints</a></li>");
+        AppendTocEntries(sb, providerSections, SectionPlacement.End);
         sb.AppendLine("</ul>");
         sb.AppendLine("</aside>");
 
@@ -820,6 +948,8 @@ public sealed class SessionDocsService : ISessionDocsService
         }
         sb.AppendLine("</section>");
 
+        AppendProviderSections(sb, providerSections, SectionPlacement.AfterOverview);
+
         // V1.5 (#196): drop-in fragments. Markdown is inlined; HTML is
         // embedded via a sibling <iframe src=…> so the host page stays
         // safe even if the fragment has its own <style> / <script>.
@@ -858,6 +988,8 @@ public sealed class SessionDocsService : ISessionDocsService
             sb.AppendLine("</section>");
         }
 
+        AppendProviderSections(sb, providerSections, SectionPlacement.AfterFragments);
+
         // Mockups
         sb.AppendLine("<section id=\"mockups\" class=\"auto\">");
         sb.AppendLine("<h2>Mockups <span class=\"auto-badge\">Auto-derived from session folder</span></h2>");
@@ -881,6 +1013,8 @@ public sealed class SessionDocsService : ISessionDocsService
             sb.AppendLine("</div>");
         }
         sb.AppendLine("</section>");
+
+        AppendProviderSections(sb, providerSections, SectionPlacement.AfterMockups);
 
         // Files index
         sb.AppendLine("<section id=\"files\" class=\"auto\">");
@@ -919,6 +1053,8 @@ public sealed class SessionDocsService : ISessionDocsService
         }
         sb.AppendLine("</section>");
 
+        AppendProviderSections(sb, providerSections, SectionPlacement.AfterFiles);
+
         // Plan
         sb.AppendLine("<section id=\"plan\" class=\"auto\">");
         sb.AppendLine("<h2>Plan <span class=\"auto-badge\">Auto-derived from plan.md</span></h2>");
@@ -934,6 +1070,8 @@ public sealed class SessionDocsService : ISessionDocsService
             sb.AppendLine("<p class=\"empty\">No <code>plan.md</code> in this session folder.</p>");
         }
         sb.AppendLine("</section>");
+
+        AppendProviderSections(sb, providerSections, SectionPlacement.AfterPlan);
 
         // Checkpoints
         sb.AppendLine("<section id=\"checkpoints\" class=\"auto\">");
@@ -963,9 +1101,56 @@ public sealed class SessionDocsService : ISessionDocsService
         }
         sb.AppendLine("</section>");
 
+        AppendProviderSections(sb, providerSections, SectionPlacement.End);
+
         sb.AppendLine("</main>");
         sb.AppendLine("</body></html>");
         return sb.ToString();
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    //  Provider-section helpers (V1.5 #198)
+    // ─────────────────────────────────────────────────────────────────────
+
+    private static void AppendTocEntries(
+        StringBuilder sb,
+        IReadOnlyDictionary<SectionPlacement, List<ResolvedSection>> sections,
+        SectionPlacement placement)
+    {
+        if (!sections.TryGetValue(placement, out var list) || list.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var resolved in list)
+        {
+            sb.Append("<li><a href=\"#").Append(resolved.Anchor).Append("\">")
+                .Append(HtmlEncode(resolved.Section.Title)).AppendLine("</a></li>");
+        }
+    }
+
+    private static void AppendProviderSections(
+        StringBuilder sb,
+        IReadOnlyDictionary<SectionPlacement, List<ResolvedSection>> sections,
+        SectionPlacement placement)
+    {
+        if (!sections.TryGetValue(placement, out var list) || list.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var resolved in list)
+        {
+            sb.Append("<section id=\"").Append(resolved.Anchor).AppendLine("\" class=\"auto provider\">");
+            sb.Append("<h2>").Append(HtmlEncode(resolved.Section.Title));
+            if (!string.IsNullOrWhiteSpace(resolved.Section.Subtitle))
+            {
+                sb.Append(" <span class=\"auto-badge\">").Append(HtmlEncode(resolved.Section.Subtitle!)).Append("</span>");
+            }
+            sb.AppendLine("</h2>");
+            sb.AppendLine(resolved.Section.HtmlBody ?? string.Empty);
+            sb.AppendLine("</section>");
+        }
     }
 
     // ─────────────────────────────────────────────────────────────────────
@@ -1045,6 +1230,13 @@ public sealed class SessionDocsService : ISessionDocsService
         bool TooLarge);
 
     private sealed record CheckpointEntry(int Number, string Title, string FilePath, string? Body);
+
+    /// <summary>V1.5 (#198): a <see cref="DocsSection"/> with its resolved anchor + provider context.</summary>
+    private sealed record ResolvedSection(
+        ISessionDocsSectionProvider Provider,
+        DocsSection Section,
+        string Anchor,
+        int ProviderIndex);
 
     /// <summary>V1.5 (#196): fragment metadata + (for markdown) eagerly-loaded body.</summary>
     public sealed record LoadedFragment(FragmentEntry Entry, string? Body);
