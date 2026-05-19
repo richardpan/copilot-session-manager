@@ -764,4 +764,116 @@ public sealed class SessionDocsServiceTests : IDisposable
             return _sync!(session);
         }
     }
+
+    // ─────────────────────────────────────────────────────────────────────
+    //  V1.5 (#199): client-side Mermaid rendering
+    // ─────────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task EnsureAsync_ByDefault_EmitsPinnedMermaidScriptTagWithSri()
+    {
+        var folder = CreateSessionFolder("abc");
+        var sut = CreateSut();
+        var htmlPath = await sut.EnsureAsync(BuildSession("abc"));
+        var html = await File.ReadAllTextAsync(htmlPath);
+
+        html.Should().Contain("cdn.jsdelivr.net/npm/mermaid@" + SessionDocsService.MermaidVersion,
+            "Mermaid must be loaded from the pinned jsDelivr release");
+        html.Should().Contain("integrity=\"" + SessionDocsService.MermaidScriptIntegrity + "\"",
+            "the loader tag must carry the SRI hash that pairs with the pinned version");
+        html.Should().Contain("crossorigin=\"anonymous\"",
+            "crossorigin is required for the browser to verify the integrity attribute");
+    }
+
+    [Fact]
+    public async Task EnsureAsync_ByDefault_EmitsBootstrapperThatPromotesMermaidBlocks()
+    {
+        var folder = CreateSessionFolder("abc");
+        var sut = CreateSut();
+        var htmlPath = await sut.EnsureAsync(BuildSession("abc"));
+        var html = await File.ReadAllTextAsync(htmlPath);
+
+        html.Should().Contain("pre.mermaid",
+            "the bootstrapper must promote the Markdig Diagrams-extension output (pre.mermaid)");
+        html.Should().Contain("pre > code.language-mermaid",
+            "the bootstrapper must also handle the standard fenced code fallback");
+        html.Should().Contain("div.className = 'mermaid'",
+            "promoted blocks become div.mermaid elements that mermaid.run() understands");
+        html.Should().Contain("startOnLoad: false",
+            "the bootstrapper drives mermaid.run() manually after promotion");
+        html.Should().Contain("prefers-color-scheme: dark",
+            "theme must auto-switch with the OS color scheme");
+    }
+
+    [Fact]
+    public async Task EnsureAsync_NoMermaidOptOutFile_SuppressesScriptTags()
+    {
+        var folder = CreateSessionFolder("abc");
+        await File.WriteAllBytesAsync(
+            Path.Combine(folder, SessionDocsService.NoMermaidOptOutFileName),
+            Array.Empty<byte>());
+
+        var sut = CreateSut();
+        var htmlPath = await sut.EnsureAsync(BuildSession("abc"));
+        var html = await File.ReadAllTextAsync(htmlPath);
+
+        html.Should().NotContain("cdn.jsdelivr.net/npm/mermaid",
+            $"presence of {SessionDocsService.NoMermaidOptOutFileName} must drop the CDN load");
+        html.Should().NotContain("startOnLoad: false",
+            "the bootstrapper script must be suppressed alongside the loader");
+    }
+
+    [Fact]
+    public async Task EnsureAsync_TogglingNoMermaidOptOut_TriggersRegeneration()
+    {
+        var folder = CreateSessionFolder("abc");
+        var sut = CreateSut();
+
+        var htmlPath = await sut.EnsureAsync(BuildSession("abc"));
+        var firstHtml = await File.ReadAllTextAsync(htmlPath);
+        firstHtml.Should().Contain("cdn.jsdelivr.net/npm/mermaid");
+
+        await Task.Delay(1100);
+        await File.WriteAllBytesAsync(
+            Path.Combine(folder, SessionDocsService.NoMermaidOptOutFileName),
+            Array.Empty<byte>());
+
+        await sut.EnsureAsync(BuildSession("abc"));
+        var secondHtml = await File.ReadAllTextAsync(htmlPath);
+        secondHtml.Should().NotContain("cdn.jsdelivr.net/npm/mermaid",
+            "adding the opt-out file must invalidate the staleness check and re-render without Mermaid");
+    }
+
+    [Fact]
+    public async Task EnsureAsync_MarkdownMermaidFence_RendersAsMermaidPreBlock()
+    {
+        // Sanity check: Markdig with UseAdvancedExtensions() emits the
+        // <pre class="mermaid"> shape (via the Diagrams extension) that
+        // our bootstrapper expects and promotes.
+        var folder = CreateSessionFolder("abc");
+        await File.WriteAllTextAsync(
+            Path.Combine(folder, SessionDocsService.DocsMarkdownFileName),
+            "# Title\n\n```mermaid\nflowchart LR; A --> B\n```\n");
+
+        var sut = CreateSut();
+        var htmlPath = await sut.EnsureAsync(BuildSession("abc"));
+        var html = await File.ReadAllTextAsync(htmlPath);
+
+        html.Should().Contain("<pre class=\"mermaid\">",
+            "Markdig's Diagrams extension must emit the pre.mermaid shape for the bootstrapper");
+        html.Should().Contain("flowchart LR",
+            "the fence body must be preserved verbatim in the rendered code block");
+    }
+
+    [Fact]
+    public void MermaidConstants_HavePinnedExpectedShape()
+    {
+        SessionDocsService.MermaidVersion.Should().MatchRegex(@"^\d+\.\d+\.\d+$",
+            "version must be a fully-pinned semver");
+        SessionDocsService.MermaidScriptUrl.Should().StartWith("https://cdn.jsdelivr.net/npm/mermaid@");
+        SessionDocsService.MermaidScriptUrl.Should().EndWith("/dist/mermaid.min.js",
+            "we load the UMD bundle so SRI works against <script src>");
+        SessionDocsService.MermaidScriptIntegrity.Should().StartWith("sha384-",
+            "SRI hash must be sha384 to match what we ship");
+    }
 }

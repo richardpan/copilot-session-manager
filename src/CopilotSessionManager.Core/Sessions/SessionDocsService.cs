@@ -27,6 +27,25 @@ public sealed class SessionDocsService : ISessionDocsService
     /// <summary>The on-disk file name for the rendered HTML view.</summary>
     public const string DocsHtmlFileName = "SESSION-DOCS.html";
 
+    /// <summary>
+    /// V1.5 (#199): drop this (zero-byte) file into a session folder to
+    /// suppress the client-side Mermaid <c>&lt;script&gt;</c> tags from the
+    /// generated <c>SESSION-DOCS.html</c>. Useful for offline / strict-CSP
+    /// environments where the CDN load would fail or be undesirable.
+    /// </summary>
+    public const string NoMermaidOptOutFileName = "SESSION-DOCS.no-mermaid";
+
+    /// <summary>V1.5 (#199): pinned Mermaid release used by client-side diagram rendering.</summary>
+    public const string MermaidVersion = "11.4.1";
+
+    /// <summary>V1.5 (#199): UMD bundle URL on jsDelivr.</summary>
+    public const string MermaidScriptUrl =
+        "https://cdn.jsdelivr.net/npm/mermaid@" + MermaidVersion + "/dist/mermaid.min.js";
+
+    /// <summary>V1.5 (#199): SHA-384 subresource integrity for <see cref="MermaidScriptUrl"/>.</summary>
+    public const string MermaidScriptIntegrity =
+        "sha384-rbtjAdnIQE/aQJGEgXrVUlMibdfTSa4PQju4HDhN3sR2PmaKFzhEafuePsl9H/9I";
+
     /// <summary>Files larger than this are listed but not embedded or used for stale checks.</summary>
     public const long MaxRenderableFileBytes = 5L * 1024 * 1024;
 
@@ -281,6 +300,14 @@ public sealed class SessionDocsService : ISessionDocsService
             yield return fragment.AbsolutePath;
         }
 
+        // V1.5 (#199): toggling the Mermaid opt-out file must also
+        // re-trigger a regen so the next render reflects the new state.
+        var noMermaid = Path.Combine(folder, NoMermaidOptOutFileName);
+        if (File.Exists(noMermaid))
+        {
+            yield return noMermaid;
+        }
+
         // files/, research/, checkpoints/.
         foreach (var sub in new[] { "files", "research", "checkpoints" })
         {
@@ -528,8 +555,9 @@ public sealed class SessionDocsService : ISessionDocsService
         var filesIndex = EnumerateFilesIndex(folder, mockups);
         var checkpoints = await GetCheckpointsAsync(session.Id, cancellationToken).ConfigureAwait(false);
         var providerSections = await LoadProviderSectionsAsync(session, cancellationToken).ConfigureAwait(false);
+        var enableMermaid = !File.Exists(Path.Combine(folder, NoMermaidOptOutFileName));
 
-        var html = RenderHtml(session, docsMd, planMd, fragments, providerSections, mockups, filesIndex, checkpoints);
+        var html = RenderHtml(session, docsMd, planMd, fragments, providerSections, mockups, filesIndex, checkpoints, enableMermaid);
 
         var temp = htmlPath + ".tmp";
         try
@@ -869,7 +897,8 @@ public sealed class SessionDocsService : ISessionDocsService
         IReadOnlyDictionary<SectionPlacement, List<ResolvedSection>> providerSections,
         IReadOnlyList<MockupEntry> mockups,
         IReadOnlyList<FileEntry> filesIndex,
-        IReadOnlyList<CheckpointEntry> checkpoints)
+        IReadOnlyList<CheckpointEntry> checkpoints,
+        bool enableMermaid)
     {
         var sb = new StringBuilder(64 * 1024);
 
@@ -884,6 +913,10 @@ public sealed class SessionDocsService : ISessionDocsService
         sb.AppendLine("<style>");
         sb.AppendLine(InlineCss);
         sb.AppendLine("</style>");
+        if (enableMermaid)
+        {
+            AppendMermaidHead(sb);
+        }
         sb.AppendLine("</head>");
         sb.AppendLine("<body>");
 
@@ -1154,6 +1187,61 @@ public sealed class SessionDocsService : ISessionDocsService
     }
 
     // ─────────────────────────────────────────────────────────────────────
+    //  Mermaid (V1.5 #199) — pinned client-side renderer for ```mermaid fences
+    // ─────────────────────────────────────────────────────────────────────
+
+    private static void AppendMermaidHead(StringBuilder sb)
+    {
+        // Loader: pinned UMD bundle + SRI hash. crossorigin="anonymous" is
+        // required for the browser to verify the integrity attribute. The
+        // referrerpolicy keeps us off the CDN's analytics.
+        sb.Append("<script src=\"").Append(MermaidScriptUrl).Append("\"")
+            .Append(" integrity=\"").Append(MermaidScriptIntegrity).Append("\"")
+            .AppendLine(" crossorigin=\"anonymous\" referrerpolicy=\"no-referrer\"></script>");
+
+        // Bootstrapper: runs on DOMContentLoaded. Detects color scheme,
+        // promotes Mermaid fenced blocks into <div class="mermaid"> (the form
+        // mermaid.run handles most cleanly), then calls mermaid.run(). Falls
+        // back silently if the CDN load failed — the original code fences
+        // remain in place, no errors thrown.
+        //
+        // Two shapes are handled:
+        //   • <pre class="mermaid">…</pre>             ← Markdig Diagrams extension
+        //   • <pre><code class="language-mermaid">…    ← standard fenced code path
+        sb.AppendLine("<script>");
+        sb.AppendLine("(function () {");
+        sb.AppendLine("  function promote(source, getText) {");
+        sb.AppendLine("    var nodes = document.querySelectorAll(source);");
+        sb.AppendLine("    for (var i = 0; i < nodes.length; i++) {");
+        sb.AppendLine("      var node = nodes[i];");
+        sb.AppendLine("      var target = source.indexOf('code') !== -1 ? node.parentElement : node;");
+        sb.AppendLine("      if (!target) { continue; }");
+        sb.AppendLine("      var div = document.createElement('div');");
+        sb.AppendLine("      div.className = 'mermaid';");
+        sb.AppendLine("      div.textContent = getText(node);");
+        sb.AppendLine("      target.replaceWith(div);");
+        sb.AppendLine("    }");
+        sb.AppendLine("  }");
+        sb.AppendLine("  function init() {");
+        sb.AppendLine("    if (typeof window.mermaid === 'undefined') { return; }");
+        sb.AppendLine("    var dark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;");
+        sb.AppendLine("    try {");
+        sb.AppendLine("      window.mermaid.initialize({ startOnLoad: false, theme: dark ? 'dark' : 'default', securityLevel: 'strict' });");
+        sb.AppendLine("    } catch (e) { return; }");
+        sb.AppendLine("    promote('pre.mermaid', function (n) { return n.textContent; });");
+        sb.AppendLine("    promote('pre > code.language-mermaid', function (n) { return n.textContent; });");
+        sb.AppendLine("    try { window.mermaid.run(); } catch (e) { /* leave divs in place */ }");
+        sb.AppendLine("  }");
+        sb.AppendLine("  if (document.readyState === 'loading') {");
+        sb.AppendLine("    document.addEventListener('DOMContentLoaded', init);");
+        sb.AppendLine("  } else {");
+        sb.AppendLine("    init();");
+        sb.AppendLine("  }");
+        sb.AppendLine("})();");
+        sb.AppendLine("</script>");
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
     //  Helpers
     // ─────────────────────────────────────────────────────────────────────
 
@@ -1343,6 +1431,19 @@ section.fragment > h2 { margin-top: 0; }
 }
 .fragment-link { margin: 8px 0 0; font-size: 12px; }
 .fragment-link a { color: #89b4fa; }
+
+/* V1.5 (#199): Mermaid diagram containers. The mermaid runtime injects
+   its own SVG inside; we just give it a sane wrapper and centering. */
+div.mermaid {
+    background: #181825;
+    border: 1px solid #313244;
+    border-radius: 6px;
+    padding: 16px;
+    margin: 14px 0;
+    text-align: center;
+    overflow-x: auto;
+}
+div.mermaid svg { max-width: 100%; height: auto; }
 
 .mockup-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
 .mockup-card {
