@@ -139,11 +139,11 @@
                       Command="{Binding DataContext.Sessions.OpenReadmeCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                       CommandParameter="{Binding}"
                       AutomationProperties.Name="Open SESSION-README" />
-            <MenuItem Header="Open SESSION-DOCS (browser)"
+            <MenuItem Header="Open plan.md (default editor)"
                       Command="{Binding DataContext.Sessions.OpenDocsCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                       CommandParameter="{Binding}"
-                      AutomationProperties.Name="Open SESSION-DOCS in browser"
-                      AutomationProperties.HelpText="Generates SESSION-DOCS.html from the user-curated SESSION-DOCS.md (scaffolding it on first use) and opens it in your default browser." />
+                      AutomationProperties.Name="Open session plan.md in default editor"
+                      AutomationProperties.HelpText="Opens this session's plan.md (auto-maintained by Copilot) in whatever editor your OS has registered for .md files. Falls back to SESSION-DOCS.html if no plan.md exists yet." />
             <Separator />
             <MenuItem Header="Star (pin to top)"
                       Command="{Binding ToggleStarCommand}"
@@ -887,11 +887,11 @@
                                     <Button.ToolTip>
                                         <ToolTip MaxWidth="380">
                                             <StackPanel>
-                                                <TextBlock FontWeight="SemiBold" Text="Open session documentation" />
+                                                <TextBlock FontWeight="SemiBold" Text="Open session plan" />
                                                 <TextBlock TextWrapping="Wrap" Margin="0,4,0,0"
-                                                           Text="Opens SESSION-DOCS.html for this session in your default browser. The page contains your hand-curated notes (Overview, Decisions, Features, Mockups, …) plus auto-derived indexes of files, plan, and checkpoints." />
+                                                           Text="Opens this session's plan.md in your default editor (VS Code, Notepad, etc. — whatever is registered for .md). plan.md is auto-maintained by Copilot as it works, so it stays up to date without any regen step." />
                                                 <TextBlock TextWrapping="Wrap" Margin="0,6,0,0" FontStyle="Italic" Foreground="{DynamicResource TextSecondaryBrush}"
-                                                           Text="On first click, csm scaffolds an empty SESSION-DOCS.md in the session folder for you (or your agent) to fill in. csm never overwrites your edits." />
+                                                           Text="If this session has no plan.md yet, csm falls back to generating SESSION-DOCS.html so the button still does something useful." />
                                             </StackPanel>
                                         </ToolTip>
                                     </Button.ToolTip>

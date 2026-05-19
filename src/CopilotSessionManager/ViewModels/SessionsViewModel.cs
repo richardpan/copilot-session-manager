@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
+using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -1000,11 +1001,13 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
     }
 
     /// <summary>
-    /// V1.6 (#118): Ensures <c>SESSION-DOCS.md</c> is scaffolded for
-    /// <paramref name="card"/>'s session, regenerates
-    /// <c>SESSION-DOCS.html</c> if anything has changed, and launches the
-    /// HTML in the user's default browser. No-op if the docs service has
-    /// not been wired (e.g. legacy test fixtures).
+    /// V1.5 (#194 follow-up): Opens the agent-curated <c>plan.md</c> for
+    /// <paramref name="card"/>'s session in the user's default editor
+    /// (whatever handler is registered for <c>.md</c> — VS Code, Notepad,
+    /// etc.). If no <c>plan.md</c> exists yet — common for sessions that
+    /// have not yet engaged the Copilot planner — falls back to the V1.6
+    /// SESSION-DOCS.html flow so the button never feels broken. No-op if
+    /// the docs service has not been wired (e.g. legacy test fixtures).
     /// </summary>
     [RelayCommand]
     public async Task OpenDocsAsync(SessionCardViewModel? card, CancellationToken cancellationToken = default)
@@ -1022,9 +1025,17 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
 
         try
         {
+            var planPath = _docsService.GetPlanMarkdownPath(card.Id);
+            if (File.Exists(planPath))
+            {
+                await _fileLauncher.OpenAsync(planPath, cancellationToken).ConfigureAwait(false);
+                StatusMessage = $"Opened plan.md for {card.ShortId} in your default editor.";
+                return;
+            }
+
             var htmlPath = await _docsService.EnsureAsync(card.Model, cancellationToken).ConfigureAwait(false);
             await _fileLauncher.OpenAsync(htmlPath, cancellationToken).ConfigureAwait(false);
-            StatusMessage = $"Opened docs for {card.ShortId} in your browser.";
+            StatusMessage = $"No plan.md yet for {card.ShortId} — opened SESSION-DOCS.html instead.";
         }
         catch (Exception ex)
         {

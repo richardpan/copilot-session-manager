@@ -84,6 +84,15 @@ public sealed class SessionDocsService : ISessionDocsService
         return Path.Combine(_folders.GetSessionFolderPath(sessionId), DocsHtmlFileName);
     }
 
+    /// <summary>V1.5: <c>plan.md</c> lives alongside SESSION-DOCS.* in every session folder.</summary>
+    public const string PlanMarkdownFileName = "plan.md";
+
+    public string GetPlanMarkdownPath(string sessionId)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(sessionId);
+        return Path.Combine(_folders.GetSessionFolderPath(sessionId), PlanMarkdownFileName);
+    }
+
     public async Task<string> EnsureAsync(Session session, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(session);

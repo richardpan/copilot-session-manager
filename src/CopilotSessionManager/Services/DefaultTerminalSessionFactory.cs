@@ -7,14 +7,15 @@ namespace CopilotSessionManager.Services;
 
 /// <summary>
 /// Production <see cref="ITerminalSessionFactory"/> used by the WPF host.
-/// Spawns <c>pwsh.exe -NoLogo</c> inside the session's working directory
-/// via <see cref="TerminalSession.Start(string, int, int, ITerminalDispatcher, string?)"/>
-/// and hands ownership back to the caller. Phase 6B (#159).
+/// Spawns <c>pwsh.exe -NoLogo -NoExit -Command "copilot --resume '&lt;id&gt;'"</c>
+/// inside the session's working directory via
+/// <see cref="TerminalSession.Start(string, int, int, ITerminalDispatcher, string?)"/>
+/// so opening a session in an embedded tab automatically attaches the
+/// Copilot CLI rather than dropping the user at a bare pwsh prompt.
+/// V1.5 update of the V1.4 Phase 6B factory (#159).
 /// </summary>
 public sealed class DefaultTerminalSessionFactory : ITerminalSessionFactory
 {
-    private const string DefaultShellCommandLine = "pwsh.exe -NoLogo";
-
     /// <summary>
     /// V1.5 — command-line used by <see cref="CreateNewCopilotSession"/>
     /// to mint a brand-new Copilot session inside an embedded tab.
@@ -36,7 +37,8 @@ public sealed class DefaultTerminalSessionFactory : ITerminalSessionFactory
     {
         ArgumentNullException.ThrowIfNull(session);
         var cwd = string.IsNullOrWhiteSpace(session.Cwd) ? null : session.Cwd;
-        return TerminalSession.Start(DefaultShellCommandLine, rows, cols, _dispatcher, cwd);
+        var commandLine = BuildResumeCommandLine(session.Id);
+        return TerminalSession.Start(commandLine, rows, cols, _dispatcher, cwd);
     }
 
     /// <inheritdoc />
@@ -51,5 +53,21 @@ public sealed class DefaultTerminalSessionFactory : ITerminalSessionFactory
             cwd = null;
         }
         return TerminalSession.Start(NewCopilotCommandLine, rows, cols, _dispatcher, cwd);
+    }
+
+    /// <summary>
+    /// Build the pwsh command-line used to attach Copilot to an existing
+    /// session inside an embedded ConPTY tab. Mirrors the quoting that
+    /// <c>PowerShellSessionLauncher.LaunchAsync</c> applies for the
+    /// external launcher: PowerShell-style single-quote escaping
+    /// (double the embedded quote). Windows <c>CreateProcess</c> parses
+    /// the double-quoted region as a single <c>-Command</c> argument,
+    /// which pwsh then passes intact to the Copilot CLI.
+    /// </summary>
+    public static string BuildResumeCommandLine(string sessionId)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(sessionId);
+        var safeId = sessionId.Replace("'", "''", StringComparison.Ordinal);
+        return $"pwsh.exe -NoLogo -NoExit -Command \"copilot --resume '{safeId}'\"";
     }
 }

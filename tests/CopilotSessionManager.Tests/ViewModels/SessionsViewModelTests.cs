@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -388,10 +389,15 @@ public class SessionsViewModelTests
     }
 
     [Fact]
-    public async Task OpenDocsAsync_EnsuresThenLaunchesReturnedHtmlPath()
+    public async Task OpenDocsAsync_WhenPlanMarkdownMissing_FallsBackToEnsureAndLaunchesReturnedHtmlPath()
     {
         var (vm, _, _, _, launcher) = CreateSut(new[] { Build("a", SessionStatus.Idle) });
-        var docs = new FakeDocsService { ReturnedPath = @"C:\ws\fake\SESSION-DOCS.html" };
+        var docs = new FakeDocsService
+        {
+            ReturnedPath = @"C:\ws\fake\SESSION-DOCS.html",
+            // Point the plan.md probe at a path we know does not exist on disk.
+            PlanMarkdownPathOverride = Path.Combine(Path.GetTempPath(), $"csm-no-plan-{Guid.NewGuid():N}.md"),
+        };
         vm.SetDocsService(docs);
         var card = vm.Sessions[0];
 
@@ -400,8 +406,34 @@ public class SessionsViewModelTests
         docs.EnsureCalls.Should().Be(1);
         docs.LastSession?.Id.Should().Be("a");
         launcher.Calls.Should().ContainSingle().Which.Should().Be(@"C:\ws\fake\SESSION-DOCS.html");
-        vm.StatusMessage.Should().Contain("Opened docs");
+        vm.StatusMessage.Should().Contain("No plan.md yet");
         await vm.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task OpenDocsAsync_WhenPlanMarkdownExists_OpensPlanMdAndSkipsEnsure()
+    {
+        var planPath = Path.Combine(Path.GetTempPath(), $"csm-plan-{Guid.NewGuid():N}.md");
+        File.WriteAllText(planPath, "# plan");
+        try
+        {
+            var (vm, _, _, _, launcher) = CreateSut(new[] { Build("a", SessionStatus.Idle) });
+            var docs = new FakeDocsService { PlanMarkdownPathOverride = planPath };
+            vm.SetDocsService(docs);
+            var card = vm.Sessions[0];
+
+            await vm.OpenDocsAsync(card);
+
+            docs.EnsureCalls.Should().Be(0);
+            launcher.Calls.Should().ContainSingle().Which.Should().Be(planPath);
+            vm.StatusMessage.Should().Contain("Opened plan.md");
+            vm.StatusMessage.Should().Contain("default editor");
+            await vm.DisposeAsync();
+        }
+        finally
+        {
+            File.Delete(planPath);
+        }
     }
 
     [Fact]
@@ -460,10 +492,14 @@ public class SessionsViewModelTests
         public Session? LastSession { get; private set; }
         public bool ThrowOnEnsure { get; set; }
         public string ReturnedPath { get; set; } = "/sessions/fake/SESSION-DOCS.html";
+        public string? PlanMarkdownPathOverride { get; set; }
 
         public string GetDocsMarkdownPath(string sessionId) => $"/sessions/{sessionId}/SESSION-DOCS.md";
 
         public string GetDocsHtmlPath(string sessionId) => $"/sessions/{sessionId}/SESSION-DOCS.html";
+
+        public string GetPlanMarkdownPath(string sessionId) =>
+            PlanMarkdownPathOverride ?? $"/sessions/{sessionId}/plan.md";
 
         public Task<string> EnsureAsync(Session session, CancellationToken cancellationToken = default)
         {

@@ -91,15 +91,15 @@ public class MainWindowDocsButtonTests
     }
 
     [Fact]
-    public void MainWindow_ContextMenu_AddsOpenSessionDocsEntry()
+    public void MainWindow_ContextMenu_AddsOpenPlanMarkdownEntry()
     {
         var content = ReadMainWindowXaml();
 
-        content.Should().Contain("Open SESSION-DOCS (browser)",
-            "V1.6 adds a context-menu entry that opens SESSION-DOCS.html in the browser");
+        content.Should().Contain("Open plan.md (default editor)",
+            "V1.5: the context-menu entry was retargeted from SESSION-DOCS.html in the browser to plan.md in the default editor");
         content.Should().Contain(
             "Command=\"{Binding DataContext.Sessions.OpenDocsCommand, RelativeSource={RelativeSource AncestorType=Window}}\"",
-            "the SESSION-DOCS context menu entry must bind to OpenDocsCommand");
+            "the plan.md context menu entry must bind to OpenDocsCommand (the command was kept; only the UX target changed)");
     }
 
     private static string ReadMainWindowXaml()
