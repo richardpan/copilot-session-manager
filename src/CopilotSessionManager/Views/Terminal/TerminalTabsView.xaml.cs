@@ -139,10 +139,15 @@ public partial class TerminalTabsView : UserControl
         }
 
         // Give the control focus so the user can start typing without
-        // first clicking into the terminal area. We use Keyboard.Focus
-        // (not just Focus()) so the WPF focus manager actually routes
-        // text input events here.
-        Keyboard.Focus(control);
+        // first clicking into the terminal area. We defer to Input
+        // priority so the TabControl's own focus-management (which runs
+        // during layout/render) has finished before we grab focus.
+        // Without the deferral, the TabControl can steal focus back to
+        // the tab header, causing the first keystroke to be routed
+        // elsewhere.
+        control.Dispatcher.BeginInvoke(
+            DispatcherPriority.Input,
+            () => Keyboard.Focus(control));
     }
 
     /// <summary>
