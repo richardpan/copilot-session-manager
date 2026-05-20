@@ -35,6 +35,11 @@ public sealed class WpfTerminalDispatcher : ITerminalDispatcher
             return;
         }
 
-        _dispatcher.BeginInvoke(action);
+        // Use Input priority (higher than the default Normal) so terminal
+        // output is processed with the same urgency as keyboard events.
+        // This reduces perceived typing lag — at Normal priority, output
+        // echoes queue behind layout/binding work items, adding visible
+        // delay between the keystroke and the character appearing.
+        _dispatcher.BeginInvoke(DispatcherPriority.Input, action);
     }
 }

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -430,6 +431,27 @@ public class TerminalControl : FrameworkElement
         if (DispatchKeyCore(key, Keyboard.Modifiers))
         {
             e.Handled = true;
+            return;
+        }
+
+        // DispatchKeyCore returned false — the key isn't a special key or
+        // Ctrl/Alt chord. Try to convert it to a printable character
+        // directly via Win32 ToUnicode, bypassing the WPF TextInput
+        // pipeline entirely. This is the standard approach for terminal
+        // emulators: WPF's TextInput path can swallow the first character
+        // after a focus change (TSF initialisation, AccessKeyManager
+        // interception, or TabControl focus-steal races), and going
+        // through OnPreviewKeyDown → ToUnicode avoids all of those.
+        if (TryConvertKeyToChar(e, out var ch))
+        {
+            var bytes = VtKeyEncoder.EncodeText(ch.ToString(), altHeld: false);
+            if (bytes.Length > 0)
+            {
+                EmitInput(bytes);
+                ClearSelection();
+                _suppressNextTextInput = true;
+                e.Handled = true;
+            }
         }
     }
 
@@ -934,6 +956,94 @@ public class TerminalControl : FrameworkElement
         };
     }
 
+    /// <summary>
+    /// Convert a WPF key event to a printable character using the Win32
+    /// <c>ToUnicode</c> API. This respects the active keyboard layout,
+    /// Shift, CapsLock, and NumLock — unlike <see cref="TryGetCharFromKey"/>
+    /// which only handles US-QWERTY lowercase. Returns <c>false</c> for
+    /// dead keys, non-printable keys, or keys already handled by
+    /// <see cref="DispatchKeyCore"/> (Ctrl/Alt chords, special keys).
+    /// </summary>
+    private static bool TryConvertKeyToChar(KeyEventArgs e, out char result)
+    {
+        result = default;
+        var key = e.Key == Key.System ? e.SystemKey : e.Key;
+
+        // Don't convert modifier keys themselves.
+        if (key is Key.LeftShift or Key.RightShift or Key.LeftCtrl or Key.RightCtrl
+                or Key.LeftAlt or Key.RightAlt or Key.LWin or Key.RWin
+                or Key.CapsLock or Key.NumLock or Key.Scroll)
+        {
+            return false;
+        }
+
+        // Don't convert if Ctrl or Alt is held — those combos are already
+        // handled in DispatchKeyCore, and ToUnicode would produce control
+        // characters (0x01–0x1A) that we don't want here.
+        var mods = Keyboard.Modifiers;
+        if ((mods & ModifierKeys.Control) != 0 || (mods & ModifierKeys.Alt) != 0)
+        {
+            return false;
+        }
+
+        var virtualKey = (uint)KeyInterop.VirtualKeyFromKey(key);
+        var scanCode = (uint)NativeKeyboard.MapVirtualKey(virtualKey, NativeKeyboard.MAPVK_VK_TO_VSC);
+
+        // Snapshot the 256-byte keyboard state (Shift, CapsLock, etc.)
+        var keyboardState = new byte[256];
+        if (!NativeKeyboard.GetKeyboardState(keyboardState))
+        {
+            return false;
+        }
+
+        var chars = new char[2];
+        var count = NativeKeyboard.ToUnicode(
+            virtualKey, scanCode, keyboardState,
+            chars, chars.Length, 0);
+
+        if (count == 1)
+        {
+            var ch = chars[0];
+            // Filter out control characters (Tab, Enter, etc. produce
+            // 0x09, 0x0D which we don't want here; they go through
+            // DispatchKeyCore via MapKey).
+            if (!char.IsControl(ch))
+            {
+                result = ch;
+                return true;
+            }
+        }
+        // count == -1 → dead key (accent); count == 0 → no mapping.
+        // Both are fine: fall through to the TextInput pipeline.
+        return false;
+    }
+
+    /// <summary>
+    /// P/Invoke declarations for <c>user32.dll</c> keyboard functions
+    /// used by <see cref="TryConvertKeyToChar"/>. Kept as a private nested
+    /// class so the terminal control stays self-contained.
+    /// </summary>
+    private static class NativeKeyboard
+    {
+        public const uint MAPVK_VK_TO_VSC = 0;
+
+        [DllImport("user32.dll")]
+        public static extern uint MapVirtualKey(uint uCode, uint uMapType);
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool GetKeyboardState(byte[] lpKeyState);
+
+        [DllImport("user32.dll")]
+        public static extern int ToUnicode(
+            uint wVirtKey,
+            uint wScanCode,
+            byte[] lpKeyState,
+            [Out, MarshalAs(UnmanagedType.LPArray, SizeParamIndex = 4)] char[] pwszBuff,
+            int cchBuff,
+            uint wFlags);
+    }
+
 
     /// <summary>
     /// Run any pending dispatcher-coalesced repaint synchronously. Used
@@ -1035,22 +1145,11 @@ public class TerminalControl : FrameworkElement
         }
         _renderPending = true;
 
-        if (dispatcher.CheckAccess())
+        dispatcher.BeginInvoke(DispatcherPriority.Render, new Action(() =>
         {
-            dispatcher.BeginInvoke(DispatcherPriority.Render, new Action(() =>
-            {
-                _renderPending = false;
-                IncrementalRepaint();
-            }));
-        }
-        else
-        {
-            dispatcher.BeginInvoke(DispatcherPriority.Render, new Action(() =>
-            {
-                _renderPending = false;
-                IncrementalRepaint();
-            }));
-        }
+            _renderPending = false;
+            IncrementalRepaint();
+        }));
     }
 
     private void OnCursorBlinkTick(object? sender, EventArgs e)
