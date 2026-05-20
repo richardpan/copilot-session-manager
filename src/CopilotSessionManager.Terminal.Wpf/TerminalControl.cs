@@ -130,6 +130,15 @@ public class TerminalControl : FrameworkElement
         Focusable = true;
         FocusVisualStyle = null;
 
+        // Disable the WPF InputMethod (IME / TSF). Terminal emulators
+        // handle their own text input via VT sequences; the managed text
+        // services pipeline can swallow the first TextInput event after a
+        // focus change (the TSF context is lazily initialised per-element,
+        // and the first keystroke can be consumed during that handshake).
+        // Disabling the InputMethod avoids this race entirely and is the
+        // standard practice for custom terminal controls in WPF.
+        InputMethod.SetIsInputMethodEnabled(this, false);
+
         // Issue #180: right-click context menu with Copy and Paste.
         // Enabled state is refreshed on ContextMenuOpening so the menu
         // reflects the current selection and clipboard contents.
@@ -424,12 +433,32 @@ public class TerminalControl : FrameworkElement
         }
     }
 
+    /// <summary>
+    /// Handle text input during the tunneling (Preview) phase so the
+    /// character is consumed before any ancestor (Menu, AccessKeyManager,
+    /// TabControl) or the TSF post-processing pipeline can intercept it.
+    /// The bubbling <see cref="OnTextInput"/> is kept as a no-op fallback
+    /// — in practice <c>e.Handled = true</c> here prevents the bubbling
+    /// event from firing.
+    /// </summary>
+    protected override void OnPreviewTextInput(TextCompositionEventArgs e)
+    {
+        base.OnPreviewTextInput(e);
+
+        if (DispatchTextInputCore(e.Text, Keyboard.Modifiers))
+        {
+            e.Handled = true;
+        }
+    }
+
     /// <inheritdoc />
     protected override void OnTextInput(TextCompositionEventArgs e)
     {
         base.OnTextInput(e);
 
-        if (DispatchTextInputCore(e.Text, Keyboard.Modifiers))
+        // Normally reached only when OnPreviewTextInput did not mark the
+        // event as handled (e.g. a future code path that returns false).
+        if (!e.Handled && DispatchTextInputCore(e.Text, Keyboard.Modifiers))
         {
             e.Handled = true;
         }
