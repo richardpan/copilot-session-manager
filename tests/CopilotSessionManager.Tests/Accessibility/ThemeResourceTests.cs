@@ -32,6 +32,7 @@ public class ThemeResourceTests
     [Theory]
     [InlineData("CatppuccinMocha.xaml")]
     [InlineData("GitHubDark.xaml")]
+    [InlineData("GitHubLight.xaml")]
     [InlineData("HighContrast.xaml")]
     public void ThemeDictionary_DefinesRequiredBrushKeys(string fileName)
     {

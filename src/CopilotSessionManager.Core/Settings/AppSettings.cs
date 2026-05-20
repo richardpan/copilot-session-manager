@@ -98,6 +98,14 @@ public sealed class AppSettings
     /// </summary>
     public string WrapUpPromptTemplate { get; set; } = DefaultWrapUpPromptTemplate;
 
+    /// <summary>
+    /// Active theme name. Supported values: <c>"GitHubDark"</c> (default),
+    /// <c>"GitHubLight"</c>, <c>"CatppuccinMocha"</c>, <c>"HighContrast"</c>.
+    /// Unknown values fall back to <c>"GitHubDark"</c> at startup.
+    /// Additive, non-breaking — no schema bump needed.
+    /// </summary>
+    public string Theme { get; set; } = "GitHubDark";
+
     /// <summary>Returns a fresh instance with all defaults.</summary>
     public static AppSettings Defaults() => new();
 }

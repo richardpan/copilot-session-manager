@@ -19,6 +19,7 @@
         <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
         <conv:NullToVisibilityConverter x:Key="NullToVisibility" />
         <conv:InverseBooleanToVisibilityConverter x:Key="InverseBoolToVisibility" />
+        <conv:StringEqualsConverter x:Key="ThemeChecker" />
 
         <DataTemplate x:Key="LabelFilterTemplate" DataType="{x:Type vm:LabelFilterChip}">
             <CheckBox Content="{Binding Label}"
@@ -263,6 +264,35 @@
                           ToolTip="Switch between Information and Debug log level. Persisted."
                           AutomationProperties.Name="Verbose logging"
                           AutomationProperties.HelpText="Toggle between Information and Debug log level. The setting is persisted across restarts." />
+            </MenuItem>
+            <MenuItem Header="_Settings" Foreground="{DynamicResource TextPrimaryBrush}" AutomationProperties.Name="Settings menu">
+                <MenuItem Header="Theme">
+                    <MenuItem Header="Dark (GitHub)"
+                              IsCheckable="True"
+                              IsChecked="{Binding CurrentTheme, Converter={StaticResource ThemeChecker}, ConverterParameter=GitHubDark, Mode=OneWay}"
+                              Command="{Binding SwitchThemeCommand}"
+                              CommandParameter="GitHubDark"
+                              AutomationProperties.Name="Switch to GitHub Dark theme" />
+                    <MenuItem Header="Light (GitHub)"
+                              IsCheckable="True"
+                              IsChecked="{Binding CurrentTheme, Converter={StaticResource ThemeChecker}, ConverterParameter=GitHubLight, Mode=OneWay}"
+                              Command="{Binding SwitchThemeCommand}"
+                              CommandParameter="GitHubLight"
+                              AutomationProperties.Name="Switch to GitHub Light theme" />
+                    <Separator />
+                    <MenuItem Header="Catppuccin Mocha"
+                              IsCheckable="True"
+                              IsChecked="{Binding CurrentTheme, Converter={StaticResource ThemeChecker}, ConverterParameter=CatppuccinMocha, Mode=OneWay}"
+                              Command="{Binding SwitchThemeCommand}"
+                              CommandParameter="CatppuccinMocha"
+                              AutomationProperties.Name="Switch to Catppuccin Mocha theme" />
+                    <MenuItem Header="High Contrast"
+                              IsCheckable="True"
+                              IsChecked="{Binding CurrentTheme, Converter={StaticResource ThemeChecker}, ConverterParameter=HighContrast, Mode=OneWay}"
+                              Command="{Binding SwitchThemeCommand}"
+                              CommandParameter="HighContrast"
+                              AutomationProperties.Name="Switch to High Contrast theme" />
+                </MenuItem>
             </MenuItem>
             <MenuItem Header="_Debug"
                       Foreground="{DynamicResource TextPrimaryBrush}"

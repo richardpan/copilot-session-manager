@@ -117,6 +117,12 @@ public partial class App : Application
             // from the Help menu.
             var settingsStore = _host.Services.GetRequiredService<IAppSettingsStore>();
             var settings = await settingsStore.LoadAsync();
+
+            // Apply persisted theme before any window is shown so all
+            // DynamicResource bindings resolve against the correct palette.
+            var themeManager = _host.Services.GetRequiredService<Services.ThemeManager>();
+            themeManager.Apply(settings.Theme);
+
             if (!settings.OnboardingCompleted)
             {
                 try
@@ -478,6 +484,7 @@ public partial class App : Application
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton<Services.IFileLauncher, Services.ShellFileLauncher>();
         services.AddSingleton<Services.IClipboardService, Services.WpfClipboardService>();
+        services.AddSingleton<Services.ThemeManager>();
 
         // V1.3 (#149): expose the persisted AppSettings instance to the
         // sessions VM and per-card view-models so the wrap-up threshold

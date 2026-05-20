@@ -1,0 +1,75 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:s="clr-namespace:System;assembly=mscorlib">
+    <!--
+        GitHub Light palette — warm whites and soft grays with GitHub's
+        signature blue/green accents. Optimised for daylight readability
+        with WCAG AA contrast ratios on all text levels.
+    -->
+
+    <!-- ── Surfaces ─────────────────────────────────────────────── -->
+    <SolidColorBrush x:Key="BackgroundBrush"     Color="#FFFFFF" />
+    <SolidColorBrush x:Key="SurfaceBrush"        Color="#F6F8FA" />
+    <SolidColorBrush x:Key="SurfaceAltBrush"     Color="#F0F2F5" />
+    <SolidColorBrush x:Key="SurfaceHoverBrush"   Color="#EAEEF2" />
+    <SolidColorBrush x:Key="OverlayBrush"        Color="#D0D7DE" />
+    <SolidColorBrush x:Key="BorderBrush"         Color="#D0D7DE" />
+
+    <!-- ── Text ─────────────────────────────────────────────────── -->
+    <SolidColorBrush x:Key="TextPrimaryBrush"     Color="#1F2328" />
+    <SolidColorBrush x:Key="TextSecondaryBrush"   Color="#59636E" />
+    <SolidColorBrush x:Key="TextMutedBrush"       Color="#6E7781" />
+    <SolidColorBrush x:Key="TextPlaceholderBrush" Color="#8C959F" />
+    <SolidColorBrush x:Key="TextOnAccentBrush"    Color="#FFFFFF" />
+    <SolidColorBrush x:Key="BadgeTextBrush"       Color="#FFFFFF" />
+
+    <!-- ── Accents & actions ────────────────────────────────────── -->
+    <SolidColorBrush x:Key="AccentBrush"                Color="#0969DA" />
+    <SolidColorBrush x:Key="FocusOutlineBrush"          Color="#0969DA" />
+    <SolidColorBrush x:Key="PrimaryActionBrush"         Color="#1A7F37" />
+    <SolidColorBrush x:Key="PrimaryActionBorderBrush"   Color="#1A7F37" />
+    <SolidColorBrush x:Key="PrimaryActionAltBorderBrush" Color="#0969DA" />
+    <SolidColorBrush x:Key="LinkBrush"                  Color="#0969DA" />
+
+    <!-- ── Semantic ─────────────────────────────────────────────── -->
+    <SolidColorBrush x:Key="SuccessBrush"        Color="#1A7F37" />
+    <SolidColorBrush x:Key="SuccessBorderBrush"  Color="#1A7F37" />
+    <SolidColorBrush x:Key="DangerBrush"         Color="#CF222E" />
+    <SolidColorBrush x:Key="ErrorBrush"          Color="#CF222E" />
+    <SolidColorBrush x:Key="WarningSurfaceBrush" Color="#FFF8C5" />
+    <SolidColorBrush x:Key="DangerSurfaceBrush"  Color="#FFEBE9" />
+
+    <!-- ── Status indicators ────────────────────────────────────── -->
+    <SolidColorBrush x:Key="StatusWorkingBrush"  Color="#1A7F37" />
+    <SolidColorBrush x:Key="StatusAwaitingBrush" Color="#9A6700" />
+    <SolidColorBrush x:Key="StatusInputBrush"    Color="#0969DA" />
+    <SolidColorBrush x:Key="StatusIdleBrush"     Color="#6E7781" />
+    <SolidColorBrush x:Key="StatusInactiveBrush" Color="#8C959F" />
+    <SolidColorBrush x:Key="StatusCrashedBrush"  Color="#CF222E" />
+
+    <!-- ── Badges ───────────────────────────────────────────────── -->
+    <SolidColorBrush x:Key="BadgeOpenBrush"    Color="#1A7F37" />
+    <SolidColorBrush x:Key="BadgeClosedBrush"  Color="#8250DF" />
+    <SolidColorBrush x:Key="BadgeMergedBrush"  Color="#8250DF" />
+    <SolidColorBrush x:Key="BadgeDraftBrush"   Color="#6E7781" />
+    <SolidColorBrush x:Key="BadgeNeutralBrush" Color="#8C959F" />
+    <SolidColorBrush x:Key="BadgeFailureBrush" Color="#CF222E" />
+    <SolidColorBrush x:Key="BadgePendingBrush" Color="#9A6700" />
+
+    <!-- ── Labels ───────────────────────────────────────────────── -->
+    <SolidColorBrush x:Key="LabelOrangeBrush" Color="#BC4C00" />
+    <SolidColorBrush x:Key="LabelBlueBrush"   Color="#0969DA" />
+    <SolidColorBrush x:Key="LabelTealBrush"   Color="#0E7C6B" />
+    <SolidColorBrush x:Key="LabelRedBrush"    Color="#CF222E" />
+    <SolidColorBrush x:Key="LabelPurpleBrush" Color="#8250DF" />
+    <SolidColorBrush x:Key="LabelCyanBrush"   Color="#0E7C6B" />
+
+    <!-- ── Typography scale (same as dark for consistency) ──────── -->
+    <s:Double x:Key="FontSizeXS">11</s:Double>
+    <s:Double x:Key="FontSizeS">12</s:Double>
+    <s:Double x:Key="FontSizeM">13</s:Double>
+    <s:Double x:Key="FontSizeL">14</s:Double>
+    <s:Double x:Key="FontSizeXL">15</s:Double>
+    <s:Double x:Key="FontSizeH2">16</s:Double>
+    <s:Double x:Key="FontSizeH1">18</s:Double>
+</ResourceDictionary>

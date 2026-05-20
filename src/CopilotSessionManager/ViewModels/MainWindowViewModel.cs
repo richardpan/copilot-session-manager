@@ -35,6 +35,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
     private readonly IUiDispatcher? _dispatcher;
     private readonly ICliAvailabilityProvider _cliAvailability;
     private readonly ICliVersionProbe? _cliVersionProbe;
+    private readonly ThemeManager _themeManager;
     private int _cliProbeStarted;
 
     [ObservableProperty]
@@ -48,6 +49,9 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
     [ObservableProperty]
     private bool _isVerboseLogging;
+
+    [ObservableProperty]
+    private string _currentTheme = "GitHubDark";
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ShowGitHubBanner))]
@@ -165,6 +169,11 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         _isVerboseLogging = _levelSwitch.IsVerbose;
 
+        // Resolve ThemeManager from DI (optional for tests).
+        _themeManager = serviceProvider.GetService(typeof(ThemeManager)) as ThemeManager
+            ?? new ThemeManager(Microsoft.Extensions.Logging.Abstractions.NullLogger<ThemeManager>.Instance);
+        _currentTheme = _themeManager.CurrentTheme;
+
         if (_availability is not null)
         {
             ApplyAvailability(_availability.Current);
@@ -274,6 +283,25 @@ public sealed partial class MainWindowViewModel : ObservableObject
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to persist verbose logging setting.");
+        }
+    }
+
+    /// <summary>Switches the active theme and persists the choice.</summary>
+    [RelayCommand]
+    public async Task SwitchThemeAsync(string themeName)
+    {
+        try
+        {
+            _themeManager.Apply(themeName);
+            CurrentTheme = _themeManager.CurrentTheme;
+            var settings = await _settingsStore.LoadAsync().ConfigureAwait(false);
+            settings.Theme = CurrentTheme;
+            await _settingsStore.SaveAsync(settings).ConfigureAwait(false);
+            _logger.LogInformation("Theme switched to {Theme} and persisted.", CurrentTheme);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to switch theme to {Theme}.", themeName);
         }
     }
 

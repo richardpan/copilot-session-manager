@@ -1,5 +1,6 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:s="clr-namespace:System;assembly=mscorlib"
                     xmlns:win="clr-namespace:System.Windows;assembly=PresentationFramework">
     <SolidColorBrush x:Key="BackgroundBrush" Color="{x:Static win:SystemColors.WindowColor}" />
     <SolidColorBrush x:Key="SurfaceBrush" Color="{x:Static win:SystemColors.ControlColor}" />
@@ -50,4 +51,12 @@
     <SolidColorBrush x:Key="LabelRedBrush" Color="{x:Static win:SystemColors.HighlightColor}" />
     <SolidColorBrush x:Key="LabelPurpleBrush" Color="{x:Static win:SystemColors.HighlightColor}" />
     <SolidColorBrush x:Key="LabelCyanBrush" Color="{x:Static win:SystemColors.HighlightColor}" />
+
+    <s:Double x:Key="FontSizeXS">11</s:Double>
+    <s:Double x:Key="FontSizeS">12</s:Double>
+    <s:Double x:Key="FontSizeM">13</s:Double>
+    <s:Double x:Key="FontSizeL">14</s:Double>
+    <s:Double x:Key="FontSizeXL">15</s:Double>
+    <s:Double x:Key="FontSizeH2">16</s:Double>
+    <s:Double x:Key="FontSizeH1">18</s:Double>
 </ResourceDictionary>
