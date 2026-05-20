@@ -281,11 +281,50 @@ public class TerminalControl : FrameworkElement
     {
         base.OnRender(drawingContext);
 
+        // Fill the entire control area with the background colour so the
+        // element itself is hit-testable. Without this fill, areas not
+        // covered by row DrawingVisuals (e.g. the strip below the last
+        // rendered row) are transparent to WPF input hit testing, and
+        // clicks there fall through to the parent Border — the control
+        // never receives focus and keyboard input is lost.
+        if (RenderSize.Width > 0 && RenderSize.Height > 0)
+        {
+            var brush = new SolidColorBrush(Background);
+            brush.Freeze();
+            drawingContext.DrawRectangle(brush, null, new Rect(RenderSize));
+        }
+
         // When WPF re-renders (DP change with AffectsRender, initial
         // layout, or RenderTargetBitmap.Render in tests) we resync the
         // whole viewport. ViewportInvalidated handles deltas between
         // these synchronous resync points.
         FullRepaint();
+    }
+
+    /// <summary>
+    /// Always return a positive hit for any point within the control's
+    /// layout bounds. The default <c>UIElement.HitTestCore</c>
+    /// only returns a hit when <see cref="OnRender"/> has drawn content at
+    /// that point. Because this control renders its terminal rows into
+    /// child <see cref="DrawingVisual"/> objects (not the element's own
+    /// drawing context), empty-row areas — where the row visual has
+    /// nothing drawn (default background, spaces only) — would otherwise
+    /// be invisible to WPF input hit testing. That caused clicks on empty
+    /// terminal space to target the parent <c>Border</c> instead of this
+    /// control, preventing keyboard focus from being set.
+    /// </summary>
+    protected override HitTestResult? HitTestCore(PointHitTestParameters hitTestParameters)
+    {
+        // Accept any point within the arranged bounds so the entire
+        // terminal surface is interactive, regardless of what content the
+        // child DrawingVisuals have rendered.
+        var pt = hitTestParameters.HitPoint;
+        if (pt.X >= 0 && pt.Y >= 0
+            && pt.X <= RenderSize.Width && pt.Y <= RenderSize.Height)
+        {
+            return new PointHitTestResult(this, pt);
+        }
+        return null;
     }
 
     /// <inheritdoc />

@@ -102,6 +102,53 @@ public class TerminalControlRenderTests
         VisualTreeHelper.GetChildrenCount(control).Should().Be(0);
     });
 
+    [Fact]
+    public void HitTestCore_returns_hit_for_point_inside_bounds() => StaRunner.Run(() =>
+    {
+        var control = NewControl();
+        var buffer = new ScreenBuffer(rows: 4, columns: 8);
+        control.Buffer = buffer;
+        control.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+        control.Arrange(new Rect(control.DesiredSize));
+        ForceRender(control);
+
+        // Click in the middle of the control — even if that cell is empty
+        // and has no drawn content in the row visual, HitTestCore must
+        // return a positive hit so mouse/keyboard events reach the control.
+        var center = new Point(control.RenderSize.Width / 2, control.RenderSize.Height / 2);
+        HitTestResult? result = null;
+        VisualTreeHelper.HitTest(
+            control,
+            null,
+            r => { result = r; return HitTestResultBehavior.Stop; },
+            new PointHitTestParameters(center));
+
+        result.Should().NotBeNull();
+        result!.VisualHit.Should().Be(control);
+    });
+
+    [Fact]
+    public void HitTestCore_returns_null_for_point_outside_bounds() => StaRunner.Run(() =>
+    {
+        var control = NewControl();
+        var buffer = new ScreenBuffer(rows: 4, columns: 8);
+        control.Buffer = buffer;
+        control.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+        control.Arrange(new Rect(control.DesiredSize));
+        ForceRender(control);
+
+        // A point well outside the arranged bounds should not hit.
+        var outside = new Point(control.RenderSize.Width + 50, control.RenderSize.Height + 50);
+        HitTestResult? result = null;
+        VisualTreeHelper.HitTest(
+            control,
+            null,
+            r => { result = r; return HitTestResultBehavior.Stop; },
+            new PointHitTestParameters(outside));
+
+        result.Should().BeNull();
+    });
+
     private static TerminalControl NewControl() => new()
     {
         FontFamily = new FontFamily("Cascadia Mono, Consolas, Courier New"),
