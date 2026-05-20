@@ -1,0 +1,80 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:s="clr-namespace:System;assembly=mscorlib">
+    <!--
+        GitHub Dark palette — neutral-warm grays with GitHub's signature
+        blue/green accents. Designed for a Copilot tool: high readability,
+        strong surface separation, WCAG AA contrast ratios.
+    -->
+
+    <!-- ── Surfaces ─────────────────────────────────────────────── -->
+    <SolidColorBrush x:Key="BackgroundBrush"     Color="#0D1117" />
+    <SolidColorBrush x:Key="SurfaceBrush"        Color="#161B22" />
+    <SolidColorBrush x:Key="SurfaceAltBrush"     Color="#1C2128" />
+    <SolidColorBrush x:Key="SurfaceHoverBrush"   Color="#272D36" />
+    <SolidColorBrush x:Key="OverlayBrush"        Color="#30363D" />
+    <SolidColorBrush x:Key="BorderBrush"         Color="#3D444D" />
+
+    <!-- ── Text ─────────────────────────────────────────────────── -->
+    <SolidColorBrush x:Key="TextPrimaryBrush"     Color="#E6EDF3" />
+    <SolidColorBrush x:Key="TextSecondaryBrush"   Color="#B1BAC4" />
+    <SolidColorBrush x:Key="TextMutedBrush"       Color="#8B949E" />
+    <SolidColorBrush x:Key="TextPlaceholderBrush" Color="#6E7681" />
+    <SolidColorBrush x:Key="TextOnAccentBrush"    Color="#FFFFFF" />
+    <SolidColorBrush x:Key="BadgeTextBrush"       Color="#0D1117" />
+
+    <!-- ── Accents & actions ────────────────────────────────────── -->
+    <SolidColorBrush x:Key="AccentBrush"                Color="#58A6FF" />
+    <SolidColorBrush x:Key="FocusOutlineBrush"          Color="#58A6FF" />
+    <SolidColorBrush x:Key="PrimaryActionBrush"         Color="#238636" />
+    <SolidColorBrush x:Key="PrimaryActionBorderBrush"   Color="#2EA043" />
+    <SolidColorBrush x:Key="PrimaryActionAltBorderBrush" Color="#58A6FF" />
+    <SolidColorBrush x:Key="LinkBrush"                  Color="#58A6FF" />
+
+    <!-- ── Semantic ─────────────────────────────────────────────── -->
+    <SolidColorBrush x:Key="SuccessBrush"        Color="#3FB950" />
+    <SolidColorBrush x:Key="SuccessBorderBrush"  Color="#2EA043" />
+    <SolidColorBrush x:Key="DangerBrush"         Color="#F85149" />
+    <SolidColorBrush x:Key="ErrorBrush"          Color="#F85149" />
+    <SolidColorBrush x:Key="WarningSurfaceBrush" Color="#3D2E00" />
+    <SolidColorBrush x:Key="DangerSurfaceBrush"  Color="#4A1D1D" />
+
+    <!-- ── Status indicators ────────────────────────────────────── -->
+    <SolidColorBrush x:Key="StatusWorkingBrush"  Color="#3FB950" />
+    <SolidColorBrush x:Key="StatusAwaitingBrush" Color="#D29922" />
+    <SolidColorBrush x:Key="StatusInputBrush"    Color="#58A6FF" />
+    <SolidColorBrush x:Key="StatusIdleBrush"     Color="#8B949E" />
+    <SolidColorBrush x:Key="StatusInactiveBrush" Color="#6E7681" />
+    <SolidColorBrush x:Key="StatusCrashedBrush"  Color="#F85149" />
+
+    <!-- ── Badges ───────────────────────────────────────────────── -->
+    <SolidColorBrush x:Key="BadgeOpenBrush"    Color="#3FB950" />
+    <SolidColorBrush x:Key="BadgeClosedBrush"  Color="#BC8CFF" />
+    <SolidColorBrush x:Key="BadgeMergedBrush"  Color="#BC8CFF" />
+    <SolidColorBrush x:Key="BadgeDraftBrush"   Color="#8B949E" />
+    <SolidColorBrush x:Key="BadgeNeutralBrush" Color="#6E7681" />
+    <SolidColorBrush x:Key="BadgeFailureBrush" Color="#F85149" />
+    <SolidColorBrush x:Key="BadgePendingBrush" Color="#D29922" />
+
+    <!-- ── Labels ───────────────────────────────────────────────── -->
+    <SolidColorBrush x:Key="LabelOrangeBrush" Color="#F0883E" />
+    <SolidColorBrush x:Key="LabelBlueBrush"   Color="#58A6FF" />
+    <SolidColorBrush x:Key="LabelTealBrush"   Color="#76E3EA" />
+    <SolidColorBrush x:Key="LabelRedBrush"    Color="#F85149" />
+    <SolidColorBrush x:Key="LabelPurpleBrush" Color="#BC8CFF" />
+    <SolidColorBrush x:Key="LabelCyanBrush"   Color="#76E3EA" />
+
+    <!-- ── Typography scale ─────────────────────────────────────── -->
+    <!--
+        Base scale bumped +1–2 pt from the original for readability.
+        Components reference these via {DynamicResource FontSizeXxx} so a
+        theme swap adjusts the entire app.
+    -->
+    <s:Double x:Key="FontSizeXS">11</s:Double>
+    <s:Double x:Key="FontSizeS">12</s:Double>
+    <s:Double x:Key="FontSizeM">13</s:Double>
+    <s:Double x:Key="FontSizeL">14</s:Double>
+    <s:Double x:Key="FontSizeXL">15</s:Double>
+    <s:Double x:Key="FontSizeH2">16</s:Double>
+    <s:Double x:Key="FontSizeH1">18</s:Double>
+</ResourceDictionary>

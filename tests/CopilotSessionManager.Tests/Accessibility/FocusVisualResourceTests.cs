@@ -22,7 +22,7 @@ public class FocusVisualResourceTests
             "the global accessible focus visual must be defined in App.xaml");
         content.Should().Contain("Stroke=\"{DynamicResource FocusOutlineBrush}\"",
             "focus visual should follow the active named theme brush");
-        content.Should().Contain("Themes/CatppuccinMocha.xaml",
+        content.Should().Contain("Themes/GitHubDark.xaml",
             "App.xaml should merge the default named brush palette");
     }
 

@@ -63,18 +63,18 @@
                                    TextTrimming="CharacterEllipsis" />
                         <TextBlock Text="{Binding Subtitle}"
                                    Foreground="{DynamicResource TextSecondaryBrush}"
-                                   FontSize="11"
+                                   FontSize="13"
                                    Margin="0,2,0,0"
                                    TextTrimming="CharacterEllipsis" />
                     </StackPanel>
                     <StackPanel Grid.Column="2" HorizontalAlignment="Right" VerticalAlignment="Center">
                         <TextBlock Text="{Binding StatusLabel}"
                                    Foreground="{DynamicResource TextSecondaryBrush}"
-                                   FontSize="11"
+                                   FontSize="13"
                                    HorizontalAlignment="Right" />
                         <TextBlock Text="{Binding RecencyDescription}"
                                    Foreground="{DynamicResource TextMutedBrush}"
-                                   FontSize="10"
+                                   FontSize="12"
                                    FontStyle="Italic"
                                    HorizontalAlignment="Right" />
                     </StackPanel>
@@ -94,10 +94,10 @@
         <StackPanel Grid.Row="0" Margin="0,0,0,12">
             <TextBlock Text="Merge session"
                        Foreground="{DynamicResource TextPrimaryBrush}"
-                       FontSize="20"
+                       FontSize="22"
                        FontWeight="SemiBold" />
             <TextBlock Foreground="{DynamicResource TextSecondaryBrush}"
-                       FontSize="12"
+                       FontSize="14"
                        Margin="0,4,0,0"
                        TextWrapping="Wrap">
                 <Run Text="From " />
@@ -186,7 +186,7 @@
                 <TextBlock Grid.Row="3"
                            Text="The export step calls 'copilot --share' on the source session. This may take a few seconds."
                            Foreground="{DynamicResource TextMutedBrush}"
-                           FontSize="11"
+                           FontSize="13"
                            FontStyle="Italic"
                            Margin="0,8,0,0"
                            TextWrapping="Wrap" />
@@ -218,14 +218,14 @@
                         Padding="10,8"
                         Margin="0,0,0,10">
                     <StackPanel>
-                        <TextBlock Foreground="{DynamicResource TextSecondaryBrush}" FontSize="11">
+                        <TextBlock Foreground="{DynamicResource TextSecondaryBrush}" FontSize="13">
                             <Run Text="Source: " />
                             <Run Text="{Binding SourceTitle, Mode=OneWay}" Foreground="{DynamicResource TextPrimaryBrush}" FontWeight="SemiBold" />
                             <Run Text=" (" />
                             <Run Text="{Binding SourceShortId, Mode=OneWay}" FontFamily="Consolas" />
                             <Run Text=")" />
                         </TextBlock>
-                        <TextBlock Foreground="{DynamicResource TextSecondaryBrush}" FontSize="11" Margin="0,2,0,0">
+                        <TextBlock Foreground="{DynamicResource TextSecondaryBrush}" FontSize="13" Margin="0,2,0,0">
                             <Run Text="Target: " />
                             <Run Text="{Binding TargetTitle, Mode=OneWay}" Foreground="{DynamicResource TextPrimaryBrush}" FontWeight="SemiBold" />
                             <Run Text=" (" />
@@ -244,7 +244,7 @@
                          Text="{Binding MarkdownPreview, Mode=OneWay}"
                          IsReadOnly="True"
                          FontFamily="Consolas"
-                         FontSize="12"
+                         FontSize="14"
                          Background="{DynamicResource SurfaceAltBrush}"
                          Foreground="{DynamicResource TextPrimaryBrush}"
                          BorderBrush="{DynamicResource OverlayBrush}"
@@ -274,7 +274,7 @@
                              BorderThickness="0" />
                 <TextBlock Text="{Binding ProgressMessage}"
                            Foreground="{DynamicResource TextPrimaryBrush}"
-                           FontSize="13"
+                           FontSize="15"
                            HorizontalAlignment="Center"
                            Margin="0,16,0,0" />
             </StackPanel>
@@ -310,7 +310,7 @@
                 </TextBlock>
                 <TextBlock Text="{Binding DoneSummary}"
                            Foreground="{DynamicResource TextPrimaryBrush}"
-                           FontSize="14"
+                           FontSize="16"
                            TextAlignment="Center"
                            TextWrapping="Wrap"
                            MaxWidth="540"

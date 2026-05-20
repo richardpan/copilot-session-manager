@@ -34,7 +34,7 @@
             <Setter Property="BorderThickness" Value="1" />
             <Setter Property="Padding" Value="8,2" />
             <Setter Property="Margin" Value="4,2,0,2" />
-            <Setter Property="FontSize" Value="11" />
+            <Setter Property="FontSize" Value="13" />
             <Setter Property="Cursor" Value="Hand" />
             <Setter Property="VerticalAlignment" Value="Center" />
         </Style>
@@ -76,12 +76,12 @@
                             <TextBlock Text="{Binding BadgeGlyph}"
                                        Foreground="{DynamicResource TextOnAccentBrush}"
                                        FontWeight="SemiBold"
-                                       FontSize="11"
+                                       FontSize="13"
                                        Padding="8,2,2,2" />
                             <TextBlock Text="{Binding Display}"
                                        Foreground="{DynamicResource TextOnAccentBrush}"
                                        FontWeight="SemiBold"
-                                       FontSize="11"
+                                       FontSize="13"
                                        Padding="0,2,8,2" />
                         </StackPanel>
                     </Button>

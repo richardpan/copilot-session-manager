@@ -184,7 +184,7 @@
             <Setter Property="AutomationProperties.Name" Value="{Binding AutomationName}" />
             <Setter Property="BorderThickness" Value="4,0,0,0" />
             <Setter Property="BorderBrush" Value="{Binding StatusBrush}" />
-            <Setter Property="MinHeight" Value="36" />
+            <Setter Property="MinHeight" Value="42" />
             <Style.Triggers>
                 <Trigger Property="IsMouseOver" Value="True">
                     <Setter Property="Background" Value="{DynamicResource SurfaceHoverBrush}" />
@@ -217,7 +217,7 @@
         <Style x:Key="SessionHeaderStyle" TargetType="DataGridColumnHeader">
             <Setter Property="Background" Value="{DynamicResource SurfaceAltBrush}" />
             <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}" />
-            <Setter Property="FontSize" Value="11" />
+            <Setter Property="FontSize" Value="13" />
             <Setter Property="FontWeight" Value="SemiBold" />
             <Setter Property="Padding" Value="8,6" />
             <Setter Property="BorderBrush" Value="{DynamicResource SurfaceBrush}" />
@@ -296,13 +296,13 @@
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                     <TextBlock Text="⚠"
                                Foreground="{DynamicResource AccentBrush}"
-                               FontSize="14"
+                               FontSize="16"
                                FontWeight="SemiBold"
                                VerticalAlignment="Center"
                                Margin="0,0,8,0" />
                     <TextBlock Text="{Binding GitHubStatusMessage}"
                                Foreground="{DynamicResource AccentBrush}"
-                               FontSize="12"
+                               FontSize="14"
                                VerticalAlignment="Center"
                                TextWrapping="Wrap" />
                 </StackPanel>
@@ -319,28 +319,28 @@
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                     <TextBlock Text="🔒"
                                Foreground="{DynamicResource DangerBrush}"
-                               FontSize="14"
+                               FontSize="16"
                                FontWeight="SemiBold"
                                VerticalAlignment="Center"
                                Margin="0,0,8,0" />
                     <TextBlock Text="{Binding GitHubStatusMessage}"
                                Foreground="{DynamicResource DangerBrush}"
-                               FontSize="12"
+                               FontSize="14"
                                VerticalAlignment="Center"
                                TextWrapping="Wrap" />
                     <TextBlock Text=" — Run "
                                Foreground="{DynamicResource DangerBrush}"
-                               FontSize="12"
+                               FontSize="14"
                                VerticalAlignment="Center" />
                     <TextBlock Text="gh auth login"
                                Foreground="{DynamicResource DangerBrush}"
                                FontFamily="Consolas"
-                               FontSize="12"
+                               FontSize="14"
                                FontWeight="SemiBold"
                                VerticalAlignment="Center" />
                     <TextBlock Text=" in PowerShell."
                                Foreground="{DynamicResource DangerBrush}"
-                               FontSize="12"
+                               FontSize="14"
                                VerticalAlignment="Center" />
                 </StackPanel>
             </Border>
@@ -355,7 +355,7 @@
                 <TextBlock Grid.Column="0"
                            Text="{Binding HeaderText}"
                            Foreground="{DynamicResource TextPrimaryBrush}"
-                           FontSize="16"
+                           FontSize="18"
                            FontWeight="SemiBold"
                            VerticalAlignment="Center" />
                 <StackPanel Grid.Column="1" Orientation="Horizontal">
@@ -458,14 +458,14 @@
                         VerticalAlignment="Center">
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Text="🔍"
-                                   FontSize="11"
+                                   FontSize="13"
                                    Foreground="{DynamicResource TextMutedBrush}"
                                    VerticalAlignment="Center"
                                    Margin="0,0,4,0" />
                         <Grid Width="200" VerticalAlignment="Center">
                             <TextBlock Text="Search by name…"
                                        Foreground="{DynamicResource TextPlaceholderBrush}"
-                                       FontSize="12"
+                                       FontSize="14"
                                        VerticalAlignment="Center"
                                        IsHitTestVisible="False">
                                 <TextBlock.Style>
@@ -483,7 +483,7 @@
                                      Text="{Binding Sessions.SearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                      Background="Transparent"
                                      Foreground="{DynamicResource TextPrimaryBrush}"
-                                     FontSize="12"
+                                     FontSize="14"
                                      BorderThickness="0"
                                      CaretBrush="{DynamicResource TextPrimaryBrush}"
                                      KeyDown="OnSearchBoxKeyDown"
@@ -650,7 +650,7 @@
                     <TextBlock DockPanel.Dock="Left"
                                Text="⚠"
                                Foreground="{DynamicResource StatusCrashedBrush}"
-                               FontSize="16"
+                               FontSize="18"
                                FontWeight="SemiBold"
                                VerticalAlignment="Center"
                                Margin="0,0,10,0" />
@@ -679,7 +679,7 @@
                     </StackPanel>
                     <TextBlock Text="{Binding Sessions.CrashBanner.Message}"
                                Foreground="{DynamicResource TextPrimaryBrush}"
-                               FontSize="12"
+                               FontSize="14"
                                FontWeight="SemiBold"
                                VerticalAlignment="Center"
                                TextTrimming="CharacterEllipsis" />
@@ -701,7 +701,7 @@
                     <TextBlock DockPanel.Dock="Left"
                                Text="⬆"
                                Foreground="{DynamicResource AccentBrush}"
-                               FontSize="16"
+                               FontSize="18"
                                FontWeight="SemiBold"
                                VerticalAlignment="Center"
                                Margin="0,0,10,0" />
@@ -718,12 +718,12 @@
                     <StackPanel>
                         <TextBlock Text="{Binding OutdatedCliBanner.Headline}"
                                    Foreground="{DynamicResource TextPrimaryBrush}"
-                                   FontSize="12"
+                                   FontSize="14"
                                    FontWeight="SemiBold"
                                    TextWrapping="Wrap" />
                         <TextBlock Text="{Binding OutdatedCliBanner.UpgradeInstructions}"
                                    Foreground="{DynamicResource TextSecondaryBrush}"
-                                   FontSize="11"
+                                   FontSize="13"
                                    Margin="0,2,0,0"
                                    TextWrapping="Wrap" />
                     </StackPanel>
@@ -765,7 +765,7 @@
                   Background="{DynamicResource SurfaceBrush}"
                   BorderThickness="0"
                   Foreground="{DynamicResource TextPrimaryBrush}"
-                  RowHeight="40"
+                  RowHeight="46"
                   RowDetailsVisibilityMode="Collapsed"
                   LoadingRowDetails="DataGrid_LoadingRowDetails"
                   RowStyle="{StaticResource SessionRowStyle}"
@@ -786,7 +786,7 @@
                         <StackPanel>
                             <TextBlock Text="Sub-agents"
                                        FontWeight="SemiBold"
-                                       FontSize="11"
+                                       FontSize="13"
                                        Foreground="{DynamicResource TextSecondaryBrush}"
                                        Margin="0,0,0,4"
                                        AutomationProperties.HeadingLevel="Level3" />
@@ -823,7 +823,7 @@
                                     BorderThickness="0"
                                     Background="Transparent"
                                     Padding="4,0"
-                                    FontSize="14"
+                                    FontSize="16"
                                     AutomationProperties.Name="Toggle star"
                                     AutomationProperties.HelpText="Star this session to pin it to the top of the dashboard.">
                                 <Button.Style>
@@ -854,7 +854,7 @@
                                     AutomationProperties.Name="{Binding StatusBadgeText}">
                                 <TextBlock Text="{Binding StatusBadgeText}"
                                            Foreground="{DynamicResource TextOnAccentBrush}"
-                                           FontSize="10"
+                                           FontSize="12"
                                            FontWeight="SemiBold" />
                             </Border>
                         </DataTemplate>
@@ -873,7 +873,7 @@
                                         VerticalAlignment="Center">
                                 <Button Content="📚 Docs"
                                         Padding="10,4"
-                                        FontSize="11"
+                                        FontSize="13"
                                         FontWeight="SemiBold"
                                         Margin="0,0,4,0"
                                         Background="{DynamicResource PrimaryActionBrush}"
@@ -898,7 +898,7 @@
                                 </Button>
                                 <Button Content="▶"
                                         Padding="6,0"
-                                        FontSize="11"
+                                        FontSize="13"
                                         Margin="0,0,3,0"
                                         Background="Transparent"
                                         Foreground="{DynamicResource SuccessBrush}"
@@ -920,7 +920,7 @@
                                 </Button>
                                 <Button Content="✎"
                                         Padding="5,0"
-                                        FontSize="11"
+                                        FontSize="13"
                                         Margin="0,0,3,0"
                                         Background="Transparent"
                                         Foreground="{DynamicResource TextPrimaryBrush}"
@@ -942,7 +942,7 @@
                                 </Button>
                                 <Button Content="📝 Wrap up"
                                         Padding="6,0"
-                                        FontSize="11"
+                                        FontSize="13"
                                         Margin="0,0,3,0"
                                         Background="Transparent"
                                         Foreground="{DynamicResource StatusAwaitingBrush}"
@@ -968,7 +968,7 @@
                                 </Button>
                                 <Button Content="🧹"
                                         Padding="5,0"
-                                        FontSize="11"
+                                        FontSize="13"
                                         Margin="0,0,3,0"
                                         Background="Transparent"
                                         Foreground="{DynamicResource TextPrimaryBrush}"
@@ -993,7 +993,7 @@
                                 </Button>
                                 <Button Content="▶ Resume"
                                         Padding="6,0"
-                                        FontSize="11"
+                                        FontSize="13"
                                         Margin="0,0,3,0"
                                         Background="{DynamicResource SuccessBrush}"
                                         Foreground="{DynamicResource TextOnAccentBrush}"
@@ -1017,7 +1017,7 @@
                                 </Button>
                                 <Button Content="🗑"
                                         Padding="5,0"
-                                        FontSize="11"
+                                        FontSize="13"
                                         Background="Transparent"
                                         Foreground="{DynamicResource DangerBrush}"
                                         BorderThickness="0"
@@ -1054,7 +1054,7 @@
                                         <TextBlock x:Name="CardTitleText"
                                                    Text="{Binding DisplayName}"
                                                    Foreground="{DynamicResource TextPrimaryBrush}"
-                                                   FontSize="13"
+                                                   FontSize="15"
                                                    FontWeight="SemiBold"
                                                    TextTrimming="CharacterEllipsis"
                                                    ToolTip="{Binding TitleTooltip}"
@@ -1064,7 +1064,7 @@
                                                    AutomationProperties.HelpText="Click to rename this session." />
                                         <TextBlock Text="{Binding SubagentBadgeText}"
                                                    Foreground="{DynamicResource TextSecondaryBrush}"
-                                                   FontSize="10"
+                                                   FontSize="12"
                                                    Margin="6,0,0,0"
                                                    VerticalAlignment="Center"
                                                    Visibility="{Binding HasSubagents, Converter={StaticResource BoolToVisibility}}" />
@@ -1073,7 +1073,7 @@
                                              Text="{Binding EditableTitle, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                              Foreground="{DynamicResource TextOnAccentBrush}"
                                              Background="{DynamicResource AccentBrush}"
-                                             FontSize="13"
+                                             FontSize="15"
                                              FontWeight="SemiBold"
                                              BorderThickness="1"
                                              BorderBrush="{DynamicResource AccentBrush}"
@@ -1110,10 +1110,10 @@
                                         </Border.ContextMenu>
                                         <TextBlock Text="{Binding LabelText}"
                                                    Foreground="White"
-                                                   FontSize="9"
+                                                   FontSize="11"
                                                    FontWeight="SemiBold" />
                                     </Border>
-                                    <TextBlock Foreground="{DynamicResource TextSecondaryBrush}" FontSize="11" VerticalAlignment="Center">
+                                    <TextBlock Foreground="{DynamicResource TextSecondaryBrush}" FontSize="13" VerticalAlignment="Center">
                                         <Hyperlink Foreground="{DynamicResource PrimaryActionBrush}"
                                                    TextDecorations="None"
                                                    ToolTip="Open repository on GitHub"
@@ -1122,8 +1122,8 @@
                                             <Run Text="{Binding Repository, FallbackValue='no repo', Mode=OneWay}" />
                                         </Hyperlink>
                                     </TextBlock>
-                                    <TextBlock Text=" · " Foreground="{DynamicResource TextMutedBrush}" FontSize="11" VerticalAlignment="Center" />
-                                    <TextBlock Foreground="{DynamicResource TextSecondaryBrush}" FontSize="11" VerticalAlignment="Center">
+                                    <TextBlock Text=" · " Foreground="{DynamicResource TextMutedBrush}" FontSize="13" VerticalAlignment="Center" />
+                                    <TextBlock Foreground="{DynamicResource TextSecondaryBrush}" FontSize="13" VerticalAlignment="Center">
                                         <Hyperlink Foreground="{DynamicResource PrimaryActionBrush}"
                                                    TextDecorations="None"
                                                    ToolTip="Open branch on GitHub"
@@ -1160,7 +1160,7 @@
                                         </Border.InputBindings>
                                         <TextBlock Text="{Binding PullRequestBadgeText}"
                                                    Foreground="{DynamicResource TextOnAccentBrush}"
-                                                   FontSize="9"
+                                                   FontSize="11"
                                                    FontWeight="SemiBold" />
                                     </Border>
                                     <Border Background="{Binding CheckBadgeBrush}"
@@ -1173,7 +1173,7 @@
                                             AutomationProperties.Name="{Binding CheckTooltip}">
                                         <TextBlock Text="{Binding CheckBadgeText}"
                                                    Foreground="{DynamicResource TextOnAccentBrush}"
-                                                   FontSize="9"
+                                                   FontSize="11"
                                                    FontWeight="SemiBold" />
                                     </Border>
                                 </StackPanel>
@@ -1191,7 +1191,7 @@
                     <DataGridTextColumn.ElementStyle>
                         <Style TargetType="TextBlock">
                             <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
-                            <Setter Property="FontSize" Value="11" />
+                            <Setter Property="FontSize" Value="13" />
                             <Setter Property="VerticalAlignment" Value="Center" />
                             <Setter Property="TextTrimming" Value="CharacterEllipsis" />
                         </Style>
@@ -1212,7 +1212,7 @@
                                     AutomationProperties.HelpText="{Binding ModelTooltip}">
                                 <TextBlock Text="{Binding ModelDisplay}"
                                            Foreground="{DynamicResource TextOnAccentBrush}"
-                                           FontSize="10"
+                                           FontSize="12"
                                            FontWeight="SemiBold"
                                            TextTrimming="CharacterEllipsis"
                                            MaxWidth="84" />
@@ -1293,7 +1293,7 @@
                                     </Style>
                                 </Button.Style>
                                 <TextBlock Text="{Binding DocFreshnessCaption}"
-                                           FontSize="10"
+                                           FontSize="12"
                                            FontWeight="SemiBold"
                                            TextTrimming="CharacterEllipsis" />
                             </Button>
@@ -1310,7 +1310,7 @@
                     <DataGridTextColumn.ElementStyle>
                         <Style TargetType="TextBlock">
                             <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
-                            <Setter Property="FontSize" Value="11" />
+                            <Setter Property="FontSize" Value="13" />
                             <Setter Property="FontWeight" Value="SemiBold" />
                             <Setter Property="HorizontalAlignment" Value="Right" />
                             <Setter Property="VerticalAlignment" Value="Center" />
@@ -1327,7 +1327,7 @@
                     <DataGridTextColumn.ElementStyle>
                         <Style TargetType="TextBlock">
                             <Setter Property="Foreground" Value="{DynamicResource AccentBrush}" />
-                            <Setter Property="FontSize" Value="11" />
+                            <Setter Property="FontSize" Value="13" />
                             <Setter Property="FontWeight" Value="SemiBold" />
                             <Setter Property="HorizontalAlignment" Value="Right" />
                             <Setter Property="VerticalAlignment" Value="Center" />
@@ -1345,7 +1345,7 @@
                     <DataGridTextColumn.ElementStyle>
                         <Style TargetType="TextBlock">
                             <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}" />
-                            <Setter Property="FontSize" Value="11" />
+                            <Setter Property="FontSize" Value="13" />
                             <Setter Property="VerticalAlignment" Value="Center" />
                         </Style>
                     </DataGridTextColumn.ElementStyle>
@@ -1374,7 +1374,7 @@
         <Border Grid.Row="5" Padding="16,6" Background="{DynamicResource SurfaceBrush}">
             <TextBlock Text="{Binding Sessions.StatusMessage}"
                        Foreground="{DynamicResource TextMutedBrush}"
-                       FontSize="11" />
+                       FontSize="13" />
         </Border>
     </Grid>
 </Window>

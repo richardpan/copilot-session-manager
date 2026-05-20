@@ -9,7 +9,7 @@
              d:DataContext="{d:DesignInstance Type=vm:TerminalTabsViewModel}"
              d:DesignHeight="320"
              d:DesignWidth="900"
-             Background="#1E1E1E"
+             Background="{DynamicResource SurfaceBrush}"
              Focusable="True">
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
@@ -45,8 +45,8 @@
         <TabControl x:Name="Tabs"
                     ItemsSource="{Binding Tabs}"
                     SelectedItem="{Binding ActiveTab, Mode=TwoWay}"
-                    Background="#1E1E1E"
-                    BorderBrush="#3F3F46"
+                    Background="{DynamicResource SurfaceBrush}"
+                    BorderBrush="{DynamicResource BorderBrush}"
                     BorderThickness="1">
             <TabControl.Resources>
                 <Style TargetType="{x:Type TabItem}">
@@ -91,7 +91,7 @@
                                 Background="{Binding TierAccent}" />
                         <TextBlock Text="{Binding DisplayName}"
                                    VerticalAlignment="Center"
-                                   Foreground="#DCDCDC" />
+                                   Foreground="{DynamicResource TextPrimaryBrush}" />
                         <Button x:Name="CloseButton"
                                 Margin="8,0,0,0"
                                 Padding="4,0"
@@ -101,8 +101,8 @@
                                 Background="Transparent"
                                 BorderBrush="Transparent"
                                 BorderThickness="0"
-                                Foreground="#9F9F9F"
-                                FontSize="12"
+                                Foreground="{DynamicResource TextMutedBrush}"
+                                FontSize="14"
                                 FontWeight="Bold"
                                 Cursor="Hand"
                                 Focusable="False"
@@ -125,8 +125,8 @@
                                                 </Border>
                                                 <ControlTemplate.Triggers>
                                                     <Trigger Property="IsMouseOver" Value="True">
-                                                        <Setter TargetName="Bd" Property="Background" Value="#5A1D1D" />
-                                                        <Setter Property="Foreground" Value="#FFFFFF" />
+                                                        <Setter TargetName="Bd" Property="Background" Value="{DynamicResource DangerSurfaceBrush}" />
+                                                        <Setter Property="Foreground" Value="{DynamicResource TextOnAccentBrush}" />
                                                     </Trigger>
                                                 </ControlTemplate.Triggers>
                                             </ControlTemplate>
@@ -140,14 +140,14 @@
             </TabControl.ItemTemplate>
             <TabControl.ContentTemplate>
                 <DataTemplate DataType="{x:Type vm:TerminalTabViewModel}">
-                    <Border BorderBrush="#3F3F46"
+                    <Border BorderBrush="{DynamicResource BorderBrush}"
                             BorderThickness="0,1,0,0"
-                            Background="#0C0C0C">
+                            Background="{DynamicResource SurfaceBrush}">
                         <terminal:TerminalControl x:Name="EmbeddedTerminal"
                                                   FontFamily="Cascadia Mono, Consolas, Lucida Console, Courier New"
-                                                  FontSize="14"
-                                                  Background="#0C0C0C"
-                                                  Foreground="#DCDCDC"
+                                                  FontSize="16"
+                                                  Background="#0D1117"
+                                                  Foreground="#E6EDF3"
                                                   Buffer="{Binding TerminalSession.Buffer}"
                                                   Loaded="OnEmbeddedTerminalLoaded"
                                                   Unloaded="OnEmbeddedTerminalUnloaded"
@@ -161,7 +161,7 @@
         <TextBlock Visibility="{Binding IsEmpty, Converter={StaticResource BoolToVisibility}}"
                    HorizontalAlignment="Center"
                    VerticalAlignment="Center"
-                   Foreground="#7F7F7F"
+                   Foreground="{DynamicResource TextPlaceholderBrush}"
                    FontStyle="Italic"
                    Text="No embedded terminals open. Click Open Terminal on a session card to add one." />
     </Grid>

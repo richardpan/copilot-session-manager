@@ -29,7 +29,7 @@
                    Text="Issue reference"
                    Foreground="{DynamicResource TextPrimaryBrush}"
                    FontWeight="SemiBold"
-                   FontSize="13"
+                   FontSize="15"
                    Margin="0,0,0,4" />
 
         <TextBox x:Name="InputBox"
@@ -39,7 +39,7 @@
                  BorderBrush="{DynamicResource BorderBrush}"
                  CaretBrush="{DynamicResource TextPrimaryBrush}"
                  Padding="6,4"
-                 FontSize="13"
+                 FontSize="15"
                  Margin="0,0,0,6"
                  TextChanged="InputBox_TextChanged"
                  AutomationProperties.LabeledBy="{Binding ElementName=InputLabel}"
@@ -50,7 +50,7 @@
                    Grid.Row="2"
                    Text="Accepts owner/repo#NN, #NN, NN, or full https://github.com/.../issues/NN URL."
                    Foreground="{DynamicResource TextSecondaryBrush}"
-                   FontSize="11"
+                   FontSize="13"
                    TextWrapping="Wrap"
                    Margin="0,0,0,4" />
 
@@ -58,7 +58,7 @@
                    Grid.Row="3"
                    Text=""
                    Foreground="{DynamicResource DangerBrush}"
-                   FontSize="12"
+                   FontSize="14"
                    TextWrapping="Wrap"
                    VerticalAlignment="Top"
                    AutomationProperties.LiveSetting="Polite" />

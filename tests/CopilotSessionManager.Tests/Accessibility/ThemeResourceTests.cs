@@ -31,6 +31,7 @@ public class ThemeResourceTests
 
     [Theory]
     [InlineData("CatppuccinMocha.xaml")]
+    [InlineData("GitHubDark.xaml")]
     [InlineData("HighContrast.xaml")]
     public void ThemeDictionary_DefinesRequiredBrushKeys(string fileName)
     {
@@ -47,12 +48,12 @@ public class ThemeResourceTests
     }
 
     [Fact]
-    public void AppXaml_MergesCatppuccinPaletteByDefault()
+    public void AppXaml_MergesNamedPaletteByDefault()
     {
         var appXaml = File.ReadAllText(Path.Combine(RepoRoot.FullName, "src", "CopilotSessionManager", "App.xaml"));
 
         appXaml.Should().Contain("<ResourceDictionary.MergedDictionaries>");
-        appXaml.Should().Contain("Themes/CatppuccinMocha.xaml");
+        appXaml.Should().Contain("Themes/GitHubDark.xaml");
     }
 
     private static ResourceDictionary LoadThemeDictionary(string fileName)
