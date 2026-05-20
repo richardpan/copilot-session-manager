@@ -143,11 +143,15 @@
                     <Border BorderBrush="#3F3F46"
                             BorderThickness="0,1,0,0"
                             Background="#0C0C0C">
-                        <terminal:TerminalControl FontFamily="Cascadia Mono, Consolas, Lucida Console, Courier New"
+                        <terminal:TerminalControl x:Name="EmbeddedTerminal"
+                                                  FontFamily="Cascadia Mono, Consolas, Lucida Console, Courier New"
                                                   FontSize="14"
                                                   Background="#0C0C0C"
                                                   Foreground="#DCDCDC"
-                                                  Buffer="{Binding TerminalSession.Buffer}" />
+                                                  Buffer="{Binding TerminalSession.Buffer}"
+                                                  Loaded="OnEmbeddedTerminalLoaded"
+                                                  Unloaded="OnEmbeddedTerminalUnloaded"
+                                                  SizeChanged="OnEmbeddedTerminalSizeChanged" />
                     </Border>
                 </DataTemplate>
             </TabControl.ContentTemplate>
