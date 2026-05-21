@@ -281,9 +281,24 @@ public class TerminalControl : FrameworkElement
 
         EnsureMetrics();
         var metrics = _metrics!;
-        return new Size(
-            buffer.Columns * metrics.CellWidth,
-            buffer.Rows * metrics.CellHeight);
+
+        // The desired size is the buffer's cell grid, but when the parent
+        // offers more space (Stretch alignment inside a Grid/Border), we
+        // accept it so the control fills the container. This lets the
+        // resize-feedback loop (SizeChanged → PTY resize → buffer grows →
+        // repaint) work correctly instead of clamping the control to the
+        // buffer's initial 30×100 default.
+        var bufferWidth  = buffer.Columns * metrics.CellWidth;
+        var bufferHeight = buffer.Rows    * metrics.CellHeight;
+
+        var width  = double.IsInfinity(availableSize.Width)
+            ? bufferWidth
+            : Math.Max(bufferWidth, availableSize.Width);
+        var height = double.IsInfinity(availableSize.Height)
+            ? bufferHeight
+            : Math.Max(bufferHeight, availableSize.Height);
+
+        return new Size(width, height);
     }
 
     /// <inheritdoc />
