@@ -25,6 +25,23 @@ namespace CopilotSessionManager.ViewModels;
 /// </summary>
 public sealed partial class SessionCardViewModel : ObservableObject
 {
+    // Cached frozen brushes for badge/chip colors — avoids allocating a
+    // new SolidColorBrush on every property read. Frozen brushes are
+    // thread-safe and shareable across all instances.
+    private static readonly Brush PinkBrush    = Freeze(Color.FromRgb(0xF3, 0x8B, 0xA8));
+    private static readonly Brush BlueBrush    = Freeze(Color.FromRgb(0x89, 0xB4, 0xFA));
+    private static readonly Brush GreenBrush   = Freeze(Color.FromRgb(0xA6, 0xE3, 0xA1));
+    private static readonly Brush GrayBrush    = Freeze(Color.FromRgb(0x7F, 0x84, 0x9C));
+    private static readonly Brush PurpleBrush  = Freeze(Color.FromRgb(0xCB, 0xA6, 0xF7));
+    private static readonly Brush YellowBrush  = Freeze(Color.FromRgb(0xF9, 0xE2, 0xAF));
+
+    private static SolidColorBrush Freeze(Color c)
+    {
+        var b = new SolidColorBrush(c);
+        b.Freeze();
+        return b;
+    }
+
     private Session _model;
     private SessionType _label;
     private PullRequestInfo? _liveOverridePullRequest;
@@ -698,10 +715,10 @@ public sealed partial class SessionCardViewModel : ObservableObject
     /// <summary>Brush used for the model tier chip.</summary>
     public Brush ModelTierBrush => ModelTier switch
     {
-        ModelTier.Premium => new SolidColorBrush(Color.FromRgb(0xF3, 0x8B, 0xA8)), // pink
-        ModelTier.Standard => new SolidColorBrush(Color.FromRgb(0x89, 0xB4, 0xFA)), // blue
-        ModelTier.Fast => new SolidColorBrush(Color.FromRgb(0xA6, 0xE3, 0xA1)), // green
-        _ => new SolidColorBrush(Color.FromRgb(0x7F, 0x84, 0x9C)), // gray
+        ModelTier.Premium => PinkBrush,
+        ModelTier.Standard => BlueBrush,
+        ModelTier.Fast => GreenBrush,
+        _ => GrayBrush,
     };
 
     /// <summary>
@@ -951,12 +968,11 @@ public sealed partial class SessionCardViewModel : ObservableObject
     /// <summary>Brush used for the PR badge background, color-coded by state.</summary>
     public Brush PullRequestStateBrush => PullRequest?.State switch
     {
-        // Catppuccin-ish palette consistent with model tier chips.
-        PullRequestState.Open => new SolidColorBrush(Color.FromRgb(0xA6, 0xE3, 0xA1)), // green
-        PullRequestState.Draft => new SolidColorBrush(Color.FromRgb(0x7F, 0x84, 0x9C)), // gray
-        PullRequestState.Merged => new SolidColorBrush(Color.FromRgb(0xCB, 0xA6, 0xF7)), // purple
-        PullRequestState.Closed => new SolidColorBrush(Color.FromRgb(0xF3, 0x8B, 0xA8)), // pink/red
-        _ => new SolidColorBrush(Color.FromRgb(0x7F, 0x84, 0x9C)),
+        PullRequestState.Open => GreenBrush,
+        PullRequestState.Draft => GrayBrush,
+        PullRequestState.Merged => PurpleBrush,
+        PullRequestState.Closed => PinkBrush,
+        _ => GrayBrush,
     };
 
     /// <summary>
@@ -1437,9 +1453,9 @@ public sealed partial class SessionCardViewModel : ObservableObject
     /// <summary>Background brush for the CI badge — colour-coded by rollup.</summary>
     public Brush CheckBadgeBrush => CheckRollup switch
     {
-        PullRequestCheckRollup.Success => new SolidColorBrush(Color.FromRgb(0xA6, 0xE3, 0xA1)), // green
-        PullRequestCheckRollup.Failure => new SolidColorBrush(Color.FromRgb(0xF3, 0x8B, 0xA8)), // red/pink
-        PullRequestCheckRollup.Pending => new SolidColorBrush(Color.FromRgb(0xF9, 0xE2, 0xAF)), // yellow
+        PullRequestCheckRollup.Success => GreenBrush,
+        PullRequestCheckRollup.Failure => PinkBrush,
+        PullRequestCheckRollup.Pending => YellowBrush,
         _ => Brushes.Transparent,
     };
 

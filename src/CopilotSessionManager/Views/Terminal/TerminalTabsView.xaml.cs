@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Controls;
@@ -93,71 +92,13 @@ public partial class TerminalTabsView : UserControl
             return;
         }
 
-        var session = tab.TerminalSession;
-        var buffer = session.Buffer;
-        var initialRows = buffer.Rows > 0 ? buffer.Rows : 30;
-        var initialCols = buffer.Columns > 0 ? buffer.Columns : 100;
-
         var state = _states.GetValue(control, _ => new EmbeddedTerminalState());
         if (state.Binder is not null && !state.Binder.IsDisposed)
         {
-            // Loaded fired again without Unloaded in between (can happen
-            // when the tab is briefly hidden and reshown). The existing
-            // binder already covers this control.
             return;
         }
 
-        state.Binder = new TerminalControlSessionBinder(
-            control,
-            bytes => ForwardInput(session, bytes),
-            (rows, cols) => ForwardResize(session, rows, cols),
-            initialRows,
-            initialCols);
-
-        if (state.DebounceTimer is null)
-        {
-            state.DebounceTimer = new DispatcherTimer(DispatcherPriority.Background)
-            {
-                Interval = ResizeDebounceInterval,
-            };
-            state.DebounceTimer.Tick += (_, _) =>
-            {
-                state.DebounceTimer!.Stop();
-                state.Binder?.TryApplyResize(state.PendingSize);
-            };
-        }
-
-        // First-fit: the tab is now visible and laid out, so the
-        // rendered viewport probably disagrees with the PTY's initial
-        // 30×100 (especially on tall dashboards). Defer to Loaded
-        // priority so every pending Measure / Arrange pass has settled
-        // before we sample ActualWidth / ActualHeight. Without the
-        // deferral, tabs 2+ can pick up stale preliminary sizes because
-        // the ContentPresenter re-templates on tab switch and the first
-        // layout pass may not yet have propagated the final dimensions.
-        var capturedState = state;
-        var capturedBinder = state.Binder;
-        control.Dispatcher.BeginInvoke(
-            DispatcherPriority.Loaded,
-            () =>
-            {
-                if (control.ActualWidth > 0 && control.ActualHeight > 0)
-                {
-                    capturedState.PendingSize = new Size(control.ActualWidth, control.ActualHeight);
-                    capturedBinder?.TryApplyResize(capturedState.PendingSize);
-                }
-            });
-
-        // Give the control focus so the user can start typing without
-        // first clicking into the terminal area. We defer to Input
-        // priority so the TabControl's own focus-management (which runs
-        // during layout/render) has finished before we grab focus.
-        // Without the deferral, the TabControl can steal focus back to
-        // the tab header, causing the first keystroke to be routed
-        // elsewhere.
-        control.Dispatcher.BeginInvoke(
-            DispatcherPriority.Input,
-            () => Keyboard.Focus(control));
+        EnsureBinderForTab(control, tab);
     }
 
     /// <summary>
@@ -185,8 +126,97 @@ public partial class TerminalTabsView : UserControl
     }
 
     /// <summary>
+    /// WPF's TabControl reuses a single ContentPresenter (and its visual
+    /// tree) across tabs that share the same DataTemplate.  When the user
+    /// switches tabs the TerminalControl's DataContext silently changes
+    /// from the old <see cref="TerminalTabViewModel"/> to the new one —
+    /// no Loaded / Unloaded / SizeChanged fires.  This handler detects
+    /// that swap, tears down the old binder, and wires a fresh one to
+    /// the new session so input, resize, and rendering all target the
+    /// correct PTY.
+    /// </summary>
+    private void OnEmbeddedTerminalDataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
+    {
+        if (sender is not TerminalControl control)
+        {
+            return;
+        }
+
+        if (e.NewValue is not TerminalTabViewModel tab)
+        {
+            return;
+        }
+
+        EnsureBinderForTab(control, tab);
+    }
+
+    private void EnsureBinderForTab(TerminalControl control, TerminalTabViewModel tab)
+    {
+        var session = tab.TerminalSession;
+        var buffer = session.Buffer;
+        var initialRows = buffer.Rows > 0 ? buffer.Rows : 30;
+        var initialCols = buffer.Columns > 0 ? buffer.Columns : 100;
+
+        var state = _states.GetValue(control, _ => new EmbeddedTerminalState());
+        state.DebounceTimer?.Stop();
+        state.Binder?.Dispose();
+        state.Binder = null;
+
+        state.Binder = new TerminalControlSessionBinder(
+            control,
+            bytes => ForwardInput(session, bytes),
+            (rows, cols) => ForwardResize(session, rows, cols),
+            initialRows,
+            initialCols);
+
+        if (state.DebounceTimer is null)
+        {
+            state.DebounceTimer = new DispatcherTimer(DispatcherPriority.Background)
+            {
+                Interval = ResizeDebounceInterval,
+            };
+            state.DebounceTimer.Tick += (_, _) =>
+            {
+                state.DebounceTimer!.Stop();
+                state.Binder?.TryApplyResize(state.PendingSize);
+            };
+        }
+
+        if (state.PendingSize.Width > 0 && state.PendingSize.Height > 0)
+        {
+            state.Binder.TryApplyResize(state.PendingSize);
+        }
+        else if (control.ActualWidth > 0 && control.ActualHeight > 0)
+        {
+            state.PendingSize = new Size(control.ActualWidth, control.ActualHeight);
+            state.Binder.TryApplyResize(state.PendingSize);
+        }
+
+        var capturedState = state;
+        var capturedBinder = state.Binder;
+        control.Dispatcher.BeginInvoke(
+            DispatcherPriority.ContextIdle,
+            () =>
+            {
+                if (control.ActualWidth > 0 && control.ActualHeight > 0)
+                {
+                    capturedState.PendingSize = new Size(control.ActualWidth, control.ActualHeight);
+                    capturedBinder?.TryApplyResize(capturedState.PendingSize);
+                }
+            });
+
+        control.Dispatcher.BeginInvoke(
+            DispatcherPriority.Input,
+            () => Keyboard.Focus(control));
+
+    }
+
+    /// <summary>
     /// Stash the latest pixel size and (re)start the debounce timer.
     /// The timer's Tick will hand the most-recent size to the binder.
+    /// When called before the binder exists (SizeChanged fires during
+    /// layout, before Loaded), the size is stashed so the Loaded handler
+    /// can apply it immediately.
     /// </summary>
     private void OnEmbeddedTerminalSizeChanged(object sender, SizeChangedEventArgs e)
     {
@@ -194,12 +224,18 @@ public partial class TerminalTabsView : UserControl
         {
             return;
         }
-        if (!_states.TryGetValue(control, out var state) || state.Binder is null)
+
+        // Always stash the latest size, even if the binder doesn't
+        // exist yet (pre-Loaded SizeChanged). The Loaded handler will
+        // read PendingSize and apply the first-fit resize.
+        var state = _states.GetValue(control, _ => new EmbeddedTerminalState());
+        state.PendingSize = e.NewSize;
+
+        if (state.Binder is null)
         {
             return;
         }
 
-        state.PendingSize = e.NewSize;
         state.DebounceTimer?.Stop();
         state.DebounceTimer?.Start();
     }
@@ -258,5 +294,6 @@ public partial class TerminalTabsView : UserControl
         public DispatcherTimer? DebounceTimer;
         public Size PendingSize;
     }
+
 }
 

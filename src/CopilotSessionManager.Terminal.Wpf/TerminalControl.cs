@@ -46,6 +46,7 @@ public class TerminalControl : FrameworkElement
 
     private CellMetrics? _metrics;
     private int _renderedRows;
+    private int _renderedCols;
     private bool _renderPending;
     private bool _cursorBlinkOn = true;
     private bool _suppressNextTextInput;
@@ -1121,6 +1122,7 @@ public class TerminalControl : FrameworkElement
         }
 
         control._renderedRows = 0;
+        control._renderedCols = 0;
         control.FullRepaint();
     }
 
@@ -1131,6 +1133,7 @@ public class TerminalControl : FrameworkElement
             control._metrics = null;
             control.InvalidateMeasure();
             control._renderedRows = 0;
+            control._renderedCols = 0;
             control.FullRepaint();
         }
     }
@@ -1242,6 +1245,7 @@ public class TerminalControl : FrameworkElement
         var metrics = _metrics!;
 
         SyncVisualCount(buffer.Rows);
+        _renderedCols = buffer.Columns;
 
         for (var row = 1; row <= buffer.Rows; row++)
         {
@@ -1265,7 +1269,7 @@ public class TerminalControl : FrameworkElement
         // A geometry change means the dirty-row map is stale — fall back
         // to a full repaint to keep the visual tree consistent with the
         // buffer.
-        if (buffer.Rows != _renderedRows)
+        if (buffer.Rows != _renderedRows || buffer.Columns != _renderedCols)
         {
             FullRepaint();
             return;
@@ -1294,6 +1298,7 @@ public class TerminalControl : FrameworkElement
         _children.Clear();
         _rowVisuals.Clear();
         _renderedRows = 0;
+        _renderedCols = 0;
         using (_selectionVisual.RenderOpen())
         {
             // Drop any cached selection overlay.

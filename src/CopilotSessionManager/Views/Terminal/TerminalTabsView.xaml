@@ -184,7 +184,8 @@
                                                   Buffer="{Binding TerminalSession.Buffer}"
                                                   Loaded="OnEmbeddedTerminalLoaded"
                                                   Unloaded="OnEmbeddedTerminalUnloaded"
-                                                  SizeChanged="OnEmbeddedTerminalSizeChanged" />
+                                                  SizeChanged="OnEmbeddedTerminalSizeChanged"
+                                                  DataContextChanged="OnEmbeddedTerminalDataContextChanged" />
                     </Border>
                 </DataTemplate>
             </TabControl.ContentTemplate>

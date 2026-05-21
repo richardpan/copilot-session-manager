@@ -127,7 +127,28 @@
             V1.5 (#116): Right-click context menu for each session row in the
             data-table layout. Same actions as the prior card context menu.
         -->
-        <ContextMenu x:Key="SessionRowContextMenu">
+        <ContextMenu x:Key="SessionRowContextMenu"
+                     Background="{DynamicResource SurfaceBrush}"
+                     BorderBrush="{DynamicResource BorderBrush}"
+                     BorderThickness="1"
+                     Padding="0,4"
+                     Foreground="{DynamicResource TextPrimaryBrush}">
+            <ContextMenu.Resources>
+                <Style TargetType="Separator">
+                    <Setter Property="Height" Value="1" />
+                    <Setter Property="Margin" Value="4,3" />
+                    <Setter Property="Background" Value="{DynamicResource BorderBrush}" />
+                    <Setter Property="Template">
+                        <Setter.Value>
+                            <ControlTemplate TargetType="Separator">
+                                <Border Height="{TemplateBinding Height}"
+                                        Margin="{TemplateBinding Margin}"
+                                        Background="{TemplateBinding Background}" />
+                            </ControlTemplate>
+                        </Setter.Value>
+                    </Setter>
+                </Style>
+            </ContextMenu.Resources>
             <MenuItem Header="Open in external PowerShell"
                       Command="{Binding OpenInExternalCommand}"
                       AutomationProperties.Name="Open this session in an external PowerShell window"
@@ -239,13 +260,151 @@
 
         <!-- Top menu bar (Help → Onboarding…) -->
         <Menu Grid.Row="0" Background="{DynamicResource SurfaceAltBrush}" Foreground="{DynamicResource TextPrimaryBrush}" Padding="4,2">
+            <Menu.Resources>
+                <!-- Themed Separator: thin line, no extra padding -->
+                <Style TargetType="Separator">
+                    <Setter Property="Height" Value="1" />
+                    <Setter Property="Margin" Value="4,3" />
+                    <Setter Property="Background" Value="{DynamicResource BorderBrush}" />
+                    <Setter Property="Template">
+                        <Setter.Value>
+                            <ControlTemplate TargetType="Separator">
+                                <Border Height="{TemplateBinding Height}"
+                                        Margin="{TemplateBinding Margin}"
+                                        Background="{TemplateBinding Background}" />
+                            </ControlTemplate>
+                        </Setter.Value>
+                    </Setter>
+                </Style>
+
+                <!-- Themed MenuItem: remove default chrome borders -->
+                <Style TargetType="MenuItem">
+                    <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+                    <Setter Property="Background" Value="Transparent" />
+                    <Setter Property="Padding" Value="8,5" />
+                    <Setter Property="BorderThickness" Value="0" />
+                    <Setter Property="Template">
+                        <Setter.Value>
+                            <ControlTemplate TargetType="MenuItem">
+                                <Grid>
+                                    <Border x:Name="Bd"
+                                            Background="{TemplateBinding Background}"
+                                            BorderBrush="{TemplateBinding BorderBrush}"
+                                            BorderThickness="{TemplateBinding BorderThickness}"
+                                            Padding="{TemplateBinding Padding}"
+                                            SnapsToDevicePixels="True">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto" SharedSizeGroup="MenuIconCol" MinWidth="20" />
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" SharedSizeGroup="MenuShortcutCol" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <!-- Checkmark glyph for IsCheckable items -->
+                                            <TextBlock x:Name="CheckMark"
+                                                       Grid.Column="0"
+                                                       Text="✓"
+                                                       FontSize="12"
+                                                       VerticalAlignment="Center"
+                                                       Margin="0,0,4,0"
+                                                       Visibility="Collapsed"
+                                                       Foreground="{DynamicResource AccentBrush}" />
+                                            <!-- Icon placeholder -->
+                                            <ContentPresenter x:Name="Icon"
+                                                              Grid.Column="0"
+                                                              ContentSource="Icon"
+                                                              VerticalAlignment="Center"
+                                                              Margin="0,0,4,0"
+                                                              Width="16" Height="16" />
+                                            <!-- Header text -->
+                                            <ContentPresenter Grid.Column="1"
+                                                              ContentSource="Header"
+                                                              RecognizesAccessKey="True"
+                                                              VerticalAlignment="Center" />
+                                            <!-- InputGestureText -->
+                                            <TextBlock Grid.Column="2"
+                                                       Text="{TemplateBinding InputGestureText}"
+                                                       Margin="16,0,0,0"
+                                                       VerticalAlignment="Center"
+                                                       Foreground="{DynamicResource TextMutedBrush}" />
+                                            <!-- Submenu arrow -->
+                                            <Path x:Name="SubMenuArrow"
+                                                  Grid.Column="3"
+                                                  Data="M 0,0 L 4,4 L 0,8 Z"
+                                                  Fill="{DynamicResource TextMutedBrush}"
+                                                  VerticalAlignment="Center"
+                                                  Margin="8,0,0,0"
+                                                  Visibility="Collapsed" />
+                                        </Grid>
+                                    </Border>
+                                    <!-- Submenu popup -->
+                                    <Popup x:Name="PART_Popup"
+                                           IsOpen="{Binding IsSubmenuOpen, RelativeSource={RelativeSource TemplatedParent}}"
+                                           Placement="Bottom"
+                                           AllowsTransparency="True"
+                                           Focusable="False"
+                                           PopupAnimation="Fade">
+                                        <Border Background="{DynamicResource SurfaceBrush}"
+                                                BorderBrush="{DynamicResource BorderBrush}"
+                                                BorderThickness="1"
+                                                CornerRadius="4"
+                                                Padding="0,4"
+                                                SnapsToDevicePixels="True">
+                                            <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                                          HorizontalScrollBarVisibility="Disabled">
+                                                <StackPanel IsItemsHost="True"
+                                                            KeyboardNavigation.DirectionalNavigation="Cycle"
+                                                            Grid.IsSharedSizeScope="True" />
+                                            </ScrollViewer>
+                                        </Border>
+                                    </Popup>
+                                </Grid>
+                                <ControlTemplate.Triggers>
+                                    <!-- No icon → hide icon presenter -->
+                                    <Trigger Property="Icon" Value="{x:Null}">
+                                        <Setter TargetName="Icon" Property="Visibility" Value="Collapsed" />
+                                    </Trigger>
+                                    <!-- Checkable + Checked → show glyph -->
+                                    <MultiTrigger>
+                                        <MultiTrigger.Conditions>
+                                            <Condition Property="IsCheckable" Value="True" />
+                                            <Condition Property="IsChecked" Value="True" />
+                                        </MultiTrigger.Conditions>
+                                        <Setter TargetName="CheckMark" Property="Visibility" Value="Visible" />
+                                    </MultiTrigger>
+                                    <!-- Has children → show arrow, popup goes Right -->
+                                    <Trigger Property="HasItems" Value="True">
+                                        <Setter TargetName="SubMenuArrow" Property="Visibility" Value="Visible" />
+                                        <Setter TargetName="PART_Popup" Property="Placement" Value="Right" />
+                                    </Trigger>
+                                    <!-- Top-level items → popup goes Bottom -->
+                                    <Trigger Property="Role" Value="TopLevelHeader">
+                                        <Setter TargetName="PART_Popup" Property="Placement" Value="Bottom" />
+                                        <Setter TargetName="SubMenuArrow" Property="Visibility" Value="Collapsed" />
+                                    </Trigger>
+                                    <Trigger Property="Role" Value="TopLevelItem">
+                                        <Setter TargetName="SubMenuArrow" Property="Visibility" Value="Collapsed" />
+                                    </Trigger>
+                                    <!-- Hover highlight -->
+                                    <Trigger Property="IsHighlighted" Value="True">
+                                        <Setter TargetName="Bd" Property="Background" Value="{DynamicResource SurfaceHoverBrush}" />
+                                    </Trigger>
+                                    <!-- Disabled -->
+                                    <Trigger Property="IsEnabled" Value="False">
+                                        <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}" />
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </Setter.Value>
+                    </Setter>
+                </Style>
+            </Menu.Resources>
             <MenuItem Header="_Help" Foreground="{DynamicResource TextPrimaryBrush}" AutomationProperties.Name="Help menu">
                 <MenuItem Header="_Onboarding…"
                           Command="{Binding OpenOnboardingCommand}"
                           ToolTip="Re-run the welcome flow and prerequisite checks."
                           AutomationProperties.Name="Re-run onboarding"
                           AutomationProperties.HelpText="Reopens the welcome flow and prerequisite checks." />
-                <Separator />
                 <MenuItem Header="Open _log folder"
                           Command="{Binding OpenLogFolderCommand}"
                           ToolTip="Open the per-user log folder in Explorer."
@@ -256,7 +415,6 @@
                           ToolTip="Zip current log files for sharing in a bug report."
                           AutomationProperties.Name="Bundle logs for bug report"
                           AutomationProperties.HelpText="Zips current log files into a single archive for sharing in a bug report." />
-                <Separator />
                 <MenuItem Header="_Verbose logging"
                           IsCheckable="True"
                           IsChecked="{Binding IsVerboseLogging, Mode=TwoWay}"
@@ -279,7 +437,6 @@
                               Command="{Binding SwitchThemeCommand}"
                               CommandParameter="GitHubLight"
                               AutomationProperties.Name="Switch to GitHub Light theme" />
-                    <Separator />
                     <MenuItem Header="Catppuccin Mocha"
                               IsCheckable="True"
                               IsChecked="{Binding CurrentTheme, Converter={StaticResource ThemeChecker}, ConverterParameter=CatppuccinMocha, Mode=OneWay}"
