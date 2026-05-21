@@ -48,6 +48,7 @@ public class TerminalControl : FrameworkElement
     private int _renderedRows;
     private int _renderedCols;
     private int _scrollOffset; // 0 = at bottom (live), >0 = scrolled up N lines into scrollback
+    private double _scrollAccumulator; // precision touchpad delta accumulation
     private bool _renderPending;
     private bool _cursorBlinkOn = true;
     private bool _suppressNextTextInput;
@@ -224,6 +225,40 @@ public class TerminalControl : FrameworkElement
 
     /// <summary>Raised whenever <see cref="Selection"/> changes value (including transitions to or from null).</summary>
     public event EventHandler? SelectionChanged;
+
+    /// <summary>Current scroll offset (0 = live output, &gt;0 = scrolled into history).</summary>
+    public int ScrollOffset => _scrollOffset;
+
+    /// <summary>Maximum scroll offset (= number of scrollback lines).</summary>
+    public int ScrollMaximum => Buffer?.ScrollbackLineCount ?? 0;
+
+    /// <summary>
+    /// Raised when the scroll position or maximum changes. Subscribers
+    /// should re-read <see cref="ScrollOffset"/> and <see cref="ScrollMaximum"/>.
+    /// </summary>
+    public event EventHandler? ScrollChanged;
+
+    /// <summary>
+    /// Set the scroll offset programmatically (e.g. from a scrollbar).
+    /// Clamps to [0, ScrollMaximum] and triggers a repaint.
+    /// </summary>
+    public void SetScrollOffset(int offset)
+    {
+        var buffer = Buffer;
+        if (buffer is null)
+        {
+            return;
+        }
+
+        var max = buffer.ScrollbackLineCount;
+        var clamped = Math.Clamp(offset, 0, max);
+        if (clamped != _scrollOffset)
+        {
+            _scrollOffset = clamped;
+            FullRepaint();
+            ScrollChanged?.Invoke(this, EventArgs.Empty);
+        }
+    }
 
     /// <summary>
     /// The clipboard abstraction used by <see cref="CopyToClipboard"/>
@@ -439,8 +474,11 @@ public class TerminalControl : FrameworkElement
     /// <summary>
     /// Scroll through the terminal's scrollback history on mouse wheel.
     /// Positive delta = scroll up (show older lines), negative = scroll
-    /// down (toward live output). Disabled while the alternate screen
-    /// buffer is active (full-screen TUI apps handle scrolling themselves).
+    /// down (toward live output). Uses delta accumulation to support
+    /// precision touchpad scrolling (which sends many small deltas
+    /// instead of discrete 120-unit notches). Disabled while the
+    /// alternate screen buffer is active (full-screen TUI apps handle
+    /// scrolling themselves).
     /// </summary>
     protected override void OnPreviewMouseWheel(MouseWheelEventArgs e)
     {
@@ -458,18 +496,33 @@ public class TerminalControl : FrameworkElement
             return; // nothing to scroll into
         }
 
-        // Typical: 3 lines per wheel notch (120 delta units per notch).
-        var lines = e.Delta / 40; // ~3 lines per notch, but smoother
+        // Accumulate delta for precision touchpad scrolling.
+        // Standard mouse wheel sends ±120 per notch; trackpads send
+        // much smaller values. Use the system's lines-per-notch setting
+        // (default 3) to compute delta-per-line.
+        _scrollAccumulator += e.Delta;
+        var linesPerNotch = SystemParameters.WheelScrollLines;
+        if (linesPerNotch <= 0)
+        {
+            linesPerNotch = 3;
+        }
+        var deltaPerLine = 120.0 / linesPerNotch;
+        var lines = (int)(_scrollAccumulator / deltaPerLine);
+
         if (lines == 0)
         {
-            lines = e.Delta > 0 ? 1 : -1;
+            e.Handled = true;
+            return;
         }
+
+        _scrollAccumulator -= lines * deltaPerLine;
 
         var newOffset = Math.Clamp(_scrollOffset + lines, 0, scrollbackCount);
         if (newOffset != _scrollOffset)
         {
             _scrollOffset = newOffset;
             FullRepaint();
+            ScrollChanged?.Invoke(this, EventArgs.Empty);
         }
 
         e.Handled = true;
@@ -933,7 +986,9 @@ public class TerminalControl : FrameworkElement
         if (_scrollOffset != 0)
         {
             _scrollOffset = 0;
+            _scrollAccumulator = 0;
             FullRepaint();
+            ScrollChanged?.Invoke(this, EventArgs.Empty);
         }
 
         InputProduced?.Invoke(this, new TerminalInputEventArgs(bytes));
@@ -1199,6 +1254,7 @@ public class TerminalControl : FrameworkElement
     private void OnBufferViewportInvalidated(object? sender, EventArgs e)
     {
         // Snap back to live output when new content arrives.
+        var wasScrolled = _scrollOffset != 0;
         _scrollOffset = 0;
 
         var dispatcher = Dispatcher;
@@ -1207,11 +1263,19 @@ public class TerminalControl : FrameworkElement
             // No dispatcher means the control was never bound to a UI
             // thread (test-only scenario). Run inline.
             IncrementalRepaint();
+            if (wasScrolled)
+            {
+                ScrollChanged?.Invoke(this, EventArgs.Empty);
+            }
             return;
         }
 
         if (_renderPending)
         {
+            if (wasScrolled)
+            {
+                dispatcher.BeginInvoke(DispatcherPriority.Render, () => ScrollChanged?.Invoke(this, EventArgs.Empty));
+            }
             return;
         }
         _renderPending = true;
@@ -1220,6 +1284,10 @@ public class TerminalControl : FrameworkElement
         {
             _renderPending = false;
             IncrementalRepaint();
+            if (wasScrolled)
+            {
+                ScrollChanged?.Invoke(this, EventArgs.Empty);
+            }
         }));
     }
 

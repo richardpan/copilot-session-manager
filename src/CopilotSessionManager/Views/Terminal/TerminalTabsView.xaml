@@ -176,17 +176,33 @@
                     <Border BorderBrush="{DynamicResource BorderBrush}"
                             BorderThickness="0,1,0,0"
                             Background="{DynamicResource SurfaceBrush}">
-                        <terminal:TerminalControl x:Name="EmbeddedTerminal"
-                                                  ClipToBounds="True"
-                                                  FontFamily="Cascadia Mono, Consolas, Lucida Console, Courier New"
-                                                  FontSize="16"
-                                                  Background="#0D1117"
-                                                  Foreground="#E6EDF3"
-                                                  Buffer="{Binding TerminalSession.Buffer}"
-                                                  Loaded="OnEmbeddedTerminalLoaded"
-                                                  Unloaded="OnEmbeddedTerminalUnloaded"
-                                                  SizeChanged="OnEmbeddedTerminalSizeChanged"
-                                                  DataContextChanged="OnEmbeddedTerminalDataContextChanged" />
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <terminal:TerminalControl x:Name="EmbeddedTerminal"
+                                                      ClipToBounds="True"
+                                                      FontFamily="Cascadia Mono, Consolas, Lucida Console, Courier New"
+                                                      FontSize="16"
+                                                      Background="#0D1117"
+                                                      Foreground="#E6EDF3"
+                                                      Buffer="{Binding TerminalSession.Buffer}"
+                                                      Loaded="OnEmbeddedTerminalLoaded"
+                                                      Unloaded="OnEmbeddedTerminalUnloaded"
+                                                      SizeChanged="OnEmbeddedTerminalSizeChanged"
+                                                      DataContextChanged="OnEmbeddedTerminalDataContextChanged" />
+                            <ScrollBar Grid.Column="1"
+                                       Orientation="Vertical"
+                                       Minimum="0"
+                                       Maximum="0"
+                                       Value="0"
+                                       SmallChange="1"
+                                       LargeChange="10"
+                                       Width="14"
+                                       Opacity="0.6"
+                                       Scroll="OnTerminalScrollBarScroll" />
+                        </Grid>
                     </Border>
                 </DataTemplate>
             </TabControl.ContentTemplate>

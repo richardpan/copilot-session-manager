@@ -2,7 +2,9 @@ using System;
 using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
+using System.Windows.Media;
 using System.Windows.Threading;
 using CopilotSessionManager.Terminal.Wpf;
 using CopilotSessionManager.ViewModels.Terminal;
@@ -209,6 +211,96 @@ public partial class TerminalTabsView : UserControl
             DispatcherPriority.Input,
             () => Keyboard.Focus(control));
 
+        // Wire up the sibling ScrollBar. It lives in the same Grid as
+        // the TerminalControl inside the DataTemplate.
+        if (state.ScrollChangedHandler is not null)
+        {
+            control.ScrollChanged -= state.ScrollChangedHandler;
+        }
+
+        var scrollBar = FindSiblingScrollBar(control);
+        state.ScrollBar = scrollBar;
+
+        if (scrollBar is not null)
+        {
+            state.ScrollChangedHandler = (_, _) => SyncScrollBar(scrollBar, control);
+            control.ScrollChanged += state.ScrollChangedHandler;
+            SyncScrollBar(scrollBar, control);
+        }
+    }
+
+    /// <summary>
+    /// Walk up from the TerminalControl to its parent Grid and find
+    /// the sibling ScrollBar placed there by the DataTemplate.
+    /// </summary>
+    private static ScrollBar? FindSiblingScrollBar(TerminalControl control)
+    {
+        if (VisualTreeHelper.GetParent(control) is not Grid grid)
+        {
+            return null;
+        }
+
+        for (var i = 0; i < grid.Children.Count; i++)
+        {
+            if (grid.Children[i] is ScrollBar sb)
+            {
+                return sb;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Push the TerminalControl's scroll state to the ScrollBar.
+    /// The ScrollBar's value is inverted: 0 = oldest (top),
+    /// Maximum = live output (bottom).
+    /// </summary>
+    private static void SyncScrollBar(ScrollBar scrollBar, TerminalControl terminal)
+    {
+        var max = terminal.ScrollMaximum;
+        scrollBar.Maximum = max;
+        scrollBar.ViewportSize = terminal.Buffer?.Rows ?? 30;
+        scrollBar.Value = max - terminal.ScrollOffset;
+        scrollBar.Visibility = max > 0 ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    /// <summary>
+    /// Handle user interaction with the ScrollBar (drag, click track,
+    /// arrow buttons). Convert the ScrollBar's inverted position back
+    /// to the TerminalControl's scroll offset.
+    /// </summary>
+    private void OnTerminalScrollBarScroll(object sender, ScrollEventArgs e)
+    {
+        if (sender is not ScrollBar scrollBar)
+        {
+            return;
+        }
+
+        // Find the sibling TerminalControl in the same Grid.
+        if (VisualTreeHelper.GetParent(scrollBar) is not Grid grid)
+        {
+            return;
+        }
+
+        TerminalControl? terminal = null;
+        for (var i = 0; i < grid.Children.Count; i++)
+        {
+            if (grid.Children[i] is TerminalControl tc)
+            {
+                terminal = tc;
+                break;
+            }
+        }
+
+        if (terminal is null)
+        {
+            return;
+        }
+
+        var max = terminal.ScrollMaximum;
+        var newOffset = (int)(max - e.NewValue);
+        terminal.SetScrollOffset(newOffset);
     }
 
     /// <summary>
@@ -293,6 +385,8 @@ public partial class TerminalTabsView : UserControl
         public TerminalControlSessionBinder? Binder;
         public DispatcherTimer? DebounceTimer;
         public Size PendingSize;
+        public ScrollBar? ScrollBar;
+        public EventHandler? ScrollChangedHandler;
     }
 
 }
