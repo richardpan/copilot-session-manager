@@ -129,14 +129,24 @@ public partial class TerminalTabsView : UserControl
 
         // First-fit: the tab is now visible and laid out, so the
         // rendered viewport probably disagrees with the PTY's initial
-        // 30×100 (especially on tall dashboards). Apply once
-        // synchronously so the prompt redraws at the right size before
-        // the user starts typing.
-        if (control.ActualWidth > 0 && control.ActualHeight > 0)
-        {
-            state.PendingSize = new Size(control.ActualWidth, control.ActualHeight);
-            state.Binder.TryApplyResize(state.PendingSize);
-        }
+        // 30×100 (especially on tall dashboards). Defer to Loaded
+        // priority so every pending Measure / Arrange pass has settled
+        // before we sample ActualWidth / ActualHeight. Without the
+        // deferral, tabs 2+ can pick up stale preliminary sizes because
+        // the ContentPresenter re-templates on tab switch and the first
+        // layout pass may not yet have propagated the final dimensions.
+        var capturedState = state;
+        var capturedBinder = state.Binder;
+        control.Dispatcher.BeginInvoke(
+            DispatcherPriority.Loaded,
+            () =>
+            {
+                if (control.ActualWidth > 0 && control.ActualHeight > 0)
+                {
+                    capturedState.PendingSize = new Size(control.ActualWidth, control.ActualHeight);
+                    capturedBinder?.TryApplyResize(capturedState.PendingSize);
+                }
+            });
 
         // Give the control focus so the user can start typing without
         // first clicking into the terminal area. We defer to Input
