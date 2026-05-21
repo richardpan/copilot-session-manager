@@ -195,12 +195,12 @@
                             <ScrollBar Grid.Column="1"
                                        Orientation="Vertical"
                                        Minimum="0"
-                                       Maximum="0"
-                                       Value="0"
+                                       Maximum="1"
+                                       Value="1"
                                        SmallChange="1"
                                        LargeChange="10"
                                        Width="14"
-                                       Opacity="0.6"
+                                       Opacity="0.7"
                                        Scroll="OnTerminalScrollBarScroll" />
                         </Grid>
                     </Border>

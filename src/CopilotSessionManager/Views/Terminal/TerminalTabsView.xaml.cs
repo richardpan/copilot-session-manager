@@ -259,10 +259,11 @@ public partial class TerminalTabsView : UserControl
     private static void SyncScrollBar(ScrollBar scrollBar, TerminalControl terminal)
     {
         var max = terminal.ScrollMaximum;
+        var viewportRows = terminal.Buffer?.Rows ?? 30;
         scrollBar.Maximum = max;
-        scrollBar.ViewportSize = terminal.Buffer?.Rows ?? 30;
+        scrollBar.ViewportSize = viewportRows;
+        scrollBar.LargeChange = Math.Max(1, viewportRows - 1);
         scrollBar.Value = max - terminal.ScrollOffset;
-        scrollBar.Visibility = max > 0 ? Visibility.Visible : Visibility.Collapsed;
     }
 
     /// <summary>

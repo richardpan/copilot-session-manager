@@ -1253,29 +1253,18 @@ public class TerminalControl : FrameworkElement
 
     private void OnBufferViewportInvalidated(object? sender, EventArgs e)
     {
-        // Snap back to live output when new content arrives.
-        var wasScrolled = _scrollOffset != 0;
-        _scrollOffset = 0;
-
         var dispatcher = Dispatcher;
         if (dispatcher is null)
         {
             // No dispatcher means the control was never bound to a UI
             // thread (test-only scenario). Run inline.
             IncrementalRepaint();
-            if (wasScrolled)
-            {
-                ScrollChanged?.Invoke(this, EventArgs.Empty);
-            }
+            ScrollChanged?.Invoke(this, EventArgs.Empty);
             return;
         }
 
         if (_renderPending)
         {
-            if (wasScrolled)
-            {
-                dispatcher.BeginInvoke(DispatcherPriority.Render, () => ScrollChanged?.Invoke(this, EventArgs.Empty));
-            }
             return;
         }
         _renderPending = true;
@@ -1284,10 +1273,9 @@ public class TerminalControl : FrameworkElement
         {
             _renderPending = false;
             IncrementalRepaint();
-            if (wasScrolled)
-            {
-                ScrollChanged?.Invoke(this, EventArgs.Empty);
-            }
+            // Always notify so the scrollbar can update its Maximum as
+            // new lines enter scrollback, and its Visibility can toggle.
+            ScrollChanged?.Invoke(this, EventArgs.Empty);
         }));
     }
 
