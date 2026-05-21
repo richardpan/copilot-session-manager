@@ -158,13 +158,15 @@ public class ScreenBufferTests
     }
 
     [Fact]
-    public void AlternateScreenScrollsWithoutAddingToScrollback()
+    public void AlternateScreenScrollsAndAddsToScrollback()
     {
         var buf = NewBuffer(rows: 2, columns: 4);
         buf.ApplyAll(Parse("\u001B[?1049h"));
         buf.ApplyAll(Parse("AB\r\nCD\r\n"));
 
-        buf.ScrollbackLineCount.Should().Be(0);
+        // ConPTY uses alternate screen for all rendering, so we
+        // always push scrolled-off rows to scrollback.
+        buf.ScrollbackLineCount.Should().Be(1);
     }
 
     [Fact]

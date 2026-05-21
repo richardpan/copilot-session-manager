@@ -597,10 +597,11 @@ public sealed class ScreenBuffer
         // Detach the top row first so we can hand it to scroll-back.
         var topRow = ExtractRow(0);
 
-        if (!_usingAlternate)
-        {
-            PushScrollback(topRow);
-        }
+        // Always push to scrollback — even when the alternate screen
+        // is active.  ConPTY uses the alternate buffer for all rendering,
+        // so skipping scrollback would leave users unable to scroll back
+        // through normal terminal output.
+        PushScrollback(topRow);
 
         // Shift rows [1..Rows-1] up by one slot.
         Array.Copy(_active, Columns, _active, 0, (Rows - 1) * Columns);
