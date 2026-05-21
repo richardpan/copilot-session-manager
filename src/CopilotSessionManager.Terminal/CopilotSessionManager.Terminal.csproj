@@ -10,6 +10,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="CopilotSessionManager.Terminal.Tests" />
+    <InternalsVisibleTo Include="CopilotSessionManager.Terminal.Wpf" />
   </ItemGroup>
 
 </Project>

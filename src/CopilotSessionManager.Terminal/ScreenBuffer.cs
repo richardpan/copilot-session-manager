@@ -172,6 +172,30 @@ public sealed class ScreenBuffer
         return node.Value[column - 1];
     }
 
+    /// <summary>
+    /// Copy scrollback row arrays into <paramref name="dest"/> starting
+    /// from line <paramref name="startLine"/> (0-based, oldest-first).
+    /// Walks the linked list once for efficiency. Returns the number of
+    /// rows actually copied.
+    /// </summary>
+    internal int GetScrollbackRows(int startLine, int count, TerminalCell[][] dest)
+    {
+        if (startLine < 0 || startLine >= _scrollback.Count || count <= 0)
+            return 0;
+
+        var node = _scrollback.First!;
+        for (var i = 0; i < startLine; i++)
+            node = node.Next!;
+
+        var copied = 0;
+        for (var i = 0; i < count && node != null; i++, node = node.Next!)
+        {
+            dest[i] = node.Value;
+            copied++;
+        }
+        return copied;
+    }
+
     /// <summary>Reset the dirty-row tracking after the renderer has caught up.</summary>
     public void ClearDirty()
     {

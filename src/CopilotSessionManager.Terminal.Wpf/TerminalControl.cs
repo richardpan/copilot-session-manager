@@ -47,6 +47,7 @@ public class TerminalControl : FrameworkElement
     private CellMetrics? _metrics;
     private int _renderedRows;
     private int _renderedCols;
+    private int _scrollOffset; // 0 = at bottom (live), >0 = scrolled up N lines into scrollback
     private bool _renderPending;
     private bool _cursorBlinkOn = true;
     private bool _suppressNextTextInput;
@@ -283,21 +284,22 @@ public class TerminalControl : FrameworkElement
         EnsureMetrics();
         var metrics = _metrics!;
 
-        // The desired size is the buffer's cell grid, but when the parent
-        // offers more space (Stretch alignment inside a Grid/Border), we
-        // accept it so the control fills the container. This lets the
-        // resize-feedback loop (SizeChanged → PTY resize → buffer grows →
-        // repaint) work correctly instead of clamping the control to the
-        // buffer's initial 30×100 default.
+        // When the parent offers finite space, accept exactly that amount so
+        // the control fills the container without overflowing (which would
+        // cause the bottom rows to render behind sibling elements like the
+        // status bar).  The resize-feedback loop (SizeChanged → PTY resize →
+        // buffer adjusts rows/columns → repaint) handles the content fit.
+        // Only fall back to the buffer's cell grid when the constraint is
+        // infinite (e.g. inside a ScrollViewer).
         var bufferWidth  = buffer.Columns * metrics.CellWidth;
         var bufferHeight = buffer.Rows    * metrics.CellHeight;
 
         var width  = double.IsInfinity(availableSize.Width)
             ? bufferWidth
-            : Math.Max(bufferWidth, availableSize.Width);
+            : availableSize.Width;
         var height = double.IsInfinity(availableSize.Height)
             ? bufferHeight
-            : Math.Max(bufferHeight, availableSize.Height);
+            : availableSize.Height;
 
         return new Size(width, height);
     }
@@ -431,6 +433,45 @@ public class TerminalControl : FrameworkElement
         {
             ReleaseMouseCapture();
         }
+        e.Handled = true;
+    }
+
+    /// <summary>
+    /// Scroll through the terminal's scrollback history on mouse wheel.
+    /// Positive delta = scroll up (show older lines), negative = scroll
+    /// down (toward live output). Disabled while the alternate screen
+    /// buffer is active (full-screen TUI apps handle scrolling themselves).
+    /// </summary>
+    protected override void OnPreviewMouseWheel(MouseWheelEventArgs e)
+    {
+        base.OnPreviewMouseWheel(e);
+
+        var buffer = Buffer;
+        if (buffer is null || buffer.UsingAlternateScreen)
+        {
+            return;
+        }
+
+        var scrollbackCount = buffer.ScrollbackLineCount;
+        if (scrollbackCount == 0 && e.Delta > 0)
+        {
+            return; // nothing to scroll into
+        }
+
+        // Typical: 3 lines per wheel notch (120 delta units per notch).
+        var lines = e.Delta / 40; // ~3 lines per notch, but smoother
+        if (lines == 0)
+        {
+            lines = e.Delta > 0 ? 1 : -1;
+        }
+
+        var newOffset = Math.Clamp(_scrollOffset + lines, 0, scrollbackCount);
+        if (newOffset != _scrollOffset)
+        {
+            _scrollOffset = newOffset;
+            FullRepaint();
+        }
+
         e.Handled = true;
     }
 
@@ -887,6 +928,14 @@ public class TerminalControl : FrameworkElement
         {
             return;
         }
+
+        // Snap back to live output when the user types while scrolled back.
+        if (_scrollOffset != 0)
+        {
+            _scrollOffset = 0;
+            FullRepaint();
+        }
+
         InputProduced?.Invoke(this, new TerminalInputEventArgs(bytes));
     }
 
@@ -1123,6 +1172,7 @@ public class TerminalControl : FrameworkElement
 
         control._renderedRows = 0;
         control._renderedCols = 0;
+        control._scrollOffset = 0;
         control.FullRepaint();
     }
 
@@ -1148,6 +1198,9 @@ public class TerminalControl : FrameworkElement
 
     private void OnBufferViewportInvalidated(object? sender, EventArgs e)
     {
+        // Snap back to live output when new content arrives.
+        _scrollOffset = 0;
+
         var dispatcher = Dispatcher;
         if (dispatcher is null)
         {
@@ -1247,14 +1300,62 @@ public class TerminalControl : FrameworkElement
         SyncVisualCount(buffer.Rows);
         _renderedCols = buffer.Columns;
 
-        for (var row = 1; row <= buffer.Rows; row++)
+        if (_scrollOffset > 0)
         {
-            RenderRow(buffer, metrics, row, _rowVisuals[row - 1]);
+            FullRepaintScrolled(buffer, metrics);
+        }
+        else
+        {
+            for (var row = 1; row <= buffer.Rows; row++)
+            {
+                RenderRow(buffer, metrics, row, _rowVisuals[row - 1]);
+            }
         }
 
         buffer.ClearDirty();
         UpdateSelectionVisual();
         UpdateCursorVisual();
+    }
+
+    /// <summary>
+    /// Render the viewport when scrolled back into scrollback history.
+    /// The viewport shows a mix of scrollback rows and screen buffer rows:
+    /// the topmost <c>min(_scrollOffset, Rows)</c> rows come from
+    /// scrollback, the rest from the live screen buffer.
+    /// </summary>
+    private void FullRepaintScrolled(ScreenBuffer buffer, CellMetrics metrics)
+    {
+        var screenRows = buffer.Rows;
+        var scrollbackCount = buffer.ScrollbackLineCount;
+        var offset = Math.Min(_scrollOffset, scrollbackCount);
+
+        // How many of the display rows show scrollback content?
+        var scrollbackRowsVisible = Math.Min(offset, screenRows);
+        var screenRowsVisible = screenRows - scrollbackRowsVisible;
+
+        // Fetch the needed scrollback rows in a single linked-list walk.
+        TerminalCell[][]? scrollbackRows = null;
+        if (scrollbackRowsVisible > 0)
+        {
+            scrollbackRows = new TerminalCell[scrollbackRowsVisible][];
+            var startLine = scrollbackCount - offset;
+            buffer.GetScrollbackRows(startLine, scrollbackRowsVisible, scrollbackRows);
+        }
+
+        // Render scrollback rows at the top.
+        for (var d = 0; d < scrollbackRowsVisible; d++)
+        {
+            var cells = scrollbackRows![d];
+            RenderScrollbackRow(cells, buffer.Columns, metrics, d, _rowVisuals[d]);
+        }
+
+        // Render screen buffer rows below the scrollback rows.
+        // When scrolled up by S, screen rows 1..(Rows-S) are visible.
+        for (var d = scrollbackRowsVisible; d < screenRows; d++)
+        {
+            var screenRow = d - scrollbackRowsVisible + 1; // 1-based
+            RenderRowAtDisplayPosition(buffer, metrics, screenRow, d, _rowVisuals[d]);
+        }
     }
 
     private void IncrementalRepaint()
@@ -1263,6 +1364,14 @@ public class TerminalControl : FrameworkElement
         if (buffer is null || buffer.Rows == 0 || buffer.Columns == 0)
         {
             ClearVisuals();
+            return;
+        }
+
+        // When scrolled back, dirty-row tracking doesn't apply to
+        // scrollback lines — fall back to a full repaint.
+        if (_scrollOffset > 0)
+        {
+            FullRepaint();
             return;
         }
 
@@ -1299,6 +1408,7 @@ public class TerminalControl : FrameworkElement
         _rowVisuals.Clear();
         _renderedRows = 0;
         _renderedCols = 0;
+        _scrollOffset = 0;
         using (_selectionVisual.RenderOpen())
         {
             // Drop any cached selection overlay.
@@ -1402,7 +1512,8 @@ public class TerminalControl : FrameworkElement
         var buffer = Buffer;
         using var dc = _cursorVisual.RenderOpen();
 
-        if (buffer is null || _metrics is null || !buffer.CursorVisible || !_cursorBlinkOn)
+        // Hide cursor when scrolled back into history — it's off-screen.
+        if (buffer is null || _metrics is null || !buffer.CursorVisible || !_cursorBlinkOn || _scrollOffset > 0)
         {
             return;
         }
@@ -1458,6 +1569,152 @@ public class TerminalControl : FrameworkElement
 
             DrawGlyphsForRun(buffer, metrics, dc, row, startCol, cellCount, x, y, fg);
         }
+    }
+
+    /// <summary>
+    /// Render a screen buffer row at an arbitrary display position
+    /// (used when scrolled back — screen rows shift down).
+    /// </summary>
+    private void RenderRowAtDisplayPosition(ScreenBuffer buffer, CellMetrics metrics, int screenRow, int displayRow0, DrawingVisual visual)
+    {
+        using var dc = visual.RenderOpen();
+
+        var defaultFg = Foreground;
+        var defaultBg = Background;
+        var y = displayRow0 * metrics.CellHeight;
+        var columns = buffer.Columns;
+
+        var col = 1;
+        while (col <= columns)
+        {
+            var startCol = col;
+            var anchor = buffer.GetCell(screenRow, col);
+            col++;
+            while (col <= columns)
+            {
+                var c = buffer.GetCell(screenRow, col);
+                if (!ShareStyle(anchor, c))
+                {
+                    break;
+                }
+                col++;
+            }
+            var endCol = col - 1;
+            var cellCount = endCol - startCol + 1;
+
+            var (fg, bg) = ResolveStyleColors(anchor, defaultFg, defaultBg);
+
+            var x = (startCol - 1) * metrics.CellWidth;
+            var width = cellCount * metrics.CellWidth;
+
+            if (bg != defaultBg)
+            {
+                var brush = new SolidColorBrush(bg);
+                brush.Freeze();
+                dc.DrawRectangle(brush, null, new Rect(x, y, width, metrics.CellHeight));
+            }
+
+            DrawGlyphsForRun(buffer, metrics, dc, screenRow, startCol, cellCount, x, y, fg);
+        }
+    }
+
+    /// <summary>
+    /// Render a scrollback row (a <see cref="TerminalCell"/> array) at the
+    /// given display position. Handles rows that may have a different
+    /// column count than the current screen width.
+    /// </summary>
+    private void RenderScrollbackRow(TerminalCell[] cells, int currentColumns, CellMetrics metrics, int displayRow0, DrawingVisual visual)
+    {
+        using var dc = visual.RenderOpen();
+
+        var defaultFg = Foreground;
+        var defaultBg = Background;
+        var y = displayRow0 * metrics.CellHeight;
+        var renderColumns = Math.Min(cells.Length, currentColumns);
+
+        var col = 0; // 0-based into cells array
+        while (col < renderColumns)
+        {
+            var startCol = col;
+            var anchor = cells[col];
+            col++;
+            while (col < renderColumns && ShareStyle(anchor, cells[col]))
+            {
+                col++;
+            }
+            var cellCount = col - startCol;
+
+            var (fg, bg) = ResolveStyleColors(anchor, defaultFg, defaultBg);
+
+            var x = startCol * metrics.CellWidth;
+            var width = cellCount * metrics.CellWidth;
+
+            if (bg != defaultBg)
+            {
+                var brush = new SolidColorBrush(bg);
+                brush.Freeze();
+                dc.DrawRectangle(brush, null, new Rect(x, y, width, metrics.CellHeight));
+            }
+
+            DrawGlyphsFromScrollback(cells, metrics, dc, startCol, cellCount, x, y, fg);
+        }
+    }
+
+    /// <summary>
+    /// Draw glyph runs for a scrollback row, reading directly from the
+    /// <see cref="TerminalCell"/> array (0-based column indices).
+    /// </summary>
+    private void DrawGlyphsFromScrollback(
+        TerminalCell[] cells,
+        CellMetrics metrics,
+        DrawingContext dc,
+        int startCol,
+        int cellCount,
+        double x,
+        double y,
+        Color fg)
+    {
+        var indices = new ushort[cellCount];
+        var advances = new double[cellCount];
+        var hasVisibleGlyph = false;
+
+        for (var i = 0; i < cellCount; i++)
+        {
+            var cell = cells[startCol + i];
+            var codePoint = cell.Glyph.Value;
+            indices[i] = metrics.GlyphIndexFor(codePoint);
+            advances[i] = metrics.CellWidth;
+            if (codePoint != ' ')
+            {
+                hasVisibleGlyph = true;
+            }
+        }
+
+        if (!hasVisibleGlyph)
+        {
+            return;
+        }
+
+        var origin = new Point(x, y + metrics.Baseline);
+        var run = new GlyphRun(
+            metrics.Typeface,
+            bidiLevel: 0,
+            isSideways: false,
+            renderingEmSize: metrics.EmSize,
+            pixelsPerDip: (float)metrics.PixelsPerDip,
+            glyphIndices: indices,
+            baselineOrigin: origin,
+            advanceWidths: advances,
+            glyphOffsets: null,
+            characters: null,
+            deviceFontName: null,
+            clusterMap: null,
+            caretStops: null,
+            language: null);
+
+        var brush = new SolidColorBrush(fg);
+        brush.Freeze();
+        dc.DrawGlyphRun(brush, run);
     }
 
     private static bool ShareStyle(TerminalCell a, TerminalCell b) =>
