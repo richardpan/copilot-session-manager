@@ -227,6 +227,28 @@ public partial class TerminalTabsView : UserControl
             control.ScrollChanged += state.ScrollChangedHandler;
             SyncScrollBar(scrollBar, control);
         }
+
+        // Wire lazy history loading: when the user scrolls near the
+        // top of existing scrollback, fetch another 1000-row chunk.
+        if (state.NearTopHandler is not null)
+        {
+            control.ScrollbackNearTop -= state.NearTopHandler;
+        }
+        state.NearTopHandler = (_, _) =>
+        {
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await session.CaptureMoreHistoryAsync().ConfigureAwait(false);
+                }
+                catch
+                {
+                    // Best-effort; session may have been disposed.
+                }
+            });
+        };
+        control.ScrollbackNearTop += state.NearTopHandler;
     }
 
     /// <summary>
@@ -388,6 +410,7 @@ public partial class TerminalTabsView : UserControl
         public Size PendingSize;
         public ScrollBar? ScrollBar;
         public EventHandler? ScrollChangedHandler;
+        public EventHandler? NearTopHandler;
     }
 
 }

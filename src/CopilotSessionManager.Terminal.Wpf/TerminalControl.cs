@@ -239,6 +239,14 @@ public class TerminalControl : FrameworkElement
     public event EventHandler? ScrollChanged;
 
     /// <summary>
+    /// Raised when the user scrolls to within a small threshold of the
+    /// oldest scrollback line, signalling that more history should be
+    /// loaded. Subscribers should trigger incremental history capture
+    /// on the terminal session.
+    /// </summary>
+    public event EventHandler? ScrollbackNearTop;
+
+    /// <summary>
     /// Set the scroll offset programmatically (e.g. from a scrollbar).
     /// Clamps to [0, ScrollMaximum] and triggers a repaint.
     /// </summary>
@@ -257,6 +265,21 @@ public class TerminalControl : FrameworkElement
             _scrollOffset = clamped;
             FullRepaint();
             ScrollChanged?.Invoke(this, EventArgs.Empty);
+            CheckScrollbackNearTop(max);
+        }
+    }
+
+    /// <summary>
+    /// Fire <see cref="ScrollbackNearTop"/> when the user scrolls to
+    /// within 50 lines of the oldest scrollback row, signalling that
+    /// the host should load the next chunk of history.
+    /// </summary>
+    private void CheckScrollbackNearTop(int scrollbackMax)
+    {
+        const int threshold = 50;
+        if (scrollbackMax > 0 && _scrollOffset >= scrollbackMax - threshold)
+        {
+            ScrollbackNearTop?.Invoke(this, EventArgs.Empty);
         }
     }
 
@@ -485,7 +508,7 @@ public class TerminalControl : FrameworkElement
         base.OnPreviewMouseWheel(e);
 
         var buffer = Buffer;
-        if (buffer is null || buffer.UsingAlternateScreen)
+        if (buffer is null)
         {
             return;
         }
@@ -523,6 +546,7 @@ public class TerminalControl : FrameworkElement
             _scrollOffset = newOffset;
             FullRepaint();
             ScrollChanged?.Invoke(this, EventArgs.Empty);
+            CheckScrollbackNearTop(scrollbackCount);
         }
 
         e.Handled = true;
@@ -1272,7 +1296,16 @@ public class TerminalControl : FrameworkElement
         dispatcher.BeginInvoke(DispatcherPriority.Render, new Action(() =>
         {
             _renderPending = false;
+
             IncrementalRepaint();
+
+            // Periodically capture screen content for alternate-screen
+            // scrollback (TUI apps like Copilot CLI). Self-throttles
+            // to at most once per 3 seconds. Also called from the
+            // TerminalSession reader loop to capture even when the
+            // tab isn't visible.
+            Buffer?.Transcript.TryCapture();
+
             // Always notify so the scrollbar can update its Maximum as
             // new lines enter scrollback, and its Visibility can toggle.
             ScrollChanged?.Invoke(this, EventArgs.Empty);

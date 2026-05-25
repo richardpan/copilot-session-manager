@@ -104,6 +104,7 @@ public sealed partial class TerminalTabsViewModel : ObservableObject, IDisposabl
         Tabs.Add(tab);
         ActiveTab = tab;
         OnPropertyChanged(nameof(IsEmpty));
+        ScheduleHistoryCapture(terminalSession);
         return tab;
     }
 
@@ -132,6 +133,7 @@ public sealed partial class TerminalTabsViewModel : ObservableObject, IDisposabl
         Tabs.Add(tab);
         ActiveTab = tab;
         OnPropertyChanged(nameof(IsEmpty));
+        ScheduleHistoryCapture(terminalSession);
         return tab;
     }
 
@@ -310,6 +312,30 @@ public sealed partial class TerminalTabsViewModel : ObservableObject, IDisposabl
     }
 
     private bool CanDetachTab(TerminalTabViewModel? tab) => tab is not null && _detachToExternal is not null;
+
+    /// <summary>
+    /// Schedule a delayed history capture for the given session.
+    /// Waits 5 seconds (enough for Copilot CLI to start and render
+    /// its initial TUI) then temporarily expands the viewport to
+    /// capture the full conversation into scrollback.
+    /// Fire-and-forget: failures are silently swallowed.
+    /// </summary>
+    private static void ScheduleHistoryCapture(TerminalSession terminalSession)
+    {
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await Task.Delay(5000).ConfigureAwait(false);
+                await terminalSession.CaptureMoreHistoryAsync().ConfigureAwait(false);
+            }
+            catch
+            {
+                // Best-effort; session may have been disposed in the
+                // meantime (tab closed, app shutting down).
+            }
+        });
+    }
 
     /// <inheritdoc />
     public void Dispose() => CloseAll();

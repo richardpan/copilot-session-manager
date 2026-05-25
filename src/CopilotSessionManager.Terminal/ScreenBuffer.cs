@@ -27,7 +27,7 @@ namespace CopilotSessionManager.Terminal;
 /// </remarks>
 public sealed class ScreenBuffer
 {
-    private const int DefaultScrollbackCapacity = 1000;
+    private const int DefaultScrollbackCapacity = 10_000;
 
     private TerminalCell[] _primary;
     private TerminalCell[] _alternate;
@@ -100,6 +100,55 @@ public sealed class ScreenBuffer
     public int ScrollbackCapacity => _scrollbackCapacity;
 
     /// <summary>
+    /// Screen transcript that periodically captures alternate-screen
+    /// content for scrollback. Created with the buffer so it captures
+    /// from session start. Call <see cref="ScreenTranscript.TryCapture"/>
+    /// periodically from the UI thread.
+    /// </summary>
+    public ScreenTranscript Transcript { get; }
+
+    /// <summary>
+    /// Extract the trimmed text content of a screen row (0-based).
+    /// Returns empty string for out-of-range rows.
+    /// </summary>
+    public string GetRowText(int row0)
+    {
+        if (row0 < 0 || row0 >= Rows)
+            return string.Empty;
+        var sb = new StringBuilder(Columns);
+        var offset = row0 * Columns;
+        for (var c = 0; c < Columns; c++)
+        {
+            var cell = _active[offset + c];
+            if (cell == TerminalCell.Empty)
+                sb.Append(' ');
+            else
+                sb.Append(cell.Glyph.ToString());
+        }
+        return sb.ToString().TrimEnd();
+    }
+
+    /// <summary>
+    /// Extract a copy of a screen row's cells (0-based) for external use.
+    /// </summary>
+    public TerminalCell[] GetRowCells(int row0)
+    {
+        var copy = new TerminalCell[Columns];
+        if (row0 >= 0 && row0 < Rows)
+            Array.Copy(_active, row0 * Columns, copy, 0, Columns);
+        return copy;
+    }
+
+    /// <summary>
+    /// Push an externally constructed row into the scrollback buffer.
+    /// Used by the screen transcript system.
+    /// </summary>
+    public void PushExternalScrollback(TerminalCell[] row)
+    {
+        PushScrollback(row);
+    }
+
+    /// <summary>
     /// Per-row "dirty" flags — true when the row's contents have changed
     /// since the last <see cref="ClearDirty"/>. Same length as
     /// <see cref="Rows"/>.
@@ -141,6 +190,7 @@ public sealed class ScreenBuffer
         _alternate = CreateBlankBuffer(rows, columns);
         _active = _primary;
         _dirtyRows = new bool[rows];
+        Transcript = new ScreenTranscript(this);
     }
 
     // -- public surface --------------------------------------------------
@@ -352,6 +402,7 @@ public sealed class ScreenBuffer
         _cursorRow0 = Math.Min(_cursorRow0, rows - 1);
         _cursorCol0 = Math.Min(_cursorCol0, columns - 1);
         _pendingWrap = false;
+        Transcript.Reset();
 
         ViewportInvalidated?.Invoke(this, EventArgs.Empty);
     }
@@ -378,6 +429,7 @@ public sealed class ScreenBuffer
         }
         WindowTitle = string.Empty;
         _scrollback.Clear();
+        Transcript.Reset();
         for (var i = 0; i < _dirtyRows.Length; i++)
             _dirtyRows[i] = true;
 
@@ -594,13 +646,8 @@ public sealed class ScreenBuffer
 
     private void ScrollUpOnce()
     {
-        // Detach the top row first so we can hand it to scroll-back.
+        // Extract the top row and push it to scrollback.
         var topRow = ExtractRow(0);
-
-        // Always push to scrollback — even when the alternate screen
-        // is active.  ConPTY uses the alternate buffer for all rendering,
-        // so skipping scrollback would leave users unable to scroll back
-        // through normal terminal output.
         PushScrollback(topRow);
 
         // Shift rows [1..Rows-1] up by one slot.

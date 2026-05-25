@@ -45,6 +45,9 @@ public sealed class TerminalSession : IDisposable
 
     private int _exitedRaised;
     private int _disposed;
+    private volatile bool _capturingHistory;
+    private int _capturedDepth;
+    private readonly HashSet<int> _capturedHashes = new();
 
     /// <summary>
     /// Build a session around the given <paramref name="process"/> with
@@ -142,6 +145,11 @@ public sealed class TerminalSession : IDisposable
         {
             throw new ObjectDisposedException(nameof(TerminalSession));
         }
+        // Suppress external resizes while a history capture is in progress.
+        if (_capturingHistory)
+        {
+            return;
+        }
         if (rows <= 0)
         {
             throw new ArgumentOutOfRangeException(nameof(rows), rows, "Must be > 0.");
@@ -155,6 +163,122 @@ public sealed class TerminalSession : IDisposable
         // Marshal the buffer resize onto the UI thread so it interleaves
         // correctly with parser-driven mutations.
         _dispatcher.Post(() => Buffer.Resize(rows, cols));
+    }
+
+    private const int HistoryChunkSize = 1000;
+    private const int HistoryMaxDepth = 10000;
+
+    /// <summary>
+    /// Incrementally expand the terminal viewport to capture more
+    /// scrollback history. Each call extends the capture by
+    /// <see cref="HistoryChunkSize"/> rows (up to
+    /// <see cref="HistoryMaxDepth"/>). The TUI app re-renders at the
+    /// larger size, and the newly visible rows are pushed to scrollback
+    /// before the viewport shrinks back. Safe to call from any thread;
+    /// concurrent calls are serialised via <see cref="_capturingHistory"/>.
+    /// </summary>
+    public async Task CaptureMoreHistoryAsync()
+    {
+        if (_disposed != 0 || _capturingHistory)
+        {
+            return;
+        }
+
+        var nextDepth = _capturedDepth + HistoryChunkSize;
+        if (nextDepth > HistoryMaxDepth)
+        {
+            return; // already at maximum capture depth
+        }
+
+        var originalRows = Buffer.Rows;
+        var cols = Buffer.Columns;
+        if (nextDepth <= originalRows || cols <= 0)
+        {
+            return;
+        }
+
+        _capturingHistory = true;
+        try
+        {
+            // 1. Seed hashes with current live viewport content so we
+            //    never push rows the user can already see.
+            var seedDone = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            _dispatcher.Post(() =>
+            {
+                try
+                {
+                    for (var r = 0; r < originalRows; r++)
+                    {
+                        var text = Buffer.GetRowText(r).TrimEnd();
+                        if (text.Length > 0)
+                            _capturedHashes.Add(text.GetHashCode(StringComparison.Ordinal));
+                    }
+                }
+                finally
+                {
+                    seedDone.TrySetResult();
+                }
+            });
+            await seedDone.Task.ConfigureAwait(false);
+
+            // 2. Resize ConPTY to the expanded viewport.
+            _process.Resize((short)cols, (short)nextDepth);
+
+            // 3. Resize buffer on the UI thread.
+            var resizeDone = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            _dispatcher.Post(() =>
+            {
+                try
+                {
+                    Buffer.Resize(nextDepth, cols);
+                }
+                finally
+                {
+                    resizeDone.TrySetResult();
+                }
+            });
+            await resizeDone.Task.ConfigureAwait(false);
+
+            // 4. Wait for the TUI to redraw into the larger viewport.
+            await Task.Delay(2000).ConfigureAwait(false);
+
+            // 5. Capture only genuinely new rows and resize back.
+            var captureDone = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            _dispatcher.Post(() =>
+            {
+                try
+                {
+                    var rows = Buffer.Rows;
+                    for (var r = 0; r < rows; r++)
+                    {
+                        var text = Buffer.GetRowText(r);
+                        if (string.IsNullOrWhiteSpace(text))
+                            continue;
+                        var hash = text.TrimEnd().GetHashCode(StringComparison.Ordinal);
+                        if (!_capturedHashes.Add(hash))
+                            continue; // already on screen or pushed previously
+                        Buffer.PushExternalScrollback(Buffer.GetRowCells(r));
+                    }
+
+                    // Resize buffer back to the original viewport.
+                    Buffer.Resize(originalRows, cols);
+                }
+                finally
+                {
+                    captureDone.TrySetResult();
+                }
+            });
+            await captureDone.Task.ConfigureAwait(false);
+
+            // 6. Resize ConPTY back to the original dimensions.
+            _process.Resize((short)cols, (short)originalRows);
+
+            _capturedDepth = nextDepth;
+        }
+        finally
+        {
+            _capturingHistory = false;
+        }
     }
 
     /// <summary>
