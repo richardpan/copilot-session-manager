@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Copilot Session Manager 1.0.0 — README screenshot mockup</title>
+<title>Copilot Session Manager v1.5.0 — README screenshot mockup</title>
 <style>
   /* ---------- Reset + global ---------- */
   * { box-sizing: border-box; margin: 0; padding: 0; font-family: "Segoe UI", "Segoe UI Variable", system-ui, sans-serif; }
@@ -58,14 +58,24 @@
     color: #cfcfcf;
     font-size: 12px;
   }
-  .menubar span { padding: 0 10px; }
+  .menubar span { padding: 0 10px; cursor: default; }
+  .menubar span:hover { background: rgba(255,255,255,0.06); }
 
-  /* ---------- App body ---------- */
-  .app {
+  /* ---------- App body: split layout ---------- */
+  .app-container {
+    display: flex;
+    height: 820px;
     background: #0e1014;
+  }
+
+  /* Left panel — session cards */
+  .cards-panel {
+    flex: 1;
+    padding: 18px 16px 0 22px;
+    overflow-y: auto;
     color: #d6d6d6;
-    padding: 18px 22px 0 22px;
     font-size: 13.5px;
+    border-right: 1px solid #1c1f27;
   }
   .header {
     display: flex;
@@ -109,24 +119,16 @@
     font-size: 12.5px;
   }
   .search {
-    width: 280px;
+    width: 260px;
     height: 32px;
     background: #15171c;
     border: 1px solid #2c303a;
     border-radius: 3px;
     color: #b0b0b0;
-    padding-left: 30px;
     font-size: 12.5px;
     position: relative;
     display: inline-flex;
     align-items: center;
-  }
-  .search::before {
-    content: "🔍";
-    position: absolute;
-    left: 8px;
-    font-size: 11px;
-    opacity: 0.55;
   }
   .search-text { color: #6c6f78; padding-left: 30px; }
   .check { display: inline-flex; align-items: center; gap: 6px; }
@@ -179,6 +181,7 @@
   }
   tr.row { background: rgba(255,255,255,0.02); }
   tr.row.alt { background: transparent; }
+  tr.row.selected { background: rgba(37,99,235,0.12); }
 
   /* Status pill */
   .pill {
@@ -188,6 +191,7 @@
     border-radius: 4px;
     font-weight: 500;
     line-height: 1.4;
+    white-space: nowrap;
   }
   .pill.working { background: #2e7d32; color: #d6f5d6; }
   .pill.working::before { content: "▶ "; }
@@ -232,7 +236,6 @@
     color: #7c8089;
   }
   .meta a { color: #5e9bff; text-decoration: none; }
-  .meta a:hover { text-decoration: underline; }
   .chip {
     display: inline-block;
     padding: 2px 8px;
@@ -255,25 +258,110 @@
   /* Tier chip */
   .tier { display: inline-block; padding: 3px 10px; border-radius: 4px; font-size: 11.5px; font-weight: 500; }
   .tier.opus    { background: #f7c2c2; color: #6b1f1f; }
-  .tier.claude  { background: #2c303a; color: #cfd2da; border: 1px solid #3a3f4b; }
   .tier.sonnet  { background: #c8d4f0; color: #1a2c5e; }
   .tier.gpt     { background: #c4e8d4; color: #155724; }
+  .tier.haiku   { background: #fde68a; color: #78350f; }
 
   /* Producer text */
   .producer { color: #b0b3bb; font-size: 12.5px; }
-
-  /* Numeric columns */
   .turns { color: #f0f0f0; font-weight: 600; font-size: 13px; }
   .tokens-bar { color: #6c6f78; font-size: 13px; }
   .updated { color: #b0b3bb; font-size: 12px; }
 
+  /* ---------- Right panel — embedded terminal ---------- */
+  .terminal-panel {
+    width: 580px;
+    display: flex;
+    flex-direction: column;
+    background: #0d1117;
+  }
+  .tab-strip {
+    display: flex;
+    background: #161b22;
+    border-bottom: 1px solid #21262d;
+    height: 34px;
+    align-items: flex-end;
+    padding: 0 4px;
+  }
+  .tab {
+    padding: 6px 14px 6px 14px;
+    font-size: 12px;
+    color: #8b949e;
+    border-top: 2px solid transparent;
+    border-radius: 4px 4px 0 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    cursor: default;
+    margin-right: 2px;
+  }
+  .tab.active {
+    color: #e6edf3;
+    background: #0d1117;
+    border-top-color: #2563eb;
+  }
+  .tab .close {
+    font-size: 10px;
+    color: #484f58;
+    margin-left: 4px;
+  }
+  .tab.active .close { color: #8b949e; }
+  .tab .accent {
+    width: 4px;
+    height: 12px;
+    border-radius: 1px;
+    display: inline-block;
+  }
+  .accent.opus { background: #da6d6d; }
+  .accent.sonnet { background: #7094d4; }
+  .accent.gpt { background: #6bb87a; }
+  .terminal-body {
+    flex: 1;
+    padding: 12px 14px;
+    font-family: "Cascadia Code", "Cascadia Mono", "Consolas", monospace;
+    font-size: 13px;
+    line-height: 1.55;
+    color: #c9d1d9;
+    overflow-y: auto;
+    position: relative;
+  }
+  .terminal-body .prompt { color: #58a6ff; }
+  .terminal-body .copilot { color: #7ee787; }
+  .terminal-body .dim { color: #484f58; }
+  .terminal-body .muted { color: #8b949e; }
+  .terminal-body .bold { color: #e6edf3; font-weight: 600; }
+  .terminal-body .tool { color: #d2a8ff; }
+  .terminal-scrollbar {
+    position: absolute;
+    right: 2px;
+    top: 0;
+    bottom: 0;
+    width: 10px;
+  }
+  .scrollbar-track {
+    position: absolute;
+    top: 0; bottom: 0; right: 0;
+    width: 8px;
+    background: rgba(255,255,255,0.04);
+    border-radius: 4px;
+  }
+  .scrollbar-thumb {
+    position: absolute;
+    right: 0;
+    width: 8px;
+    background: rgba(139,148,158,0.35);
+    border-radius: 4px;
+    bottom: 4px;
+    height: 120px;
+  }
+
   /* Status bar */
   .statusbar {
-    margin-top: 12px;
     padding: 10px 22px;
     font-size: 12px;
     color: #8a8d96;
     border-top: 1px solid #1c1f27;
+    background: #0e1014;
   }
 </style>
 </head>
@@ -281,146 +369,205 @@
 <div class="window">
   <div class="titlebar">
     <span class="icon"></span>
-    <span>Copilot Session Manager 1.0.0</span>
+    <span>Copilot Session Manager v1.5.0</span>
     <div class="controls"><span>—</span><span>▢</span><span>✕</span></div>
   </div>
-  <div class="menubar"><span>Help</span></div>
-  <div class="app">
-    <div class="header">
-      <h1>Copilot Session Manager</h1>
-      <div class="toolbar">
-        <button class="btn primary">+ New session</button>
-        <button class="btn">🧹 Clean stale locks</button>
-        <button class="btn">↻ Refresh</button>
+  <div class="menubar">
+    <span>Session</span>
+    <span>View</span>
+    <span>Theme</span>
+    <span>Help</span>
+  </div>
+
+  <div class="app-container">
+    <!-- Left: session cards -->
+    <div class="cards-panel">
+      <div class="header">
+        <h1>Copilot Session Manager</h1>
+        <div class="toolbar">
+          <button class="btn primary">+ New session</button>
+          <button class="btn">↻ Refresh</button>
+        </div>
+      </div>
+
+      <div class="filter-row">
+        <div class="search"><span class="search-text">🔍 Search by name…</span></div>
+        <div class="check"><span class="box"></span> Show inactive</div>
+        <div class="count"><strong>6 active</strong> of 31 total</div>
+        <span class="label">Labels:</span>
+        <div class="check on"><span class="box"></span> Feature</div>
+        <div class="check on"><span class="box"></span> Bug</div>
+        <div class="check on"><span class="box"></span> Refactor</div>
+        <div class="check on"><span class="box"></span> Docs</div>
+        <div class="check on"><span class="box"></span> Research</div>
+        <div class="check on"><span class="box"></span> Infra</div>
+      </div>
+      <div class="filter-row">
+        <span class="label">Tiers:</span>
+        <div class="check on"><span class="box"></span> Premium</div>
+        <div class="check on"><span class="box"></span> Standard</div>
+        <div class="check on"><span class="box"></span> Fast</div>
+        <span class="label" style="margin-left:8px;">Producers:</span>
+        <div class="check on"><span class="box"></span> agency</div>
+        <div class="check on"><span class="box"></span> copilot-agent</div>
+      </div>
+
+      <table>
+        <thead>
+          <tr>
+            <th></th>
+            <th>Status</th>
+            <th></th>
+            <th>Name</th>
+            <th>Tier</th>
+            <th class="num">Turns</th>
+            <th class="num">Tokens</th>
+            <th>Updated</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr class="row selected">
+            <td><span class="star on">★</span></td>
+            <td><span class="pill working">Working</span></td>
+            <td class="actions">
+              <span class="docs-btn">Docs</span><span class="icon-btn play">▶</span><span class="icon-btn edit">✎</span><span class="icon-btn del">🗑</span>
+            </td>
+            <td>
+              <div class="name">Add lazy scrollback history to terminal</div>
+              <div class="meta"><span class="chip feature">Feature</span><a>myapp/desktop</a> · <span>feat/scrollback</span></div>
+            </td>
+            <td><span class="tier opus">Opus 4.7</span></td>
+            <td class="num turns">118</td>
+            <td class="num tokens-bar">502k</td>
+            <td class="updated">— 3 min ago</td>
+          </tr>
+          <tr class="row alt">
+            <td><span class="star on">★</span></td>
+            <td><span class="pill working">Working</span></td>
+            <td class="actions">
+              <span class="docs-btn">Docs</span><span class="icon-btn play">▶</span><span class="icon-btn edit">✎</span><span class="icon-btn del">🗑</span>
+            </td>
+            <td>
+              <div class="name">OpenAPI spec generation for REST endpoints</div>
+              <div class="meta"><span class="chip docs">Docs</span><a>myapp/api</a> · <span>docs/openapi-v3</span></div>
+            </td>
+            <td><span class="tier sonnet">Sonnet 4.6</span></td>
+            <td class="num turns">52</td>
+            <td class="num tokens-bar">198k</td>
+            <td class="updated">— 45 min ago</td>
+          </tr>
+          <tr class="row">
+            <td><span class="star off">☆</span></td>
+            <td><span class="pill waiting">Awaiting input</span></td>
+            <td class="actions">
+              <span class="docs-btn">Docs</span><span class="icon-btn play">▶</span><span class="icon-btn edit">✎</span><span class="icon-btn del">🗑</span>
+            </td>
+            <td>
+              <div class="name">Spike: caching strategy for product catalog</div>
+              <div class="meta"><span class="chip research">Research</span><span style="color:#6c6f78;">no repo</span></div>
+            </td>
+            <td><span class="tier gpt">GPT-5.4</span></td>
+            <td class="num turns">8</td>
+            <td class="num tokens-bar">34k</td>
+            <td class="updated">— 2 hr ago</td>
+          </tr>
+          <tr class="row alt">
+            <td><span class="star off">☆</span></td>
+            <td><span class="pill idle">Idle</span></td>
+            <td class="actions">
+              <span class="docs-btn">Docs</span><span class="icon-btn play">▶</span><span class="icon-btn edit">✎</span><span class="icon-btn del">🗑</span>
+            </td>
+            <td>
+              <div class="name">Fix off-by-one in paginated list view</div>
+              <div class="meta"><span class="chip bug">Bug</span><a>myapp/web</a> · <span>fix/list-pagination</span> · <a>#241</a></div>
+            </td>
+            <td><span class="tier opus">Opus 4.7</span></td>
+            <td class="num turns">14</td>
+            <td class="num tokens-bar">61k</td>
+            <td class="updated">— 6 hr ago</td>
+          </tr>
+          <tr class="row">
+            <td><span class="star on">★</span></td>
+            <td><span class="pill working">Working</span></td>
+            <td class="actions">
+              <span class="docs-btn">Docs</span><span class="icon-btn play">▶</span><span class="icon-btn edit">✎</span><span class="icon-btn del">🗑</span>
+            </td>
+            <td>
+              <div class="name">Migrate logging from printf to structured slog</div>
+              <div class="meta"><span class="chip refactor">Refactor</span><a>myapp/backend</a> · <span>chore/structured-logging</span></div>
+            </td>
+            <td><span class="tier haiku">Haiku 4.5</span></td>
+            <td class="num turns">33</td>
+            <td class="num tokens-bar">87k</td>
+            <td class="updated">— 1 d ago</td>
+          </tr>
+          <tr class="row alt">
+            <td><span class="star off">☆</span></td>
+            <td><span class="pill working">Working</span></td>
+            <td class="actions">
+              <span class="docs-btn">Docs</span><span class="icon-btn play">▶</span><span class="icon-btn edit">✎</span><span class="icon-btn del">🗑</span>
+            </td>
+            <td>
+              <div class="name">Terraform modules for dev environment</div>
+              <div class="meta"><span class="chip infra">Infra</span><a>myapp/infra</a> · <span>infra/dev-env</span></div>
+            </td>
+            <td><span class="tier sonnet">Sonnet 4.6</span></td>
+            <td class="num turns">21</td>
+            <td class="num tokens-bar">72k</td>
+            <td class="updated">— 1 d ago</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Right: embedded terminal -->
+    <div class="terminal-panel">
+      <div class="tab-strip">
+        <div class="tab active">
+          <span class="accent opus"></span>
+          Add lazy scrollback…
+          <span class="close">✕</span>
+        </div>
+        <div class="tab">
+          <span class="accent sonnet"></span>
+          OpenAPI spec gener…
+          <span class="close">✕</span>
+        </div>
+        <div class="tab">
+          <span class="accent gpt"></span>
+          Spike: caching str…
+          <span class="close">✕</span>
+        </div>
+      </div>
+      <div class="terminal-body">
+        <div><span class="copilot">●</span> <span class="bold">Copilot</span> <span class="dim">(Opus 4.7 · turn 118)</span></div>
+        <div>&nbsp;</div>
+        <div>All 1574 tests pass. Here's the summary of changes:</div>
+        <div>&nbsp;</div>
+        <div><span class="bold">Lazy scrollback history loading</span></div>
+        <div>&nbsp;</div>
+        <div>• <span class="tool">ScreenTranscript</span> — periodic alternate-screen</div>
+        <div>&nbsp; content capture with timer throttling and dedup</div>
+        <div>• <span class="tool">CaptureMoreHistoryAsync</span> — resizes viewport</div>
+        <div>&nbsp; in 1,000-row chunks (up to 10,000) on demand</div>
+        <div>• <span class="tool">ScrollbackNearTop</span> event triggers loading</div>
+        <div>&nbsp; when user scrolls within 50 lines of oldest row</div>
+        <div>• Live viewport rows excluded from capture via</div>
+        <div>&nbsp; content-hash pre-seeding</div>
+        <div>&nbsp;</div>
+        <div>Shall I commit and tag <span class="bold">v1.5.0</span>?</div>
+        <div>&nbsp;</div>
+        <div><span class="prompt">❯</span> <span class="muted">Type a message… (↑ for history)</span></div>
+        <div class="terminal-scrollbar">
+          <div class="scrollbar-track">
+            <div class="scrollbar-thumb"></div>
+          </div>
+        </div>
       </div>
     </div>
-
-    <div class="filter-row">
-      <div class="search"><span class="search-text">Search by name…</span></div>
-      <div class="check"><span class="box"></span> Show inactive</div>
-      <div class="count"><strong>5 active</strong> of 24 total</div>
-      <span class="label">Labels:</span>
-      <div class="check on"><span class="box"></span> Exploratory</div>
-      <div class="check on"><span class="box"></span> Research</div>
-      <div class="check on"><span class="box"></span> Feature</div>
-      <div class="check on"><span class="box"></span> Bug</div>
-      <div class="check on"><span class="box"></span> Refactor</div>
-      <div class="check on"><span class="box"></span> Docs</div>
-      <div class="check on"><span class="box"></span> Infra</div>
-      <div class="check on"><span class="box"></span> Experiment</div>
-      <span class="label" style="margin-left:8px;">Tiers:</span>
-      <div class="check on"><span class="box"></span> Unknown</div>
-      <div class="check on"><span class="box"></span> Fast</div>
-      <div class="check on"><span class="box"></span> Standard</div>
-      <div class="check on"><span class="box"></span> Premium</div>
-    </div>
-    <div class="filter-row">
-      <span class="label">Producers:</span>
-      <div class="check on"><span class="box"></span> agency</div>
-      <div class="check on"><span class="box"></span> copilot-agent</div>
-      <div class="check on"><span class="box"></span> (unknown)</div>
-    </div>
-
-    <table>
-      <thead>
-        <tr>
-          <th></th>
-          <th>Status</th>
-          <th></th>
-          <th>Name</th>
-          <th>Producer</th>
-          <th>Tier</th>
-          <th class="num">Turns</th>
-          <th class="num">Tokens</th>
-          <th>Updated</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr class="row">
-          <td><span class="star on">★</span></td>
-          <td><span class="pill working">Working</span></td>
-          <td class="actions">
-            <span class="docs-btn">Docs</span><span class="icon-btn play">▶</span><span class="icon-btn edit">✎</span><span class="icon-btn del">🗑</span>
-          </td>
-          <td>
-            <div class="name">Refactor auth middleware to drop session affinity</div>
-            <div class="meta"><span class="chip refactor">Refactor</span><a>acme/api-server</a> · <span>feature/jwt-auth</span></div>
-          </td>
-          <td class="producer">agency</td>
-          <td><span class="tier opus">Opus 4.7</span></td>
-          <td class="num turns">91</td>
-          <td class="num tokens-bar">412k</td>
-          <td class="updated">— 14 min ago</td>
-        </tr>
-        <tr class="row alt">
-          <td><span class="star on">★</span></td>
-          <td><span class="pill working">Working</span></td>
-          <td class="actions">
-            <span class="docs-btn">Docs</span><span class="icon-btn play">▶</span><span class="icon-btn edit">✎</span><span class="icon-btn del">🗑</span>
-          </td>
-          <td>
-            <div class="name">REST API reference documentation pass</div>
-            <div class="meta"><span class="chip docs">Docs</span><a>acme/api-server</a> · <span>docs/openapi-3</span></div>
-          </td>
-          <td class="producer">agency</td>
-          <td><span class="tier sonnet">Sonnet 4.6</span></td>
-          <td class="num turns">47</td>
-          <td class="num tokens-bar">186k</td>
-          <td class="updated">— 1 hr ago</td>
-        </tr>
-        <tr class="row">
-          <td><span class="star off">☆</span></td>
-          <td><span class="pill waiting">Awaiting input</span></td>
-          <td class="actions">
-            <span class="docs-btn">Docs</span><span class="icon-btn play">▶</span><span class="icon-btn edit">✎</span><span class="icon-btn del">🗑</span>
-          </td>
-          <td>
-            <div class="name">Spike: GraphQL schema for catalog service</div>
-            <div class="meta"><span class="chip research">Research</span><span style="color:#6c6f78;">no repo</span></div>
-          </td>
-          <td class="producer">copilot-agent</td>
-          <td><span class="tier gpt">GPT-5.4</span></td>
-          <td class="num turns">6</td>
-          <td class="num tokens-bar">28k</td>
-          <td class="updated">— 3 hr ago</td>
-        </tr>
-        <tr class="row alt">
-          <td><span class="star off">☆</span></td>
-          <td><span class="pill idle">Idle</span></td>
-          <td class="actions">
-            <span class="docs-btn">Docs</span><span class="icon-btn play">▶</span><span class="icon-btn edit">✎</span><span class="icon-btn del">🗑</span>
-          </td>
-          <td>
-            <div class="name">Pagination off-by-one bug on /v1/orders</div>
-            <div class="meta"><span class="chip bug">Bug</span><a>acme/web-app</a> · <span>fix/orders-pagination</span> · <a>#318</a></div>
-          </td>
-          <td class="producer">copilot-agent</td>
-          <td><span class="tier opus">Opus 4.7</span></td>
-          <td class="num turns">12</td>
-          <td class="num tokens-bar">54k</td>
-          <td class="updated">— 8 hr ago</td>
-        </tr>
-        <tr class="row">
-          <td><span class="star on">★</span></td>
-          <td><span class="pill working">Working</span></td>
-          <td class="actions">
-            <span class="docs-btn">Docs</span><span class="icon-btn play">▶</span><span class="icon-btn edit">✎</span><span class="icon-btn del">🗑</span>
-          </td>
-          <td>
-            <div class="name">Migrate Console.WriteLine logging to Serilog</div>
-            <div class="meta"><span class="chip refactor">Refactor</span><a>acme/web-app</a> · <span>chore/serilog-migration</span></div>
-          </td>
-          <td class="producer">agency</td>
-          <td><span class="tier claude">Claude Opus 4.7</span></td>
-          <td class="num turns">28</td>
-          <td class="num tokens-bar">94k</td>
-          <td class="updated">— 1 d ago</td>
-        </tr>
-      </tbody>
-    </table>
-
-    <div class="statusbar">5 active / 24 total at 7:42 PM.</div>
   </div>
+
+  <div class="statusbar">6 active / 31 total · v1.5.0 · GitHub Dark theme · 9:43 PM</div>
 </div>
 </body>
 </html>

@@ -4,13 +4,13 @@
 
 [![Platform](https://img.shields.io/badge/platform-Windows-0078D4?logo=windows)](https://github.com/richardpan/copilot-session-manager)
 [![.NET](https://img.shields.io/badge/.NET-8.0-512BD4?logo=dotnet)](https://dotnet.microsoft.com/)
-[![Release](https://img.shields.io/badge/release-v1.4.0-success)](https://github.com/richardpan/copilot-session-manager/releases/tag/v1.4.0)
-[![Tests](https://img.shields.io/badge/tests-1493%20passing-brightgreen)]()
+[![Release](https://img.shields.io/badge/release-v1.5.0-success)](https://github.com/richardpan/copilot-session-manager/releases/tag/v1.5.0)
+[![Tests](https://img.shields.io/badge/tests-1574%20passing-brightgreen)]()
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 ---
 
-![Copilot Session Manager v1.4.0 dashboard mockup](docs/images/dashboard.png)
+![Copilot Session Manager v1.5.0 dashboard mockup](docs/images/dashboard.png)
 
 > *The dashboard at a glance — search, filter by label · tier · producer, color-coded status pills, per-session **Docs / Open / Rename / Delete** actions, and live token / turn counts. **Mockup with synthetic example data**; the source HTML is at [`docs/images/dashboard-mockup.html`](docs/images/dashboard-mockup.html).*
 
