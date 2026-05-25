@@ -10,7 +10,7 @@
 
 ---
 
-![Copilot Session Manager v1.5.0 dashboard mockup](docs/images/dashboard.png)
+![Copilot Session Manager v1.5.0 dashboard — checkbox filters, embedded ConPTY terminal, GitHub Dark theme](docs/images/dashboard-v1.5.0.png)
 
 > *The dashboard at a glance — search, checkbox filters for labels · tiers · producers, color-coded status pills, per-session **Docs / Open / Rename / Delete** actions, live token / turn counts, and an embedded terminal panel with tabbed multi-session view. **Mockup with synthetic example data**; the source HTML is at [`docs/images/dashboard-mockup.html`](docs/images/dashboard-mockup.html).*
 
@@ -445,7 +445,8 @@ copilot-session-manager/
 ├── docs/
 │   ├── adr/                                 # Architecture Decision Records
 │   ├── images/
-│   │   ├── dashboard.png                    # README hero (synthetic mockup)
+│   │   ├── dashboard-v1.0.0.png              # v1.0.0 screenshot (historical)
+│   │   ├── dashboard-v1.5.0.png              # v1.5.0 screenshot (current README hero)
 │   │   └── dashboard-mockup.html            # source HTML for the mockup
 │   ├── a11y-manual-test.md                  # Narrator + Accessibility Insights checklist
 │   └── manual-tests.md                      # Manual smoke tests
