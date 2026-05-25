@@ -12,7 +12,7 @@
 
 ![Copilot Session Manager v1.5.0 dashboard mockup](docs/images/dashboard.png)
 
-> *The dashboard at a glance — search, filter by label · tier · producer, color-coded status pills, per-session **Docs / Open / Rename / Delete** actions, and live token / turn counts. **Mockup with synthetic example data**; the source HTML is at [`docs/images/dashboard-mockup.html`](docs/images/dashboard-mockup.html).*
+> *The dashboard at a glance — search, checkbox filters for labels · tiers · producers, color-coded status pills, per-session **Docs / Open / Rename / Delete** actions, live token / turn counts, and an embedded terminal panel with tabbed multi-session view. **Mockup with synthetic example data**; the source HTML is at [`docs/images/dashboard-mockup.html`](docs/images/dashboard-mockup.html).*
 
 ---
 
@@ -76,8 +76,8 @@ Copilot Session Manager solves all of these problems with a native Windows app t
 
 **Windows 10 (1809+) or Windows 11, x64.**
 
-1. Download `copilot-session-manager-v1.4.0-win-x64.zip` from the
-   [v1.4.0 release page](https://github.com/richardpan/copilot-session-manager/releases/tag/v1.4.0).
+1. Download `copilot-session-manager-v1.5.0-win-x64.zip` from the
+   [v1.5.0 release page](https://github.com/richardpan/copilot-session-manager/releases/tag/v1.5.0).
 2. Right-click the zip → **Properties** → tick **Unblock** → **OK**
    (Windows quarantine flag for downloaded executables).
 3. Extract anywhere (e.g. `%LOCALAPPDATA%\Programs\copilot-session-manager\`).
@@ -102,8 +102,9 @@ and walks you through anything missing.
 
 ## Key Features
 
-V1.4.0 ships the dashboard, the full session lifecycle, and the
-embedded ConPTY terminal with tabbed multi-session view. Everything
+V1.5.0 ships the dashboard, the full session lifecycle, the
+embedded ConPTY terminal with tabbed multi-session view, lazy
+scrollback history, and multiple theme options. Everything
 listed below works in the released build.
 
 ### Dashboard
@@ -143,9 +144,9 @@ listed below works in the released build.
 - **Producer filter** — toggle visibility of `agency` vs. `copilot-agent`
   (sub-agent) sessions. Useful for hiding the parallel sub-agents that
   Copilot spawns during long runs.
-- **Label and tier chips** — multi-select filters for session labels
-  (Exploratory, Research, Feature, Bug, Refactor, Docs, Infra, Experiment)
-  and model tiers (Unknown, Fast, Standard, Premium).
+- **Label and tier checkbox filters** — multi-select checkboxes for session labels
+  (Feature, Bug, Refactor, Docs, Research, Infra) and model tiers
+  (Premium, Standard, Fast). All checked by default; uncheck to hide.
 - **Show inactive** toggle — hide sessions that have not been touched
   recently.
 
@@ -180,7 +181,8 @@ Two distinct files per session:
 - **DPAPI-encrypted** local SQLite database for cached metadata.
 - **Settings schema versioning** with forward-compatible migrations.
 - **Structured logging** via Serilog to `%LOCALAPPDATA%\CopilotSessionManager\logs\`.
-- **905 automated tests** — Core, app, and Native — gating every commit.
+- **1574 automated tests** — Core, Terminal, WPF, Hosting, Native, and
+  app integration — gating every commit.
 
 ### Roadmap
 
@@ -200,7 +202,6 @@ includes:
 - 🔔 Desktop notifications for long-running tasks and waiting sessions
 - 📁 Custom groups, saved filters, repo-based auto-grouping
 - 🧰 Settings UI (currently the JSON file is hand-edited)
-- 🖥️ Embedded ConPTY terminal ([#93](https://github.com/richardpan/copilot-session-manager/issues/93))
 - 📦 MSIX packaging + code-signing ([#48](https://github.com/richardpan/copilot-session-manager/issues/48))
 
 ---
@@ -218,12 +219,21 @@ desktop application on Windows.
 │                       (WPF / .NET 8)                            │
 │                                                                 │
 │  ┌──────────────────────────────────────────────────────────┐   │
-│  │  MainWindow (XAML data-table + filters + tray)           │   │
+│  │  MainWindow (XAML data-table + filters + terminal tabs)  │   │
 │  └──────────────────────┬───────────────────────────────────┘   │
 │                         │                                       │
 │  ┌──────────────────────▼───────────────────────────────────┐   │
 │  │  ViewModels (CommunityToolkit.Mvvm source generators)    │   │
-│  │  MainWindowViewModel · SessionsViewModel · …             │   │
+│  │  MainWindowViewModel · SessionsViewModel ·               │   │
+│  │  TerminalTabsViewModel · TerminalTabViewModel            │   │
+│  └──────────────────────┬───────────────────────────────────┘   │
+│                         │                                       │
+│  ┌──────────────────────▼───────────────────────────────────┐   │
+│  │  Terminal layer                                          │   │
+│  │  • Terminal.Wpf — TerminalControl (DrawingVisual render) │   │
+│  │  • Terminal — VtParser, ScreenBuffer, ScreenTranscript   │   │
+│  │  • Terminal.Hosting — ConPTY TerminalSession, lazy       │   │
+│  │    scrollback capture (1k-row chunks, up to 10k)         │   │
 │  └──────────────────────┬───────────────────────────────────┘   │
 │                         │                                       │
 │  ┌──────────────────────▼───────────────────────────────────┐   │
@@ -244,9 +254,9 @@ desktop application on Windows.
               │                                  │
               ▼                                  ▼
    ┌──────────────────────┐         ┌─────────────────────────────┐
-   │  ~/.copilot/         │         │  External pwsh.exe windows  │
-   │  session-state/      │         │  (one per "▶ Open" click,   │
-   │  workspace.yaml      │         │  reused via HWND tracking)  │
+   │  ~/.copilot/         │         │  Embedded ConPTY terminals  │
+   │  session-state/      │         │  (tabbed, per-session, with │
+   │  workspace.yaml      │         │  lazy scrollback history)   │
    │  *.lock files        │         └─────────────────────────────┘
    └──────────────────────┘
 ```
@@ -267,15 +277,22 @@ and the join-key contract.
 
 ### PowerShell Integration
 
-V1.4.0 ships an **embedded ConPTY terminal** with a tabbed multi-session
+V1.5.0 ships an **embedded ConPTY terminal** with a tabbed multi-session
 view ([#93](https://github.com/richardpan/copilot-session-manager/issues/93),
 [#159](https://github.com/richardpan/copilot-session-manager/issues/159)).
 Clicking `▶ Open` on a card opens (or focuses) a tab in the dashboard's
 terminal panel rather than spawning an external console. The renderer is
-a custom WPF surface backed by a hand-rolled VT parser and a 1000-line
-scroll-back screen buffer; mouse selection, Ctrl+C / Ctrl+V, Alt+drag
-block selection, right-click Copy / Paste, double-/triple-click word
-and row selection, and auto-resize are all wired up.
+a custom WPF surface backed by a hand-rolled VT parser and a 10,000-line
+scroll-back screen buffer with **lazy history loading** — scrollback is
+fetched in 1,000-row chunks on demand as the user scrolls up, supporting
+up to 10,000 rows of conversation history. Mouse selection, Ctrl+C /
+Ctrl+V, Alt+drag block selection, right-click Copy / Paste, double- /
+triple-click word and row selection, precision touchpad scrolling, and
+auto-resize are all wired up.
+
+**Themes:** The application supports multiple themes — GitHub Dark
+(default), Light, and Catppuccin — switchable from the Theme menu.
+Theme selection persists across restarts.
 
 An **external** PowerShell window remains available via the row context
 menu's "Open in external window" and "Detach to external window" entries
@@ -311,6 +328,7 @@ documentation pages.
 |-------|--------|-----|
 | Runtime | **.NET 8** | Long-term support, AOT-capable, fast |
 | UI Framework | **WPF** | Most mature Windows UI framework, deep Win32 access, excellent tooling |
+| Terminal | **Custom ConPTY + VT parser + DrawingVisual renderer** | Embedded terminal with tabbed sessions, lazy scrollback (10k rows), theme support |
 | MVVM | **CommunityToolkit.Mvvm** | Source generators reduce boilerplate |
 | Hosting | **Microsoft.Extensions.Hosting / DI / Logging** | Standard .NET app composition |
 | Markdown | **Markdig** | Fast, extensible Markdown → HTML for `SESSION-DOCS.html` |
@@ -319,7 +337,7 @@ documentation pages.
 | Encryption | **System.Security.Cryptography.ProtectedData** (DPAPI) | Native Windows per-user secret protection for the local DB |
 | GitHub | **`gh` CLI** (shelled out) | Reuses the user's existing auth + offline degradation is trivial |
 | Logging | **Serilog** + Sinks.File / Debug / Enrichers | Structured logging with rolling files |
-| Testing | **xUnit + Moq + FluentAssertions + coverlet** | Standard .NET test stack — 905 tests gating every commit |
+| Testing | **xUnit + Moq + FluentAssertions + coverlet** | Standard .NET test stack — 1574 tests gating every commit |
 | Packaging | **Self-contained `dotnet publish` zip** (V1) → MSIX + code-signing planned for V2 ([#48](https://github.com/richardpan/copilot-session-manager/issues/48)) |
 
 ---
@@ -353,9 +371,9 @@ dotnet run   --project src\CopilotSessionManager
 dotnet publish src\CopilotSessionManager\CopilotSessionManager.csproj `
   -c Release -r win-x64 --self-contained true `
   -p:IncludeNativeLibrariesForSelfExtract=true `
-  -o publish\v1.4.0
-Compress-Archive -Path publish\v1.4.0\* `
-  -DestinationPath publish\copilot-session-manager-v1.4.0-win-x64.zip
+  -o publish\v1.5.0
+Compress-Archive -Path publish\v1.5.0\* `
+  -DestinationPath publish\copilot-session-manager-v1.5.0-win-x64.zip
 ```
 
 ---
@@ -396,9 +414,10 @@ rotated daily.
 copilot-session-manager/
 ├── src/
 │   ├── CopilotSessionManager/              # WPF app (entry point)
-│   │   ├── Views/                           # MainWindow + dialogs
-│   │   ├── ViewModels/                      # MainWindowViewModel, SessionsViewModel, …
+│   │   ├── Views/                           # MainWindow + terminal tabs + dialogs
+│   │   ├── ViewModels/                      # MainWindowViewModel, SessionsViewModel, TerminalTabsViewModel, …
 │   │   ├── Controls/                        # Custom WPF controls
+│   │   ├── Services/                        # DefaultTerminalSessionFactory, …
 │   │   ├── Logging/                         # Serilog setup
 │   │   ├── App.xaml(.cs)                    # Application entry + DI composition
 │   │   └── CopilotSessionManager.csproj
@@ -409,11 +428,20 @@ copilot-session-manager/
 │   │   ├── Settings/                        # AppSettings + JsonAppSettingsStore
 │   │   ├── GitHub/                          # gh CLI shell-out + offline detection
 │   │   └── Logging/                         # ZipLogBundler
+│   ├── CopilotSessionManager.Terminal/      # VT parser + ScreenBuffer + ScreenTranscript
+│   ├── CopilotSessionManager.Terminal.Wpf/  # WPF TerminalControl renderer
+│   ├── CopilotSessionManager.Terminal.Hosting/ # ConPTY process hosting + TerminalSession
 │   └── CopilotSessionManager.Native/       # Win32 P/Invoke wrappers
 ├── tests/
-│   ├── CopilotSessionManager.Core.Tests/   # 566 tests
-│   ├── CopilotSessionManager.Tests/        # 337 tests (WPF VM + integration)
-│   └── CopilotSessionManager.Native.Tests/ # 2 tests
+│   ├── CopilotSessionManager.Core.Tests/           # 716 tests
+│   ├── CopilotSessionManager.Tests/                # 487 tests (WPF VM + integration)
+│   ├── CopilotSessionManager.Terminal.Tests/       # 241 tests
+│   ├── CopilotSessionManager.Terminal.Wpf.Tests/   # 86 tests
+│   ├── CopilotSessionManager.Terminal.Hosting.Tests/ # 20 tests
+│   ├── CopilotSessionManager.Native.Tests/         # 14 tests
+│   └── CapturePtyTrace.Tests/                      # 10 tests
+├── tools/
+│   └── CapturePtyTrace/                     # Diagnostic ConPTY trace capture tool
 ├── docs/
 │   ├── adr/                                 # Architecture Decision Records
 │   ├── images/
@@ -435,7 +463,7 @@ copilot-session-manager/
 
 ## Roadmap & Issues
 
-- 🎯 **Latest release:** [v1.4.0](https://github.com/richardpan/copilot-session-manager/releases/tag/v1.4.0)
+- 🎯 **Latest release:** [v1.5.0](https://github.com/richardpan/copilot-session-manager/releases/tag/v1.5.0)
 - 📋 **All issues:** [github.com/richardpan/copilot-session-manager/issues](https://github.com/richardpan/copilot-session-manager/issues)
 - 🏷️ **Labels:** `v1` · `v2` · `enhancement` · `ux` · `cost-tracking` · `collaboration` · `lifecycle` · `documentation`
 
