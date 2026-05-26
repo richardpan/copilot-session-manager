@@ -133,22 +133,6 @@
                      BorderThickness="1"
                      Padding="0,4"
                      Foreground="{DynamicResource TextPrimaryBrush}">
-            <ContextMenu.Resources>
-                <Style TargetType="Separator">
-                    <Setter Property="Height" Value="1" />
-                    <Setter Property="Margin" Value="4,3" />
-                    <Setter Property="Background" Value="{DynamicResource BorderBrush}" />
-                    <Setter Property="Template">
-                        <Setter.Value>
-                            <ControlTemplate TargetType="Separator">
-                                <Border Height="{TemplateBinding Height}"
-                                        Margin="{TemplateBinding Margin}"
-                                        Background="{TemplateBinding Background}" />
-                            </ControlTemplate>
-                        </Setter.Value>
-                    </Setter>
-                </Style>
-            </ContextMenu.Resources>
             <MenuItem Header="Open in external PowerShell"
                       Command="{Binding OpenInExternalCommand}"
                       AutomationProperties.Name="Open this session in an external PowerShell window"
@@ -166,7 +150,7 @@
                       CommandParameter="{Binding}"
                       AutomationProperties.Name="Open session plan.md in default editor"
                       AutomationProperties.HelpText="Opens this session's plan.md (auto-maintained by Copilot) in whatever editor your OS has registered for .md files. Falls back to SESSION-DOCS.html if no plan.md exists yet." />
-            <Separator />
+            <MenuItem Style="{StaticResource MenuSeparatorItemStyle}" />
             <MenuItem Header="Star (pin to top)"
                       Command="{Binding ToggleStarCommand}"
                       AutomationProperties.Name="Toggle star" />
@@ -180,12 +164,12 @@
                 <MenuItem Header="Infra" Click="OnLabelMenuItemClicked" Tag="{x:Static models:SessionType.Infra}" />
                 <MenuItem Header="Experiment" Click="OnLabelMenuItemClicked" Tag="{x:Static models:SessionType.Experiment}" />
             </MenuItem>
-            <Separator />
+            <MenuItem Style="{StaticResource MenuSeparatorItemStyle}" />
             <MenuItem Header="Merge into..."
                       Command="{Binding MergeIntoCommand}"
                       AutomationProperties.Name="Merge this session into another"
                       AutomationProperties.HelpText="Opens the merge wizard to export this session via copilot --share and append it to a target session." />
-            <Separator />
+            <MenuItem Style="{StaticResource MenuSeparatorItemStyle}" />
             <MenuItem Header="Delete from disk..."
                       Command="{Binding DeleteCommand}"
                       Foreground="{DynamicResource DangerBrush}"
@@ -937,6 +921,7 @@
                   ItemsSource="{Binding Sessions.VisibleSessions}"
                   SelectedItem="{Binding Sessions.SelectedCard, Mode=TwoWay}"
                   PreviewMouseLeftButtonDown="DataGrid_PreviewMouseLeftButtonDown"
+                  PreviewMouseWheel="SessionsGrid_PreviewMouseWheel"
                   AutoGenerateColumns="False"
                   CanUserAddRows="False"
                   CanUserDeleteRows="False"

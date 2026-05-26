@@ -83,6 +83,23 @@ public sealed class ScreenTranscript
             return;
         }
 
+        // Detect whether an actual upward scroll occurred between snapshots.
+        // A real scroll shifts many rows up by the same amount K; an
+        // in-place TUI redraw (status bar, input echo, cursor blink) does
+        // not. Without this check, status-footer changes get misclassified
+        // as scrolled-off content and pollute the scrollback with
+        // duplicates.
+        var scrollShiftK = DetectUpwardScrollShift(currentText, _prevText, rows, _prevRows);
+
+        // No upward shift detected → don't push anything. The screen just
+        // had in-place updates (typical for TUI chrome at the bottom).
+        if (scrollShiftK <= 0)
+        {
+            _prevText = currentText;
+            _prevCells = currentCells;
+            return;
+        }
+
         // Compare each old row against the new screen.
         // Only push rows that:
         //   1) Changed between snapshots
@@ -90,8 +107,15 @@ public sealed class ScreenTranscript
         //   3) Are NOT a prefix of the same-position new row (streaming)
         //   4) Don't appear anywhere on the new screen (truly gone)
         //   5) Haven't been pushed recently (dedup)
+        //   6) Live in the upper portion of the screen (bottom rows are
+        //      UI chrome and never legitimately scroll off)
+        var chromeRowThreshold = Math.Max(0, _prevRows - 3);
         for (var r = 0; r < Math.Min(rows, _prevRows); r++)
         {
+            // Skip bottom rows — UI chrome (status bar, input box, hints).
+            if (r >= chromeRowThreshold)
+                continue;
+
             var oldText = _prevText[r];
             var newText = currentText[r];
 
@@ -144,6 +168,44 @@ public sealed class ScreenTranscript
                 return true;
         }
         return false;
+    }
+
+    /// <summary>
+    /// Detect whether the screen content shifted upward by some K rows
+    /// between the previous and current snapshots. Returns K if a clear
+    /// shift is detected, or 0 if no scroll occurred (in-place redraws,
+    /// status bar updates, etc.).
+    /// </summary>
+    /// <remarks>
+    /// Heuristic: for each candidate K from 1..maxK, count how many
+    /// non-blank rows satisfy <c>currentText[r-K] == prevText[r]</c>.
+    /// If any K produces enough matches (≥ 3 rows), treat it as a real
+    /// upward scroll of K. Otherwise the screen changed in place.
+    /// </remarks>
+    private static int DetectUpwardScrollShift(string[] currentText, string[] prevText, int rows, int prevRows)
+    {
+        const int matchThreshold = 3;
+        var maxK = Math.Min(prevRows, rows) / 2;
+        if (maxK < 1)
+            return 0;
+
+        for (var k = 1; k <= maxK; k++)
+        {
+            var matches = 0;
+            for (var r = k; r < Math.Min(prevRows, rows); r++)
+            {
+                var prev = prevText[r];
+                if (string.IsNullOrWhiteSpace(prev))
+                    continue;
+                if (prev == currentText[r - k])
+                {
+                    matches++;
+                    if (matches >= matchThreshold)
+                        return k;
+                }
+            }
+        }
+        return 0;
     }
 
     private void TrackHash(int hash)

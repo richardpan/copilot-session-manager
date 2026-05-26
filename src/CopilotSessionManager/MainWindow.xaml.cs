@@ -44,6 +44,77 @@ public partial class MainWindow : Window
         await _viewModel.RunStartupTasksAsync();
     }
 
+    private double _gridScrollAccumulator;
+
+    /// <summary>
+    /// Reduces scroll sensitivity on the sessions DataGrid to 1 row per
+    /// mouse-wheel notch. Accumulates wheel deltas (important for precision
+    /// trackpads that send many small increments) and only scrolls once
+    /// enough delta has built up — requiring roughly double the default
+    /// input to move one row.
+    /// </summary>
+    private void SessionsGrid_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
+    {
+        if (sender is not DataGrid grid)
+        {
+            return;
+        }
+
+        var scrollViewer = FindVisualChild<ScrollViewer>(grid);
+        if (scrollViewer is null)
+        {
+            return;
+        }
+
+        _gridScrollAccumulator += e.Delta;
+
+        // Standard notch = ±120. Require 180 accumulated delta per row
+        // — a middle ground between default (120) and half-speed (240).
+        const double deltaPerRow = 180.0;
+        var rows = (int)(_gridScrollAccumulator / deltaPerRow);
+        if (rows == 0)
+        {
+            e.Handled = true;
+            return;
+        }
+
+        _gridScrollAccumulator -= rows * deltaPerRow;
+
+        var absRows = Math.Abs(rows);
+        for (int i = 0; i < absRows; i++)
+        {
+            if (rows > 0)
+            {
+                scrollViewer.LineUp();
+            }
+            else
+            {
+                scrollViewer.LineDown();
+            }
+        }
+
+        e.Handled = true;
+    }
+
+    private static T? FindVisualChild<T>(DependencyObject parent) where T : DependencyObject
+    {
+        for (int i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
+        {
+            var child = VisualTreeHelper.GetChild(parent, i);
+            if (child is T found)
+            {
+                return found;
+            }
+
+            var result = FindVisualChild<T>(child);
+            if (result is not null)
+            {
+                return result;
+            }
+        }
+        return null;
+    }
+
     /// <summary>
     /// Toggles the row-details (sub-agent breakdown) panel: when a user clicks
     /// a row whose details are already showing, collapse them by clearing the

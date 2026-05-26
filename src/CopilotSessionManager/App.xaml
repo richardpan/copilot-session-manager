@@ -39,22 +39,131 @@
             <Style TargetType="{x:Type RadioButton}">
                 <Setter Property="FocusVisualStyle" Value="{StaticResource A11yFocusVisual}" />
             </Style>
+            <!--
+                Clean ControlTemplate shared by submenu items (the rows inside
+                a ContextMenu or popup submenu). The stock WPF SubmenuItem
+                template draws a vertical "icon/check gutter" column on the
+                left and an outer Border that inherits our themed BorderBrush.
+                On a dark theme that creates bright cyan stripes between every
+                row — see right-click menu before this fix. Replace it with
+                a single themed Border whose hover state lights up.
+            -->
+            <ControlTemplate x:Key="ThemedSubmenuItemTemplate" TargetType="{x:Type MenuItem}">
+                <Border x:Name="ItemBorder"
+                        Background="{TemplateBinding Background}"
+                        Padding="12,6"
+                        SnapsToDevicePixels="True">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <ContentPresenter Grid.Column="0"
+                                          ContentSource="Header"
+                                          RecognizesAccessKey="True"
+                                          VerticalAlignment="Center" />
+                        <TextBlock Grid.Column="1"
+                                   Text="{TemplateBinding InputGestureText}"
+                                   Margin="24,0,0,0"
+                                   Opacity="0.7"
+                                   VerticalAlignment="Center" />
+                    </Grid>
+                </Border>
+                <ControlTemplate.Triggers>
+                    <Trigger Property="IsHighlighted" Value="True">
+                        <Setter TargetName="ItemBorder" Property="Background" Value="{DynamicResource SurfaceHoverBrush}" />
+                    </Trigger>
+                    <Trigger Property="IsEnabled" Value="False">
+                        <Setter Property="Opacity" Value="0.55" />
+                    </Trigger>
+                </ControlTemplate.Triggers>
+            </ControlTemplate>
+
+            <!--
+                SubmenuHeader = a row inside a ContextMenu/submenu that itself
+                opens another submenu (e.g. "Set label ▸"). Needs the same
+                clean row chrome plus a chevron + a Popup hosting child items.
+            -->
+            <ControlTemplate x:Key="ThemedSubmenuHeaderTemplate" TargetType="{x:Type MenuItem}">
+                <Border x:Name="ItemBorder"
+                        Background="{TemplateBinding Background}"
+                        Padding="12,6"
+                        SnapsToDevicePixels="True">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <ContentPresenter Grid.Column="0"
+                                          ContentSource="Header"
+                                          RecognizesAccessKey="True"
+                                          VerticalAlignment="Center" />
+                        <Path Grid.Column="1"
+                              Data="M 0 0 L 4 4 L 0 8 Z"
+                              Fill="{TemplateBinding Foreground}"
+                              Margin="16,0,0,0"
+                              VerticalAlignment="Center" />
+                        <Popup x:Name="PART_Popup"
+                               AllowsTransparency="True"
+                               Focusable="False"
+                               HorizontalOffset="-2"
+                               IsOpen="{Binding IsSubmenuOpen, RelativeSource={RelativeSource TemplatedParent}}"
+                               Placement="Right"
+                               PopupAnimation="Fade">
+                            <Border Background="{DynamicResource SurfaceBrush}"
+                                    BorderBrush="{DynamicResource BorderBrush}"
+                                    BorderThickness="1"
+                                    Padding="0,4">
+                                <ScrollViewer CanContentScroll="True">
+                                    <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Cycle"
+                                                    Grid.IsSharedSizeScope="True"
+                                                    SnapsToDevicePixels="True" />
+                                </ScrollViewer>
+                            </Border>
+                        </Popup>
+                    </Grid>
+                </Border>
+                <ControlTemplate.Triggers>
+                    <Trigger Property="IsHighlighted" Value="True">
+                        <Setter TargetName="ItemBorder" Property="Background" Value="{DynamicResource SurfaceHoverBrush}" />
+                    </Trigger>
+                    <Trigger Property="IsEnabled" Value="False">
+                        <Setter Property="Opacity" Value="0.55" />
+                    </Trigger>
+                </ControlTemplate.Triggers>
+            </ControlTemplate>
+
+            <!--
+                Template for the MenuItem wrapper WPF generates around any
+                <Separator /> placed inside a Menu/ContextMenu.
+                NOTE: kept as a shared template used by the explicit Separator
+                styles below. Renders a single 1px line in our BorderBrush.
+            -->
+            <ControlTemplate x:Key="ThemedMenuSeparatorTemplate" TargetType="{x:Type Separator}">
+                <Border Height="1"
+                        Margin="8,4"
+                        Background="{DynamicResource BorderBrush}"
+                        SnapsToDevicePixels="True" />
+            </ControlTemplate>
+
             <Style TargetType="{x:Type MenuItem}">
                 <Setter Property="FocusVisualStyle" Value="{StaticResource A11yFocusVisual}" />
-                <!--
-                    Top-level menu items inherit Foreground from the parent
-                    Menu, but submenu items pop up against the system-default
-                    light popup background. Without an explicit dark Foreground
-                    on the items, the inherited light TextPrimaryBrush makes
-                    them unreadable. Pin Background/Foreground to theme brushes
-                    so both the top-bar header and the popup items remain
-                    readable, then add a hover highlight that matches the rest
-                    of the dashboard.
-                -->
-                <Setter Property="Background" Value="{DynamicResource SurfaceAltBrush}" />
+                <Setter Property="Background" Value="{DynamicResource SurfaceBrush}" />
                 <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
-                <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
+                <Setter Property="BorderThickness" Value="0" />
                 <Style.Triggers>
+                    <!--
+                        Apply the clean submenu templates only to items that
+                        live inside a popup (Role = SubmenuItem / SubmenuHeader).
+                        Top-level Menu bar items keep the default template so the
+                        menubar at the top of the window still renders correctly.
+                    -->
+                    <Trigger Property="Role" Value="SubmenuItem">
+                        <Setter Property="Template" Value="{StaticResource ThemedSubmenuItemTemplate}" />
+                    </Trigger>
+                    <Trigger Property="Role" Value="SubmenuHeader">
+                        <Setter Property="Template" Value="{StaticResource ThemedSubmenuHeaderTemplate}" />
+                    </Trigger>
                     <Trigger Property="IsHighlighted" Value="True">
                         <Setter Property="Background" Value="{DynamicResource SurfaceHoverBrush}" />
                         <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
@@ -74,6 +183,28 @@
                 <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
                 <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
                 <Setter Property="BorderThickness" Value="1" />
+                <!--
+                    Replace the default ContextMenu template. The stock WPF
+                    template wraps items in a ScrollViewer that includes up/down
+                    repeat-button glyphs and an OpaqueRect overlay. Even when
+                    the menu fits without scrolling, those chrome elements can
+                    paint small light rectangles above each item on dark themes.
+                    A plain Border + ItemsPresenter eliminates that entirely.
+                -->
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="{x:Type ContextMenu}">
+                            <Border Background="{TemplateBinding Background}"
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="{TemplateBinding BorderThickness}"
+                                    Padding="0,4"
+                                    SnapsToDevicePixels="True">
+                                <StackPanel IsItemsHost="True"
+                                            KeyboardNavigation.DirectionalNavigation="Cycle" />
+                            </Border>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
             </Style>
             <!--
                 Top-level Menu bar styling — pin Foreground so the cascading
@@ -84,8 +215,48 @@
                 <Setter Property="Background" Value="{DynamicResource SurfaceAltBrush}" />
                 <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
             </Style>
+            <!--
+                Stand-in for <Separator /> inside ContextMenus. The default WPF
+                Separator (even with SeparatorStyleKey overridden) leaks small
+                rectangles from the menu's scroll/repeat-button chrome on this
+                dark theme. A disabled MenuItem styled with this key avoids the
+                Separator class entirely and renders a single themed 1px line.
+            -->
+            <Style x:Key="MenuSeparatorItemStyle" TargetType="{x:Type MenuItem}">
+                <Setter Property="Focusable" Value="False" />
+                <Setter Property="IsHitTestVisible" Value="False" />
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="{x:Type MenuItem}">
+                            <Border Background="Transparent"
+                                    Padding="0"
+                                    SnapsToDevicePixels="True">
+                                <Rectangle Height="1"
+                                           Margin="8,4"
+                                           HorizontalAlignment="Stretch"
+                                           Fill="{DynamicResource BorderBrush}"
+                                           SnapsToDevicePixels="True" />
+                            </Border>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+
             <Style TargetType="{x:Type Separator}">
                 <Setter Property="Background" Value="{DynamicResource BorderBrush}" />
+                <Setter Property="Template" Value="{StaticResource ThemedMenuSeparatorTemplate}" />
+            </Style>
+            <!--
+                WPF looks up the separator style inside a Menu/ContextMenu via
+                the special key MenuItem.SeparatorStyleKey — not the default
+                TargetType lookup. Without this, separators render with the
+                stock thick raised divider regardless of any Separator style
+                we define above. Both styles point at the same clean template.
+            -->
+            <Style x:Key="{x:Static MenuItem.SeparatorStyleKey}" TargetType="{x:Type Separator}">
+                <Setter Property="Background" Value="{DynamicResource BorderBrush}" />
+                <Setter Property="Template" Value="{StaticResource ThemedMenuSeparatorTemplate}" />
             </Style>
             <Style TargetType="{x:Type TextBox}">
                 <Setter Property="FocusVisualStyle" Value="{StaticResource A11yFocusVisual}" />
