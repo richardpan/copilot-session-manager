@@ -128,6 +128,17 @@ public class VtKeyEncoderTests
     }
 
     [Fact]
+    public void Shift_Enter_returns_line_feed_for_multiline_input()
+    {
+        // Shift+Enter must be distinguishable from plain Enter so TUI apps
+        // (Copilot CLI, Claude Code, readline-based prompts) can treat it
+        // as "insert newline" rather than "submit". Convention: CR submits,
+        // LF inserts a newline in the input buffer.
+        VtKeyEncoder.Encode(TerminalKey.Enter, TerminalKeyModifiers.Shift)
+            .Should().Equal(new byte[] { 0x0A });
+    }
+
+    [Fact]
     public void Backspace_returns_DEL_normally_and_BS_under_control()
     {
         VtKeyEncoder.Encode(TerminalKey.Backspace).Should().Equal(new byte[] { 0x7F });

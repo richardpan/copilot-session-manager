@@ -43,17 +43,6 @@
                       AutomationProperties.HelpText="Toggle visibility of sessions running models in this tier." />
         </DataTemplate>
 
-        <DataTemplate x:Key="ProducerFilterTemplate" DataType="{x:Type vm:ProducerFilterChip}">
-            <CheckBox Content="{Binding Label}"
-                      IsChecked="{Binding IsVisible, Mode=TwoWay}"
-                      Foreground="{DynamicResource TextPrimaryBrush}"
-                      Margin="0,3,0,3"
-                      MinWidth="180"
-                      VerticalAlignment="Center"
-                      AutomationProperties.Name="{Binding Label}"
-                      AutomationProperties.HelpText="Toggle visibility of sessions started by this Copilot client (e.g. agency, copilot-agent)." />
-        </DataTemplate>
-
         <DataTemplate x:Key="DocsFilterTemplate" DataType="{x:Type vm:DocsFilterChip}">
             <CheckBox Content="{Binding Label}"
                       IsChecked="{Binding IsVisible, Mode=TwoWay}"
@@ -427,6 +416,12 @@
                               Command="{Binding SwitchThemeCommand}"
                               CommandParameter="CatppuccinMocha"
                               AutomationProperties.Name="Switch to Catppuccin Mocha theme" />
+                    <MenuItem Header="80s Synthwave"
+                              IsCheckable="True"
+                              IsChecked="{Binding CurrentTheme, Converter={StaticResource ThemeChecker}, ConverterParameter=SynthwaveEighties, Mode=OneWay}"
+                              Command="{Binding SwitchThemeCommand}"
+                              CommandParameter="SynthwaveEighties"
+                              AutomationProperties.Name="Switch to 80s Synthwave theme" />
                     <MenuItem Header="High Contrast"
                               IsCheckable="True"
                               IsChecked="{Binding CurrentTheme, Converter={StaticResource ThemeChecker}, ConverterParameter=HighContrast, Mode=OneWay}"
@@ -733,31 +728,6 @@
                                 Margin="0,4,0,0">
                             <ItemsControl ItemsSource="{Binding Sessions.TierFilters}"
                                           ItemTemplate="{StaticResource TierFilterTemplate}" />
-                        </Border>
-                    </Popup>
-                </Grid>
-                <Grid Margin="0,2,8,2" VerticalAlignment="Center">
-                    <ToggleButton x:Name="ProducersFilterButton"
-                                  Style="{StaticResource FilterDropdownToggleStyle}"
-                                  MinWidth="170"
-                                  Content="{Binding Sessions.ProducersFilterSummary}"
-                                  ToolTip="Choose which Copilot clients to include (e.g. agency, copilot-agent)."
-                                  AutomationProperties.Name="Producers filter"
-                                  AutomationProperties.HelpText="Click to open the producers filter dropdown. Toggle one or more Copilot clients (agency, copilot-agent, etc.) to include or exclude their sessions from the table." />
-                    <Popup PlacementTarget="{Binding ElementName=ProducersFilterButton}"
-                           Placement="Bottom"
-                           IsOpen="{Binding IsChecked, ElementName=ProducersFilterButton, Mode=TwoWay}"
-                           StaysOpen="False"
-                           AllowsTransparency="True"
-                           PopupAnimation="Fade">
-                        <Border Background="{DynamicResource SurfaceBrush}"
-                                BorderBrush="{DynamicResource BorderBrush}"
-                                BorderThickness="1"
-                                CornerRadius="3"
-                                Padding="12,8"
-                                Margin="0,4,0,0">
-                            <ItemsControl ItemsSource="{Binding Sessions.ProducerFilters}"
-                                          ItemTemplate="{StaticResource ProducerFilterTemplate}" />
                         </Border>
                     </Popup>
                 </Grid>
@@ -1112,32 +1082,6 @@
                                         </ToolTip>
                                     </Button.ToolTip>
                                 </Button>
-                                <Button Content="📝 Wrap up"
-                                        Padding="6,0"
-                                        FontSize="13"
-                                        Margin="0,0,3,0"
-                                        Background="Transparent"
-                                        Foreground="{DynamicResource StatusAwaitingBrush}"
-                                        BorderBrush="{DynamicResource StatusAwaitingBrush}"
-                                        BorderThickness="1"
-                                        ToolTipService.ShowDuration="25000"
-                                        Visibility="{Binding IsWrapUpDue, Converter={StaticResource BoolToVisibility}}"
-                                        Command="{Binding WrapUpCommand}"
-                                        AutomationProperties.Name="Copy wrap-up prompt and open this session in PowerShell">
-                                    <Button.ToolTip>
-                                        <ToolTip MaxWidth="420">
-                                            <StackPanel>
-                                                <TextBlock FontWeight="SemiBold" Text="Wrap up this session" />
-                                                <TextBlock TextWrapping="Wrap" Margin="0,4,0,0"
-                                                           Text="Copies a wrap-up prompt to the clipboard and opens (or activates) this session's PowerShell window. Press Ctrl+V in the window to paste, then send the prompt so Copilot can summarise the conversation into SESSION-DOCS." />
-                                                <TextBlock TextWrapping="Wrap" Margin="0,6,0,0"
-                                                           Text="{Binding WrapUpTooltip}" />
-                                                <TextBlock TextWrapping="Wrap" Margin="0,6,0,0" FontStyle="Italic" Foreground="{DynamicResource TextSecondaryBrush}"
-                                                           Text="The threshold (default 24h idle) and prompt template are configurable in settings.json — see Settings → Wrap-up." />
-                                            </StackPanel>
-                                        </ToolTip>
-                                    </Button.ToolTip>
-                                </Button>
                                 <Button Content="🧹"
                                         Padding="5,0"
                                         FontSize="13"
@@ -1265,9 +1209,10 @@
                                             Margin="0,0,6,0"
                                             VerticalAlignment="Center"
                                             Cursor="Hand"
-                                            ToolTip="Right-click to change label"
+                                            MouseLeftButtonUp="OnLabelChipClicked"
+                                            ToolTip="Click to change label"
                                             AutomationProperties.Name="{Binding LabelText}"
-                                            AutomationProperties.HelpText="Session label. Right-click to change.">
+                                            AutomationProperties.HelpText="Session label. Click to change.">
                                         <Border.ContextMenu>
                                             <ContextMenu>
                                                 <MenuItem Header="Exploratory" Click="OnLabelMenuItemClicked" Tag="{x:Static models:SessionType.Exploratory}" />
@@ -1354,22 +1299,6 @@
                     </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
 
-                <!-- Producer: agency / copilot-agent / (unknown). -->
-                <DataGridTextColumn Header="Producer"
-                                    Width="100"
-                                    Binding="{Binding Producer, FallbackValue='—'}"
-                                    SortMemberPath="Producer"
-                                    IsReadOnly="True">
-                    <DataGridTextColumn.ElementStyle>
-                        <Style TargetType="TextBlock">
-                            <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
-                            <Setter Property="FontSize" Value="13" />
-                            <Setter Property="VerticalAlignment" Value="Center" />
-                            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
-                        </Style>
-                    </DataGridTextColumn.ElementStyle>
-                </DataGridTextColumn>
-
                 <!-- Tier badge. -->
                 <DataGridTemplateColumn Header="Tier" Width="100" SortMemberPath="ModelTier">
                     <DataGridTemplateColumn.CellTemplate>
@@ -1398,9 +1327,10 @@
                      same OpenReadmeCommand as the right-click menu item. Sorted by
                      DocFreshnessSortKey so VeryStale → Stale → Missing surface to
                      the top of an ascending sort. -->
-                <DataGridTemplateColumn Header="Docs" Width="110" SortMemberPath="DocFreshnessSortKey">
+                <DataGridTemplateColumn Header="Docs" Width="150" SortMemberPath="DocFreshnessSortKey">
                     <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate>
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                             <Button Padding="5,1"
                                     Margin="0"
                                     BorderThickness="1"
@@ -1469,44 +1399,77 @@
                                            FontWeight="SemiBold"
                                            TextTrimming="CharacterEllipsis" />
                             </Button>
+                            <Button Content="📝"
+                                    Padding="5,1"
+                                    Margin="6,0,0,0"
+                                    FontSize="13"
+                                    VerticalAlignment="Center"
+                                    Background="Transparent"
+                                    Foreground="{DynamicResource StatusAwaitingBrush}"
+                                    BorderBrush="{DynamicResource StatusAwaitingBrush}"
+                                    BorderThickness="1"
+                                    Cursor="Hand"
+                                    ToolTipService.ShowDuration="25000"
+                                    Visibility="{Binding IsWrapUpDue, Converter={StaticResource BoolToVisibility}}"
+                                    Command="{Binding WrapUpCommand}"
+                                    AutomationProperties.Name="Copy wrap-up prompt and open this session in PowerShell">
+                                <Button.ToolTip>
+                                    <ToolTip MaxWidth="420">
+                                        <StackPanel>
+                                            <TextBlock FontWeight="SemiBold" Text="Wrap up this session" />
+                                            <TextBlock TextWrapping="Wrap" Margin="0,4,0,0"
+                                                       Text="Copies a wrap-up prompt to the clipboard and opens (or activates) this session's PowerShell window. Press Ctrl+V in the window to paste, then send the prompt so Copilot can summarise the conversation into SESSION-DOCS." />
+                                            <TextBlock TextWrapping="Wrap" Margin="0,6,0,0"
+                                                       Text="{Binding WrapUpTooltip}" />
+                                            <TextBlock TextWrapping="Wrap" Margin="0,6,0,0" FontStyle="Italic" Foreground="{DynamicResource TextSecondaryBrush}"
+                                                       Text="The threshold (default 24h idle) and prompt template are configurable in settings.json — see Settings → Wrap-up." />
+                                        </StackPanel>
+                                    </ToolTip>
+                                </Button.ToolTip>
+                            </Button>
+                            </StackPanel>
                         </DataTemplate>
                     </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
 
-                <!-- Turn count. -->
-                <DataGridTextColumn Header="Turns"
-                                    Width="60"
-                                    Binding="{Binding TurnCount}"
-                                    SortMemberPath="TurnCount"
-                                    IsReadOnly="True">
-                    <DataGridTextColumn.ElementStyle>
-                        <Style TargetType="TextBlock">
-                            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
-                            <Setter Property="FontSize" Value="13" />
-                            <Setter Property="FontWeight" Value="SemiBold" />
-                            <Setter Property="HorizontalAlignment" Value="Right" />
-                            <Setter Property="VerticalAlignment" Value="Center" />
-                        </Style>
-                    </DataGridTextColumn.ElementStyle>
-                </DataGridTextColumn>
-
-                <!-- Tokens (V1.5 NEW): aggregate across all models. -->
-                <DataGridTextColumn Header="Tokens"
-                                    Width="80"
-                                    Binding="{Binding TokensDisplay}"
-                                    SortMemberPath="TotalTokensRaw"
-                                    IsReadOnly="True">
-                    <DataGridTextColumn.ElementStyle>
-                        <Style TargetType="TextBlock">
-                            <Setter Property="Foreground" Value="{DynamicResource AccentBrush}" />
-                            <Setter Property="FontSize" Value="13" />
-                            <Setter Property="FontWeight" Value="SemiBold" />
-                            <Setter Property="HorizontalAlignment" Value="Right" />
-                            <Setter Property="VerticalAlignment" Value="Center" />
-                            <Setter Property="ToolTip" Value="{Binding TokensTooltip}" />
-                        </Style>
-                    </DataGridTextColumn.ElementStyle>
-                </DataGridTextColumn>
+                <!-- Tokens (V1.5 NEW): clickable button that shows aggregate total and opens the per-model breakdown popup. -->
+                <DataGridTemplateColumn Header="Tokens"
+                                        Width="120"
+                                        SortMemberPath="TotalTokensRaw">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <Button Click="OnViewTokensClicked"
+                                    Cursor="Hand"
+                                    Padding="6,2"
+                                    Margin="2,1"
+                                    HorizontalAlignment="Stretch"
+                                    HorizontalContentAlignment="Right"
+                                    VerticalAlignment="Center"
+                                    Background="Transparent"
+                                    Foreground="{DynamicResource AccentBrush}"
+                                    BorderBrush="{DynamicResource AccentBrush}"
+                                    BorderThickness="1"
+                                    FontSize="13"
+                                    FontWeight="SemiBold"
+                                    ToolTipService.ShowDuration="25000"
+                                    AutomationProperties.Name="Show per-model token usage for this session">
+                                <Button.ToolTip>
+                                    <ToolTip MaxWidth="420">
+                                        <StackPanel>
+                                            <TextBlock FontWeight="SemiBold" Text="Show token usage" />
+                                            <TextBlock TextWrapping="Wrap" Margin="0,4,0,0"
+                                                       Text="Opens a popup with per-model input / output / cache / total token counts for this session. Works for both active sessions (live tally from assistant.message and session.compaction_complete events) and finished sessions (authoritative session.shutdown totals)." />
+                                            <TextBlock TextWrapping="Wrap" Margin="0,6,0,0"
+                                                       Foreground="{DynamicResource TextSecondaryBrush}"
+                                                       Text="{Binding TokensTooltip}" />
+                                        </StackPanel>
+                                    </ToolTip>
+                                </Button.ToolTip>
+                                <TextBlock Text="{Binding TokensDisplay}" />
+                            </Button>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
 
                 <!-- Updated (relative). -->
                 <DataGridTextColumn Header="Updated"

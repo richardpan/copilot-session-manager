@@ -104,17 +104,17 @@ public class SessionCardViewModelTokensTests
     }
 
     [Theory]
-    [InlineData(1L, "1")]
-    [InlineData(999L, "999")]
-    [InlineData(1000L, "1.0k")]
-    [InlineData(1234L, "1.2k")]
-    [InlineData(9999L, "10.0k")]
-    [InlineData(10_000L, "10k")]
-    [InlineData(12_345L, "12k")]
-    [InlineData(999_999L, "999k")]
-    [InlineData(1_000_000L, "1.0M")]
-    [InlineData(1_234_567L, "1.2M")]
-    [InlineData(12_345_678L, "12.3M")]
+    [InlineData(1L, "1 / —")]
+    [InlineData(999L, "999 / —")]
+    [InlineData(1000L, "1.0k / —")]
+    [InlineData(1234L, "1.2k / —")]
+    [InlineData(9999L, "10.0k / —")]
+    [InlineData(10_000L, "10k / —")]
+    [InlineData(12_345L, "12k / —")]
+    [InlineData(999_999L, "999k / —")]
+    [InlineData(1_000_000L, "1.0M / —")]
+    [InlineData(1_234_567L, "1.2M / —")]
+    [InlineData(12_345_678L, "12.3M / —")]
     public void TokensDisplay_FormatsCorrectly(long total, string expected)
     {
         var sut = new SessionCardViewModel(SessionWithUsage(("claude", total)), new FixedTimeProvider(Now));
@@ -131,7 +131,7 @@ public class SessionCardViewModelTokensTests
             new FixedTimeProvider(Now));
 
         sut.TotalTokensRaw.Should().Be(12_500L);
-        sut.TokensDisplay.Should().Be("12k");
+        sut.TokensDisplay.Should().Be("12k / —");
     }
 
     [Fact]
@@ -161,7 +161,7 @@ public class SessionCardViewModelTokensTests
 
         sut.SetSubagents(new[] { Subagent("call-1", 5_200_000L) });
 
-        sut.TokensDisplay.Should().Be("1.2M (+5.2M)");
+        sut.TokensDisplay.Should().Be("1.2M / — (+5.2M)");
     }
 
     [Fact]

@@ -100,7 +100,7 @@ public sealed class AppSettings
 
     /// <summary>
     /// Active theme name. Supported values: <c>"GitHubDark"</c> (default),
-    /// <c>"GitHubLight"</c>, <c>"CatppuccinMocha"</c>, <c>"HighContrast"</c>.
+    /// <c>"GitHubLight"</c>, <c>"CatppuccinMocha"</c>, <c>"SynthwaveEighties"</c>, <c>"HighContrast"</c>.
     /// Unknown values fall back to <c>"GitHubDark"</c> at startup.
     /// Additive, non-breaking — no schema bump needed.
     /// </summary>

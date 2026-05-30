@@ -4,6 +4,7 @@ using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
+using CopilotSessionManager.Core.Cli;
 using CopilotSessionManager.Core.Models;
 using CopilotSessionManager.Core.Sessions;
 using CopilotSessionManager.ViewModels;
@@ -20,16 +21,22 @@ public partial class MainWindow : Window
 {
     private readonly MainWindowViewModel _viewModel;
     private readonly ISubagentScanService _subagentScanService;
+    private readonly ICopilotCliAdapter _cliAdapter;
+    private readonly ICopilotPaths _copilotPaths;
     private readonly ILogger<MainWindow> _logger;
 
     public MainWindow(
         MainWindowViewModel viewModel,
         ISubagentScanService subagentScanService,
+        ICopilotCliAdapter cliAdapter,
+        ICopilotPaths copilotPaths,
         ILogger<MainWindow> logger)
     {
         InitializeComponent();
         _viewModel = viewModel;
         _subagentScanService = subagentScanService;
+        _cliAdapter = cliAdapter;
+        _copilotPaths = copilotPaths;
         _logger = logger;
         DataContext = viewModel;
         Loaded += OnLoadedAsync;
@@ -177,13 +184,27 @@ public partial class MainWindow : Window
         }
     }
 
-    private async void OnLabelMenuItemClicked(object sender, RoutedEventArgs e)
+    private void OnLabelChipClicked(object sender, MouseButtonEventArgs e)
     {
-        if (sender is not MenuItem item)
+        // Single left-click on the label chip should open the same submenu the
+        // ContextMenu provided previously (#?). Without this handler users had
+        // to right-click — which is non-obvious for a touch-style chip. The
+        // ContextMenu is still wired up via Border.ContextMenu so right-click
+        // and keyboard menu key continue to work, but a normal click now opens
+        // the dropdown anchored to the chip itself.
+        if (sender is not FrameworkElement fe || fe.ContextMenu is null)
         {
             return;
         }
-        if (item.DataContext is not SessionCardViewModel card)
+        fe.ContextMenu.PlacementTarget = fe;
+        fe.ContextMenu.Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom;
+        fe.ContextMenu.IsOpen = true;
+        e.Handled = true;
+    }
+
+    private async void OnLabelMenuItemClicked(object sender, RoutedEventArgs e)
+    {
+        if (sender is not MenuItem item)
         {
             return;
         }
@@ -192,7 +213,68 @@ public partial class MainWindow : Window
             return;
         }
 
+        // DataContext on this inner MenuItem isn't always propagated the
+        // first time the "Set label" submenu opens (the custom Popup-based
+        // SubmenuHeader template realizes its child items lazily, and they
+        // can fire Click before DataContext inheritance settles). Walk up
+        // through the parent MenuItem chain to the ContextMenu and pull
+        // the SessionCardViewModel from whichever ancestor has it. This
+        // keeps the first click reliable.
+        var card = FindSessionCardContext(item);
+        if (card is null)
+        {
+            return;
+        }
+
         await _viewModel.Sessions.SetLabelAsync(card, type);
+    }
+
+    private void OnViewTokensClicked(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement element ||
+            element.DataContext is not SessionCardViewModel card)
+        {
+            return;
+        }
+
+        try
+        {
+            var window = new SessionTokensWindow(card, _cliAdapter, _copilotPaths)
+            {
+                Owner = this,
+            };
+            window.ShowDialog();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to open token usage window for {SessionId}.", card.Id);
+            _viewModel.Sessions.StatusMessage = $"Could not show tokens for {card.ShortId}: {ex.Message}";
+        }
+    }
+
+    private static SessionCardViewModel? FindSessionCardContext(MenuItem item)
+    {
+        // Walk up the logical tree (MenuItem → parent MenuItem → ContextMenu).
+        DependencyObject? cursor = item;
+        while (cursor is not null)
+        {
+            if (cursor is FrameworkElement fe && fe.DataContext is SessionCardViewModel card)
+            {
+                return card;
+            }
+            // ContextMenu's PlacementTarget points at the row we right-clicked.
+            if (cursor is ContextMenu menu)
+            {
+                if (menu.PlacementTarget is FrameworkElement target &&
+                    target.DataContext is SessionCardViewModel targetCard)
+                {
+                    return targetCard;
+                }
+                break;
+            }
+            cursor = LogicalTreeHelper.GetParent(cursor) ?? VisualTreeHelper.GetParent(cursor);
+        }
+        return null;
     }
 
     /// <summary>

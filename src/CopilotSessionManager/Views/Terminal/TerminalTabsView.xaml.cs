@@ -101,6 +101,96 @@ public partial class TerminalTabsView : UserControl
         }
 
         EnsureBinderForTab(control, tab);
+
+        // Auto-focus the terminal once layout settles so the user can start
+        // typing immediately after a tab loads / becomes visible. Loaded
+        // fires before the control is rendered, so defer to a low-priority
+        // Dispatcher push.
+        control.Dispatcher.BeginInvoke(
+            DispatcherPriority.Input,
+            new Action(() =>
+            {
+                if (control.IsVisible && control.Focusable)
+                {
+                    Keyboard.Focus(control);
+                }
+            }));
+    }
+
+    /// <summary>
+    /// Switching tabs (via header click, Ctrl+Tab, or programmatic) leaves
+    /// keyboard focus on the TabItem header. Push it down to the newly
+    /// active TerminalControl so the user can start typing immediately
+    /// without an extra click into the terminal surface.
+    /// </summary>
+    private void OnTabsSelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (sender is not TabControl tabs || tabs.SelectedItem is null)
+        {
+            return;
+        }
+        // Defer until after the new tab's content template materializes.
+        Dispatcher.BeginInvoke(
+            DispatcherPriority.Input,
+            new Action(() => FocusActiveTerminal(tabs)));
+    }
+
+    /// <summary>
+    /// Any click anywhere within the active tab's content area (the Border
+    /// background, the scroll-gutter, padding around the terminal) routes
+    /// keyboard focus to the embedded <see cref="TerminalControl"/>. Without
+    /// this, clicks that miss the terminal surface itself leave focus on a
+    /// non-input ancestor and the user's first keystroke is dropped.
+    /// </summary>
+    private void OnTerminalContentBorderPreviewMouseDown(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is not DependencyObject border)
+        {
+            return;
+        }
+        var terminal = FindDescendant<TerminalControl>(border);
+        if (terminal is not null && terminal.Focusable && !terminal.IsKeyboardFocusWithin)
+        {
+            Keyboard.Focus(terminal);
+        }
+    }
+
+    private static void FocusActiveTerminal(TabControl tabs)
+    {
+        if (tabs.SelectedItem is null)
+        {
+            return;
+        }
+        var container = tabs.ItemContainerGenerator.ContainerFromItem(tabs.SelectedItem)
+            as DependencyObject ?? tabs;
+        var terminal = FindDescendant<TerminalControl>(container);
+        if (terminal is not null && terminal.Focusable)
+        {
+            Keyboard.Focus(terminal);
+        }
+    }
+
+    private static T? FindDescendant<T>(DependencyObject? root) where T : DependencyObject
+    {
+        if (root is null)
+        {
+            return null;
+        }
+        if (root is T match)
+        {
+            return match;
+        }
+        var count = VisualTreeHelper.GetChildrenCount(root);
+        for (var i = 0; i < count; i++)
+        {
+            var child = VisualTreeHelper.GetChild(root, i);
+            var found = FindDescendant<T>(child);
+            if (found is not null)
+            {
+                return found;
+            }
+        }
+        return null;
     }
 
     /// <summary>

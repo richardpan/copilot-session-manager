@@ -34,6 +34,7 @@ public class ThemeResourceTests
     [InlineData("GitHubDark.xaml")]
     [InlineData("GitHubLight.xaml")]
     [InlineData("HighContrast.xaml")]
+    [InlineData("SynthwaveEighties.xaml")]
     public void ThemeDictionary_DefinesRequiredBrushKeys(string fileName)
     {
         RunSta(() =>

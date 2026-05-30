@@ -17,6 +17,7 @@ public sealed class ThemeManager
         ["GitHubDark"] = "Themes/GitHubDark.xaml",
         ["GitHubLight"] = "Themes/GitHubLight.xaml",
         ["CatppuccinMocha"] = "Themes/CatppuccinMocha.xaml",
+        ["SynthwaveEighties"] = "Themes/SynthwaveEighties.xaml",
         ["HighContrast"] = "Themes/HighContrast.xaml",
     };
 
@@ -39,6 +40,7 @@ public sealed class ThemeManager
         "GitHubDark",
         "GitHubLight",
         "CatppuccinMocha",
+        "SynthwaveEighties",
         "HighContrast",
     };
 

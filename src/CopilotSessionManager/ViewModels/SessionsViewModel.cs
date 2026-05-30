@@ -79,11 +79,6 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
     private readonly HashSet<SessionCardViewModel> _crashBannerObservedCards = new();
     private readonly HashSet<SessionType> _hiddenLabels = new();
     private readonly HashSet<ModelTier> _hiddenTiers = new();
-    // V1.4 (#113): producer chip visibility — null is "(unknown)" producer.
-    // OrdinalIgnoreCase mirrors the case-insensitive comparison we use when
-    // grouping cards into chips and matching cards back to chips.
-    private readonly HashSet<string> _hiddenProducers = new(StringComparer.OrdinalIgnoreCase);
-    private bool _hideUnknownProducer;
     // V1.3 (#148): doc-freshness chip visibility. The bucket enum collapses
     // Stale + VeryStale into a single user-facing "Stale" chip.
     private readonly HashSet<DocFreshnessFilterBucket> _hiddenDocFreshness = new();
@@ -494,7 +489,6 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
         {
             TierFilters.Add(new TierFilterChip(t, isVisible: true, this));
         }
-        ProducerFilters = new ObservableCollection<ProducerFilterChip>();
         DocsFilters = new ObservableCollection<DocsFilterChip>();
         foreach (var b in Enum.GetValues<DocFreshnessFilterBucket>())
         {
@@ -530,13 +524,6 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
     public ObservableCollection<TierFilterChip> TierFilters { get; }
 
     /// <summary>
-    /// V1.4 (#113): one filter chip per producer string discovered in
-    /// <see cref="Sessions"/> (plus an "(unknown)" chip if any session has no
-    /// recorded producer). Rebuilt incrementally as sessions appear.
-    /// </summary>
-    public ObservableCollection<ProducerFilterChip> ProducerFilters { get; }
-
-    /// <summary>
     /// V1.3 (#148): one filter chip per <see cref="DocFreshnessFilterBucket"/>
     /// (Fresh / Stale / Missing / N/A). Stale + VeryStale share a single
     /// "Stale" bucket because the user-facing column already collapses them
@@ -557,15 +544,6 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
     /// </summary>
     public string TiersFilterSummary => FormatFilterSummary(
         "Tiers", TierFilters.Count(c => c.IsVisible), TierFilters.Count);
-
-    /// <summary>
-    /// V1.2.3 (#142): caption shown on the Producers filter dropdown. The
-    /// chip set is built incrementally as sessions stream in, so the count
-    /// here grows over time and the property re-fires from
-    /// <see cref="EnsureProducerChip"/>.
-    /// </summary>
-    public string ProducersFilterSummary => FormatFilterSummary(
-        "Producers", ProducerFilters.Count(c => c.IsVisible), ProducerFilters.Count);
 
     /// <summary>
     /// V1.3 (#148): caption shown on the Docs filter dropdown — e.g.
@@ -1235,7 +1213,6 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
                 }
                 _byId[session.Id] = card;
                 Sessions.Add(card);
-                EnsureProducerChip(session.Producer);
                 inserted = true;
 
                 if (issueLinks is not null)
@@ -1423,22 +1400,12 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
             if ((ShowInactive || IsActive(card.Status))
                 && !_hiddenLabels.Contains(card.Label)
                 && !_hiddenTiers.Contains(card.ModelTier)
-                && IsProducerVisible(card.Producer)
                 && IsDocFreshnessVisible(card.DocFreshness)
                 && MatchesSearch(card, tokens))
             {
                 VisibleSessions.Add(card);
             }
         }
-    }
-
-    private bool IsProducerVisible(string? producer)
-    {
-        if (string.IsNullOrWhiteSpace(producer))
-        {
-            return !_hideUnknownProducer;
-        }
-        return !_hiddenProducers.Contains(producer);
     }
 
     private bool IsDocFreshnessVisible(DocFreshnessState state) =>
@@ -1561,49 +1528,6 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
             RebuildVisible();
             OnPropertyChanged(nameof(DocsFilterSummary));
         }
-    }
-
-    /// <summary>
-    /// V1.4 (#113): toggles whether sessions of <paramref name="producer"/>
-    /// are visible. Used by <see cref="ProducerFilterChip"/> bindings.
-    /// <c>null</c> is the special "(unknown)" producer chip.
-    /// </summary>
-    internal void SetProducerVisible(string? producer, bool isVisible)
-    {
-        bool changed;
-        if (string.IsNullOrWhiteSpace(producer))
-        {
-            changed = isVisible ? _hideUnknownProducer : !_hideUnknownProducer;
-            _hideUnknownProducer = !isVisible;
-        }
-        else
-        {
-            changed = isVisible ? _hiddenProducers.Remove(producer) : _hiddenProducers.Add(producer);
-        }
-        if (changed)
-        {
-            RebuildVisible();
-            OnPropertyChanged(nameof(ProducersFilterSummary));
-        }
-    }
-
-    /// <summary>
-    /// V1.4 (#113): adds a chip for <paramref name="producer"/> if no chip
-    /// already represents it. Idempotent. <c>null</c> / whitespace creates
-    /// the "(unknown)" chip.
-    /// </summary>
-    private void EnsureProducerChip(string? producer)
-    {
-        var key = string.IsNullOrWhiteSpace(producer) ? null : producer;
-        foreach (var chip in ProducerFilters)
-        {
-            if (string.Equals(chip.Producer, key, StringComparison.OrdinalIgnoreCase))
-            {
-                return;
-            }
-        }
-        ProducerFilters.Add(new ProducerFilterChip(key, isVisible: true, this));
-        OnPropertyChanged(nameof(ProducersFilterSummary));
     }
 
     /// <summary>
@@ -1765,36 +1689,6 @@ public sealed partial class TierFilterChip : ObservableObject
     };
 
     partial void OnIsVisibleChanged(bool value) => _owner.SetTierVisible(Tier, value);
-}
-
-/// <summary>
-/// Bindable toggle representing one producer string in the dashboard filter
-/// row (V1.4 #113). Two-way bound to a CheckBox; setting <see cref="IsVisible"/>
-/// calls back into <see cref="SessionsViewModel.SetProducerVisible"/>. A
-/// <see cref="Producer"/> of <c>null</c> represents the "(unknown)" bucket
-/// for sessions whose first event did not record a producer.
-/// </summary>
-public sealed partial class ProducerFilterChip : ObservableObject
-{
-    private readonly SessionsViewModel _owner;
-
-    [ObservableProperty]
-    private bool _isVisible;
-
-    public ProducerFilterChip(string? producer, bool isVisible, SessionsViewModel owner)
-    {
-        ArgumentNullException.ThrowIfNull(owner);
-        Producer = string.IsNullOrWhiteSpace(producer) ? null : producer;
-        _isVisible = isVisible;
-        _owner = owner;
-    }
-
-    public string? Producer { get; }
-
-    /// <summary>User-visible chip caption.</summary>
-    public string Label => Producer ?? "(unknown)";
-
-    partial void OnIsVisibleChanged(bool value) => _owner.SetProducerVisible(Producer, value);
 }
 
 /// <summary>

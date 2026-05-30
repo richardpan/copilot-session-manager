@@ -815,17 +815,31 @@ public sealed partial class SessionCardViewModel : ObservableObject
     };
 
     /// <summary>
-    /// Total tokens consumed across all models in this session, formatted
-    /// for at-a-glance display. Returns "—" when no usage data is available
+    /// Tokens consumed by this session, formatted for at-a-glance display as
+    /// <c>"&lt;input&gt; / &lt;output&gt;"</c> (billable tokens — cache reads/writes
+    /// and reasoning tokens are excluded because they use different billing
+    /// multipliers and summing them produces a number that maps to neither cost
+    /// nor context budget). Returns "—" when no usage data is available
     /// (active sessions before shutdown, or sessions without model events).
-    /// Format: ``999`` (raw) → ``1.2k`` (1k–9.9k) → ``12k`` (10k–999k) → ``1.2M`` (≥ 1M).
+    /// Each side is formatted: ``999`` → ``1.2k`` → ``12k`` → ``1.2M``.
+    /// Zero on either side renders as ``—`` (e.g. live sessions before the first
+    /// compaction event have output but no input total yet).
     /// </summary>
     public string TokensDisplay
     {
         get
         {
-            var own = OwnTokensRaw;
-            var display = FormatTokens(own);
+            var input = OwnInputRaw;
+            var output = OwnOutputRaw;
+            string display;
+            if (input == 0 && output == 0)
+            {
+                display = "—";
+            }
+            else
+            {
+                display = $"{FormatTokens(input)} / {FormatTokens(output)}";
+            }
             var subagentTokens = SubagentTokensTotal;
             return subagentTokens > 0
                 ? $"{display} (+{FormatTokens(subagentTokens)})"
@@ -833,8 +847,9 @@ public sealed partial class SessionCardViewModel : ObservableObject
         }
     }
 
-    /// <summary>Absolute token count for the session plus completed sub-agents.</summary>
-    public long TotalTokensRaw => OwnTokensRaw + SubagentTokensTotal;
+    /// <summary>Absolute billable token count (input + output) for the session
+    /// plus completed sub-agents. Used as the sort key for the Tokens column.</summary>
+    public long TotalTokensRaw => OwnInputRaw + OwnOutputRaw + SubagentTokensTotal;
 
     /// <summary>Tooltip on the Tokens column — exact number + provenance hint.</summary>
     public string TokensTooltip
@@ -888,6 +903,42 @@ public sealed partial class SessionCardViewModel : ObservableObject
             foreach (var usage in info.UsageByModel.Values)
             {
                 sum += usage.TotalTokens;
+            }
+            return sum;
+        }
+    }
+
+    private long OwnInputRaw
+    {
+        get
+        {
+            var info = _model.ModelInfo;
+            if (info?.UsageByModel is null || info.UsageByModel.Count == 0)
+            {
+                return 0;
+            }
+            long sum = 0;
+            foreach (var usage in info.UsageByModel.Values)
+            {
+                sum += usage.InputTokens;
+            }
+            return sum;
+        }
+    }
+
+    private long OwnOutputRaw
+    {
+        get
+        {
+            var info = _model.ModelInfo;
+            if (info?.UsageByModel is null || info.UsageByModel.Count == 0)
+            {
+                return 0;
+            }
+            long sum = 0;
+            foreach (var usage in info.UsageByModel.Values)
+            {
+                sum += usage.OutputTokens;
             }
             return sum;
         }

@@ -47,7 +47,8 @@
                     SelectedItem="{Binding ActiveTab, Mode=TwoWay}"
                     Background="{DynamicResource SurfaceBrush}"
                     BorderBrush="{DynamicResource BorderBrush}"
-                    BorderThickness="1">
+                    BorderThickness="1"
+                    SelectionChanged="OnTabsSelectionChanged">
             <TabControl.Resources>
                 <Style TargetType="{x:Type TabItem}">
                     <EventSetter Event="MouseDown" Handler="OnTabItemMouseDown" />
@@ -175,7 +176,8 @@
                 <DataTemplate DataType="{x:Type vm:TerminalTabViewModel}">
                     <Border BorderBrush="{DynamicResource BorderBrush}"
                             BorderThickness="0,1,0,0"
-                            Background="{DynamicResource SurfaceBrush}">
+                            Background="{DynamicResource SurfaceBrush}"
+                            PreviewMouseLeftButtonDown="OnTerminalContentBorderPreviewMouseDown">
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />

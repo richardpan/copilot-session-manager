@@ -44,7 +44,12 @@ internal sealed class SessionModelInfoReader
 
         string? selectedModel = null;
         string? lastToolModel = null;
+        string? lastAssistantModel = null;
         SessionModelInfo? shutdown = null;
+
+        // Live tally accumulated for active sessions that haven't emitted a
+        // session.shutdown event yet. Keyed by model id.
+        var liveUsage = new Dictionary<string, MutableUsage>(StringComparer.Ordinal);
 
         await foreach (var ev in _events.ReadAsync(eventsJsonl, cancellationToken)
             .ConfigureAwait(false))
@@ -76,6 +81,14 @@ internal sealed class SessionModelInfoReader
                     }
                     break;
 
+                case "assistant.message":
+                    AccumulateAssistantMessage(data, liveUsage, ref lastAssistantModel);
+                    break;
+
+                case "session.compaction_complete":
+                    AccumulateCompaction(data, liveUsage);
+                    break;
+
                 case "session.shutdown":
                     // Last shutdown wins (sessions sometimes restart); keep
                     // walking so we always pick the freshest one.
@@ -89,16 +102,110 @@ internal sealed class SessionModelInfoReader
             return shutdown;
         }
 
-        var current = lastToolModel ?? selectedModel;
-        if (current is null)
+        var current = lastAssistantModel ?? lastToolModel ?? selectedModel;
+        if (current is null && liveUsage.Count == 0)
         {
             return SessionModelInfo.Empty;
+        }
+
+        var usage = new Dictionary<string, ModelUsage>(StringComparer.Ordinal);
+        foreach (var kv in liveUsage)
+        {
+            usage[kv.Key] = kv.Value.ToImmutable();
+        }
+
+        // Fall back to whichever model carried the most requests if we still
+        // don't have a "current" hint but did accumulate usage.
+        if (current is null && usage.Count > 0)
+        {
+            current = usage.OrderByDescending(kv => kv.Value.RequestCount).First().Key;
         }
 
         return new SessionModelInfo(
             CurrentModelId: current,
             IsFromShutdown: false,
-            UsageByModel: new Dictionary<string, ModelUsage>(StringComparer.Ordinal));
+            UsageByModel: usage);
+    }
+
+    private static void AccumulateAssistantMessage(
+        JsonElement data,
+        Dictionary<string, MutableUsage> liveUsage,
+        ref string? lastAssistantModel)
+    {
+        if (!data.TryGetProperty("model", out var modelEl) ||
+            modelEl.ValueKind != JsonValueKind.String)
+        {
+            return;
+        }
+        var model = modelEl.GetString();
+        if (string.IsNullOrWhiteSpace(model))
+        {
+            return;
+        }
+        lastAssistantModel = model;
+
+        // Every assistant.message represents a model invocation, so always
+        // bump the request count. outputTokens is optional (Copilot only
+        // emits it on the final chunk of a streamed reply).
+        var bucket = GetOrCreate(liveUsage, model);
+        bucket.RequestCount += 1;
+
+        if (data.TryGetProperty("outputTokens", out var ot) &&
+            ot.ValueKind == JsonValueKind.Number &&
+            ot.TryGetInt64(out var outputTokens) &&
+            outputTokens > 0)
+        {
+            bucket.OutputTokens += outputTokens;
+        }
+    }
+
+    private static void AccumulateCompaction(
+        JsonElement data,
+        Dictionary<string, MutableUsage> liveUsage)
+    {
+        if (!data.TryGetProperty("compactionTokensUsed", out var usage) ||
+            usage.ValueKind != JsonValueKind.Object)
+        {
+            return;
+        }
+
+        var model = usage.TryGetProperty("model", out var m) && m.ValueKind == JsonValueKind.String
+            ? m.GetString()
+            : null;
+        if (string.IsNullOrWhiteSpace(model))
+        {
+            return;
+        }
+
+        var bucket = GetOrCreate(liveUsage, model);
+        bucket.InputTokens += ReadLong(usage, "inputTokens");
+        bucket.OutputTokens += ReadLong(usage, "outputTokens");
+        bucket.CacheReadTokens += ReadLong(usage, "cacheReadTokens");
+        bucket.CacheWriteTokens += ReadLong(usage, "cacheWriteTokens");
+        bucket.ReasoningTokens += ReadLong(usage, "reasoningTokens");
+    }
+
+    private static MutableUsage GetOrCreate(Dictionary<string, MutableUsage> map, string model)
+    {
+        if (!map.TryGetValue(model, out var bucket))
+        {
+            bucket = new MutableUsage();
+            map[model] = bucket;
+        }
+        return bucket;
+    }
+
+    private sealed class MutableUsage
+    {
+        public long InputTokens;
+        public long OutputTokens;
+        public long CacheReadTokens;
+        public long CacheWriteTokens;
+        public long ReasoningTokens;
+        public int RequestCount;
+
+        public ModelUsage ToImmutable() => new(
+            InputTokens, OutputTokens, CacheReadTokens, CacheWriteTokens, ReasoningTokens, RequestCount);
     }
 
     private SessionModelInfo? ParseShutdown(JsonElement data)

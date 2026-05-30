@@ -19,8 +19,15 @@ namespace CopilotSessionManager.Terminal;
 /// </summary>
 public sealed class ScreenTranscript
 {
-    private const long CaptureIntervalMs = 3000; // 3 seconds
+    private const long CaptureIntervalMs = 5000; // 5 seconds — slower means
+                                                 // fewer partial-state captures
+                                                 // during rapid TUI repaints.
     private const int DedupeWindowSize = 500;     // last N row hashes to remember
+
+    // Threshold (in matched rows) to confidently identify a real upward scroll
+    // vs an in-place repaint. Higher = more conservative, but too high means
+    // legitimate scrolls of just a few lines get missed entirely.
+    private const int ScrollMatchThreshold = 3;
 
     private readonly ScreenBuffer _buffer;
 
@@ -107,9 +114,10 @@ public sealed class ScreenTranscript
         //   3) Are NOT a prefix of the same-position new row (streaming)
         //   4) Don't appear anywhere on the new screen (truly gone)
         //   5) Haven't been pushed recently (dedup)
-        //   6) Live in the upper portion of the screen (bottom rows are
-        //      UI chrome and never legitimately scroll off)
-        var chromeRowThreshold = Math.Max(0, _prevRows - 3);
+        //   6) Live in the upper portion of the screen — the bottom ~6 rows
+        //      are persistent UI chrome (tab bar, slash hint, model status,
+        //      Working/input footer) that never legitimately scrolls off
+        var chromeRowThreshold = Math.Max(0, _prevRows - 6);
         for (var r = 0; r < Math.Min(rows, _prevRows); r++)
         {
             // Skip bottom rows — UI chrome (status bar, input box, hints).
@@ -134,6 +142,13 @@ public sealed class ScreenTranscript
             var newTrimmed = newText.TrimEnd();
             if (newTrimmed.Length > oldTrimmed.Length &&
                 newTrimmed.StartsWith(oldTrimmed, StringComparison.Ordinal))
+                continue;
+
+            // Skip if the row looks like Copilot CLI's own UI chrome
+            // (tab bar, navigation hint, numbered option). These never
+            // belong in scrollback even when they appear above the bottom
+            // chrome threshold.
+            if (LooksLikeUiChrome(oldTrimmed))
                 continue;
 
             // Skip if the old text still appears anywhere on the new screen
@@ -171,6 +186,71 @@ public sealed class ScreenTranscript
     }
 
     /// <summary>
+    /// Heuristic check: does the row look like Copilot CLI's own UI chrome
+    /// (tab bar, navigation hint, numbered option, separator decoration,
+    /// slash-command hint, model status line)?
+    /// </summary>
+    private static bool LooksLikeUiChrome(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return false;
+
+        var t = text.Trim();
+
+        // Tab bar — "[Session]   Gists" / "[Session]    Tabs" etc.
+        if (t.StartsWith("[Session]", StringComparison.Ordinal))
+            return true;
+
+        // Slash-command / @ shortcut hint bar — "@ files · # issues" /
+        // "/ commands · @ files · # issues".
+        if (t.StartsWith("@ files", StringComparison.Ordinal) ||
+            t.StartsWith("/ commands", StringComparison.Ordinal) ||
+            t.StartsWith("# issues", StringComparison.Ordinal))
+            return true;
+
+        // Model / status indicator line — "Claude Opus 4.7 (...) · high" /
+        // "GPT-5 mini · medium" / "Working · esc cancel · Claude Opus 4.7"
+        if ((t.Contains("Claude ", StringComparison.Ordinal) ||
+             t.Contains("GPT-", StringComparison.Ordinal) ||
+             t.Contains("Working", StringComparison.Ordinal)) &&
+            t.Contains(" · ", StringComparison.Ordinal))
+            return true;
+
+        // Tip / hint footer — "Tip: /experimental", "Hint: ..."
+        if (t.StartsWith("Tip:", StringComparison.Ordinal) ||
+            t.StartsWith("Hint:", StringComparison.Ordinal))
+            return true;
+
+        // Navigation hint — "↑/↓ to navigate · enter to select · esc to cancel"
+        if (t.Contains("to navigate", StringComparison.Ordinal) &&
+            t.Contains("to select", StringComparison.Ordinal))
+            return true;
+
+        // Numbered prompt options — "1. Yes" / "> 2. No (Esc)"
+        if (t.Length <= 40 &&
+            System.Text.RegularExpressions.Regex.IsMatch(
+                t, @"^[>›\s]*\d+\.\s+\S"))
+            return true;
+
+        // Box-drawing-only rows (the dialog corners/edges).
+        var allBoxDrawing = true;
+        foreach (var ch in t)
+        {
+            if (!(ch is ' ' or '─' or '│' or '┌' or '┐' or '└' or '┘' or '├'
+                    or '┤' or '┬' or '┴' or '┼' or '╭' or '╮' or '╯' or '╰'
+                    or '═' or '║' or '╔' or '╗' or '╚' or '╝'))
+            {
+                allBoxDrawing = false;
+                break;
+            }
+        }
+        if (allBoxDrawing && t.Length > 0)
+            return true;
+
+        return false;
+    }
+
+    /// <summary>
     /// Detect whether the screen content shifted upward by some K rows
     /// between the previous and current snapshots. Returns K if a clear
     /// shift is detected, or 0 if no scroll occurred (in-place redraws,
@@ -179,12 +259,12 @@ public sealed class ScreenTranscript
     /// <remarks>
     /// Heuristic: for each candidate K from 1..maxK, count how many
     /// non-blank rows satisfy <c>currentText[r-K] == prevText[r]</c>.
-    /// If any K produces enough matches (≥ 3 rows), treat it as a real
-    /// upward scroll of K. Otherwise the screen changed in place.
+    /// If any K produces enough matches (≥ <see cref="ScrollMatchThreshold"/>
+    /// rows), treat it as a real upward scroll of K. Otherwise the screen
+    /// changed in place.
     /// </remarks>
     private static int DetectUpwardScrollShift(string[] currentText, string[] prevText, int rows, int prevRows)
     {
-        const int matchThreshold = 3;
         var maxK = Math.Min(prevRows, rows) / 2;
         if (maxK < 1)
             return 0;
@@ -200,7 +280,7 @@ public sealed class ScreenTranscript
                 if (prev == currentText[r - k])
                 {
                     matches++;
-                    if (matches >= matchThreshold)
+                    if (matches >= ScrollMatchThreshold)
                         return k;
                 }
             }

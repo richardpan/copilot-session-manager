@@ -46,7 +46,14 @@ public static class VtKeyEncoder
                     : new byte[] { 0x09 };
 
             case TerminalKey.Enter:
-                return new byte[] { 0x0D };
+                // Plain Enter → CR (submit). Shift+Enter → LF (insert newline
+                // in multiline input). This matches the convention used by
+                // the Copilot CLI, Claude Code, and most readline-based TUI
+                // apps. Without it, Shift+Enter would be indistinguishable
+                // from Enter and always submit, breaking multiline input.
+                return (modifiers & TerminalKeyModifiers.Shift) != 0
+                    ? new byte[] { 0x0A }
+                    : new byte[] { 0x0D };
 
             case TerminalKey.Backspace:
                 // Ctrl+Backspace is conventionally word-delete (BS, 0x08)
