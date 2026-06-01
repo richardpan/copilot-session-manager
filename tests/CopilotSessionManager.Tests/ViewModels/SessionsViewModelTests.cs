@@ -182,22 +182,24 @@ public class SessionsViewModelTests
     }
 
     [Fact]
-    public async Task ResortInPlace_PutsAwaitingApprovalFirst()
+    public async Task ResortInPlace_SortsByUpdatedAtDesc_WithinSameLifecycleBucket()
     {
+        // After replacing StatusPriority with Lifecycle in the sort comparator,
+        // sessions in the same star/lifecycle bucket sort by UpdatedAt desc.
         var (vm, disc, _, _, _) = CreateSut(new[]
         {
-            Build("idle", SessionStatus.Idle),
-            Build("inactive", SessionStatus.Inactive),
+            Build("old",    SessionStatus.Idle, updatedAt: Now.AddMinutes(-10)),
+            Build("oldest", SessionStatus.Idle, updatedAt: Now.AddHours(-1)),
         });
 
         disc.RaiseChanged(new[]
         {
-            Build("idle", SessionStatus.Idle),
-            Build("inactive", SessionStatus.Inactive),
-            Build("urgent", SessionStatus.AwaitingApproval),
+            Build("old",    SessionStatus.Idle,             updatedAt: Now.AddMinutes(-10)),
+            Build("oldest", SessionStatus.Idle,             updatedAt: Now.AddHours(-1)),
+            Build("urgent", SessionStatus.AwaitingApproval, updatedAt: Now),
         });
 
-        vm.Sessions[0].Id.Should().Be("urgent");
+        vm.Sessions.Select(s => s.Id).Should().Equal(new[] { "urgent", "old", "oldest" });
         await vm.DisposeAsync();
     }
 

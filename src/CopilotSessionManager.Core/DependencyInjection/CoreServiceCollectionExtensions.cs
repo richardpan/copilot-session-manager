@@ -126,6 +126,7 @@ public static class CoreServiceCollectionExtensions
         services.TryAddSingleton<ISessionFolderReader, SessionFolderReader>();
         services.AddSessionDisplayNames();
         services.AddSessionStars();
+        services.AddSessionLifecycleStore();
         services.AddWrapUpStateStore();
         services.AddDeletedSessionRegistry();
         services.TryAddSingleton<ISessionDeletionService, SessionDeletionService>();
@@ -197,6 +198,29 @@ public static class CoreServiceCollectionExtensions
                 JsonSessionStarStore.DefaultFileName);
             var logger = sp.GetRequiredService<ILogger<JsonSessionStarStore>>();
             return new JsonSessionStarStore(path, logger);
+        });
+
+        return services;
+    }
+
+    /// <summary>
+    /// Registers <see cref="ISessionLifecycleStore"/> backed by
+    /// <see cref="JsonSessionLifecycleStore"/> at
+    /// <c>%LOCALAPPDATA%\CopilotSessionManager\lifecycle.json</c> for the
+    /// user-controlled Active/Closed pill on each session row. Safe to call
+    /// multiple times.
+    /// </summary>
+    public static IServiceCollection AddSessionLifecycleStore(this IServiceCollection services)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        services.TryAddSingleton<ISessionLifecycleStore>(sp =>
+        {
+            var path = System.IO.Path.Combine(
+                AppPaths.LocalAppDataDirectory,
+                JsonSessionLifecycleStore.DefaultFileName);
+            var logger = sp.GetRequiredService<ILogger<JsonSessionLifecycleStore>>();
+            return new JsonSessionLifecycleStore(path, logger);
         });
 
         return services;

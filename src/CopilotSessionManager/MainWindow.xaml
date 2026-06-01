@@ -659,13 +659,13 @@
                         </Grid>
                     </StackPanel>
                 </Border>
-                <CheckBox Content="Show inactive"
-                          IsChecked="{Binding Sessions.ShowInactive}"
+                <CheckBox Content="Show closed"
+                          IsChecked="{Binding Sessions.ShowClosedLifecycle}"
                           Foreground="{DynamicResource TextPrimaryBrush}"
                           VerticalAlignment="Center"
                           Margin="0,2,16,2"
-                          AutomationProperties.Name="Show inactive sessions"
-                          AutomationProperties.HelpText="When checked, the dashboard also lists sessions whose process is no longer running." />
+                          AutomationProperties.Name="Show closed sessions"
+                          AutomationProperties.HelpText="When checked, the dashboard also lists sessions you've marked as Closed (work item wrapped up)." />
                 <TextBlock Text="{Binding Sessions.ActiveCount, StringFormat='{}{0} active'}"
                            Foreground="{DynamicResource SuccessBrush}"
                            VerticalAlignment="Center"
@@ -1203,6 +1203,44 @@
                                              AutomationProperties.HelpText="Press Enter to save the new name. Press Esc to cancel without saving." />
                                 </Grid>
                                 <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
+                                    <Border CornerRadius="3"
+                                            Padding="4,0"
+                                            Margin="0,0,6,0"
+                                            VerticalAlignment="Center"
+                                            Cursor="Hand"
+                                            ToolTip="{Binding LifecycleTooltip}"
+                                            AutomationProperties.Name="{Binding LifecyclePillText}"
+                                            AutomationProperties.HelpText="Lifecycle. Click to toggle between Active and Closed.">
+                                        <Border.InputBindings>
+                                            <MouseBinding MouseAction="LeftClick" Command="{Binding ToggleLifecycleCommand}" />
+                                        </Border.InputBindings>
+                                        <Border.Style>
+                                            <Style TargetType="Border">
+                                                <Setter Property="Background" Value="{DynamicResource LifecycleActiveBrush}" />
+                                                <Setter Property="BorderThickness" Value="0" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsLifecycleClosed}" Value="True">
+                                                        <Setter Property="Background" Value="Transparent" />
+                                                        <Setter Property="BorderThickness" Value="1" />
+                                                        <Setter Property="BorderBrush" Value="{DynamicResource TextMutedBrush}" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Border.Style>
+                                        <TextBlock FontSize="11" FontWeight="SemiBold">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock">
+                                                    <Setter Property="Text" Value="{Binding LifecyclePillText}" />
+                                                    <Setter Property="Foreground" Value="White" />
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsLifecycleClosed}" Value="True">
+                                                            <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
+                                    </Border>
                                     <Border Background="{Binding LabelBrush}"
                                             CornerRadius="3"
                                             Padding="4,0"
@@ -1229,6 +1267,20 @@
                                                    Foreground="White"
                                                    FontSize="11"
                                                    FontWeight="SemiBold" />
+                                    </Border>
+                                    <Border CornerRadius="3"
+                                            Padding="4,0"
+                                            Margin="0,0,6,0"
+                                            VerticalAlignment="Center"
+                                            Visibility="Collapsed">
+                                        <TextBlock Text="{Binding LifecyclePillText}" />
+                                    </Border>
+                                    <Border CornerRadius="3"
+                                            Padding="4,0"
+                                            Margin="0,0,6,0"
+                                            VerticalAlignment="Center"
+                                            Visibility="Collapsed">
+                                        <TextBlock Text="{Binding LifecyclePillText}" />
                                     </Border>
                                     <TextBlock Foreground="{DynamicResource TextSecondaryBrush}" FontSize="13" VerticalAlignment="Center">
                                         <Hyperlink Foreground="{DynamicResource PrimaryActionBrush}"

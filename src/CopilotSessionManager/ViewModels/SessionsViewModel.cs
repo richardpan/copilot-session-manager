@@ -62,6 +62,7 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
     private readonly Native.IWindowActivator? _windowActivator;
     private readonly ISessionDisplayNameStore? _displayNameStore;
     private readonly ISessionStarStore? _starStore;
+    private readonly ISessionLifecycleStore? _lifecycleStore;
     private readonly ISessionDeletionService? _deletionService;
     private readonly Func<SessionDeletionPrompt, bool>? _confirmDelete;
     private readonly IDocFreshnessService? _docFreshness;
@@ -87,6 +88,16 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
 
     [ObservableProperty]
     private bool _showInactive = true;
+
+    /// <summary>
+    /// Toolbar toggle controlling whether sessions marked
+    /// <see cref="SessionLifecycleState.Closed"/> are visible. Defaults to
+    /// false: closed sessions are hidden until the user opts in. This is
+    /// independent of <see cref="ShowInactive"/>, which filters by the
+    /// technical process status, not the user-controlled work-item lifecycle.
+    /// </summary>
+    [ObservableProperty]
+    private bool _showClosedLifecycle;
 
     [ObservableProperty]
     private bool _isLoading;
@@ -421,7 +432,8 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
         IDocFreshnessService? docFreshness,
         IWrapUpStateStore? wrapUpStateStore,
         IClipboardService? clipboardService,
-        Core.Settings.AppSettings? appSettings)
+        Core.Settings.AppSettings? appSettings,
+        ISessionLifecycleStore? lifecycleStore = null)
     {
         ArgumentNullException.ThrowIfNull(discovery);
         ArgumentNullException.ThrowIfNull(labelStore);
@@ -453,6 +465,7 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
         _windowActivator = windowActivator;
         _displayNameStore = displayNameStore;
         _starStore = starStore;
+        _lifecycleStore = lifecycleStore;
         _deletionService = deletionService;
         _confirmDelete = confirmDelete;
         _docFreshness = docFreshness;
@@ -468,6 +481,11 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
         if (_starStore is not null)
         {
             _starStore.StarsChanged += OnStarStoreChanged;
+        }
+
+        if (_lifecycleStore is not null)
+        {
+            _lifecycleStore.LifecycleChanged += OnLifecycleStoreChanged;
         }
 
         if (_wrapUpStateStore is not null)
@@ -606,7 +624,7 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
         }
         Sessions.Clear();
         _byId.Clear();
-        ApplySnapshot(snapshot, labels, new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase), new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase), new Dictionary<string, DateTimeOffset>(StringComparer.OrdinalIgnoreCase));
+        ApplySnapshot(snapshot, labels, new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase), new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase), new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase), new Dictionary<string, DateTimeOffset>(StringComparer.OrdinalIgnoreCase));
     }
 
     /// <summary>
@@ -639,7 +657,7 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
         }
         Sessions.Clear();
         _byId.Clear();
-        ApplySnapshot(snapshot, labels, new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase), new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase), new Dictionary<string, DateTimeOffset>(StringComparer.OrdinalIgnoreCase));
+        ApplySnapshot(snapshot, labels, new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase), new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase), new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase), new Dictionary<string, DateTimeOffset>(StringComparer.OrdinalIgnoreCase));
     }
 
     /// <summary>
@@ -1024,6 +1042,8 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
 
     partial void OnShowInactiveChanged(bool value) => RebuildVisible();
 
+    partial void OnShowClosedLifecycleChanged(bool value) => RebuildVisible();
+
     partial void OnSearchTextChanged(string value) => RebuildVisible();
 
     private void OnSessionCardsCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
@@ -1080,10 +1100,8 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
             if (_byId.TryGetValue(e.SessionId, out var card))
             {
                 card.UpdateLabel(e.NewType);
-                if (_hiddenLabels.Count > 0)
-                {
-                    RebuildVisible();
-                }
+                ResortInPlace();
+                RebuildVisible();
             }
         });
     }
@@ -1097,6 +1115,7 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
         var newLabels = new Dictionary<string, SessionType>(StringComparer.OrdinalIgnoreCase);
         var newDisplayNames = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
         var newStars = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+        var newLifecycleClosed = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
         var newWrapUps = new Dictionary<string, DateTimeOffset>(StringComparer.OrdinalIgnoreCase);
         foreach (var session in snapshot)
         {
@@ -1144,6 +1163,22 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
                     }
                 }
 
+                if (_lifecycleStore is not null)
+                {
+                    try
+                    {
+                        var state = await _lifecycleStore
+                            .GetAsync(session.Id, cancellationToken)
+                            .ConfigureAwait(false);
+                        newLifecycleClosed[session.Id] = state == SessionLifecycleState.Closed;
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogDebug(ex, "Could not read lifecycle state for {Id}.", session.Id);
+                        newLifecycleClosed[session.Id] = false;
+                    }
+                }
+
                 if (_wrapUpStateStore is not null)
                 {
                     try
@@ -1164,7 +1199,7 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
             }
         }
 
-        _dispatcher.Post(() => ApplySnapshot(snapshot, newLabels, newDisplayNames, newStars, newWrapUps));
+        _dispatcher.Post(() => ApplySnapshot(snapshot, newLabels, newDisplayNames, newStars, newLifecycleClosed, newWrapUps));
     }
 
     private void ApplySnapshot(
@@ -1172,6 +1207,7 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
         IReadOnlyDictionary<string, SessionType> newLabels,
         IReadOnlyDictionary<string, string?> newDisplayNames,
         IReadOnlyDictionary<string, bool> newStars,
+        IReadOnlyDictionary<string, bool> newLifecycleClosed,
         IReadOnlyDictionary<string, DateTimeOffset> newWrapUps)
     {
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -1190,6 +1226,9 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
                 var label = newLabels.TryGetValue(session.Id, out var t) ? t : SessionType.Exploratory;
                 var displayName = newDisplayNames.TryGetValue(session.Id, out var d) ? d : null;
                 var isStarred = newStars.TryGetValue(session.Id, out var s) && s;
+                var lifecycle = newLifecycleClosed.TryGetValue(session.Id, out var closed) && closed
+                    ? SessionLifecycleState.Closed
+                    : SessionLifecycleState.Active;
                 var cardLogger = _loggerFactory?.CreateLogger<SessionCardViewModel>();
                 var issueLinks = TryCreateIssueLinks(session);
                 var card = new SessionCardViewModel(
@@ -1206,7 +1245,9 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
                     wrapUpStateStore: _wrapUpStateStore,
                     clipboardService: _clipboardService,
                     appSettings: _appSettings,
-                    openEmbeddedTerminal: _openEmbeddedTerminal);
+                    openEmbeddedTerminal: _openEmbeddedTerminal,
+                    lifecycleStore: _lifecycleStore,
+                    lifecycle: lifecycle);
                 if (newWrapUps.TryGetValue(session.Id, out var wrapTs))
                 {
                     card.SetWrapUpRequestedAt(wrapTs);
@@ -1375,10 +1416,21 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
                 return byStar;
             }
 
-            var byStatus = StatusPriority(a.Status).CompareTo(StatusPriority(b.Status));
-            return byStatus != 0
-                ? byStatus
-                : b.Model.UpdatedAt.CompareTo(a.Model.UpdatedAt);
+            // Active sessions come before Closed within each star bucket.
+            var byLifecycle = (a.IsLifecycleClosed ? 1 : 0).CompareTo(b.IsLifecycleClosed ? 1 : 0);
+            if (byLifecycle != 0)
+            {
+                return byLifecycle;
+            }
+
+            // Group same-label sessions together (enum declaration order).
+            var byLabel = ((int)a.Label).CompareTo((int)b.Label);
+            if (byLabel != 0)
+            {
+                return byLabel;
+            }
+
+            return b.Model.UpdatedAt.CompareTo(a.Model.UpdatedAt);
         });
 
         for (var i = 0; i < sorted.Count; i++)
@@ -1398,6 +1450,7 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
         foreach (var card in Sessions)
         {
             if ((ShowInactive || IsActive(card.Status))
+                && (ShowClosedLifecycle || !card.IsLifecycleClosed)
                 && !_hiddenLabels.Contains(card.Label)
                 && !_hiddenTiers.Contains(card.ModelTier)
                 && IsDocFreshnessVisible(card.DocFreshness)
@@ -1564,6 +1617,25 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
         });
     }
 
+    /// <summary>
+    /// Mirrors <see cref="OnStarStoreChanged"/> for the user-controlled
+    /// Active/Closed pill. Updates the card and re-runs the visible filter
+    /// so a newly-closed session disappears from the default view (and the
+    /// reopen action brings it back).
+    /// </summary>
+    private void OnLifecycleStoreChanged(object? sender, SessionLifecycleChangedEventArgs e)
+    {
+        _dispatcher.Post(() =>
+        {
+            if (_byId.TryGetValue(e.SessionId, out var card))
+            {
+                card.ApplyLifecycleState(e.State);
+                ResortInPlace();
+                RebuildVisible();
+            }
+        });
+    }
+
     private static bool IsActive(SessionStatus status) =>
         status is SessionStatus.Working
             or SessionStatus.AwaitingApproval
@@ -1604,6 +1676,10 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
         if (_starStore is not null)
         {
             _starStore.StarsChanged -= OnStarStoreChanged;
+        }
+        if (_lifecycleStore is not null)
+        {
+            _lifecycleStore.LifecycleChanged -= OnLifecycleStoreChanged;
         }
         if (_wrapUpStateStore is not null)
         {

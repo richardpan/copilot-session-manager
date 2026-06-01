@@ -31,6 +31,7 @@
     <SolidColorBrush x:Key="LinkBrush"><SolidColorBrush.Color><Color A="255" R="1" G="205" B="254" /></SolidColorBrush.Color></SolidColorBrush>
 
     <SolidColorBrush x:Key="SuccessBrush"><SolidColorBrush.Color><Color A="255" R="114" G="247" B="174" /></SolidColorBrush.Color></SolidColorBrush>
+    <SolidColorBrush x:Key="LifecycleActiveBrush"><SolidColorBrush.Color><Color A="255" R="31" G="181" B="112" /></SolidColorBrush.Color></SolidColorBrush>
     <SolidColorBrush x:Key="SuccessBorderBrush"><SolidColorBrush.Color><Color A="255" R="92" G="219" B="151" /></SolidColorBrush.Color></SolidColorBrush>
     <SolidColorBrush x:Key="DangerBrush"><SolidColorBrush.Color><Color A="255" R="255" G="80" B="120" /></SolidColorBrush.Color></SolidColorBrush>
     <SolidColorBrush x:Key="ErrorBrush"><SolidColorBrush.Color><Color A="255" R="255" G="80" B="120" /></SolidColorBrush.Color></SolidColorBrush>

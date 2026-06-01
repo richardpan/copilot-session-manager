@@ -62,6 +62,8 @@ public sealed partial class SessionCardViewModel : ObservableObject
     private readonly Func<string, Task>? _onDeleted;
     private readonly ISessionStarStore? _starStore;
     private bool _isStarred;
+    private readonly ISessionLifecycleStore? _lifecycleStore;
+    private SessionLifecycleState _lifecycle;
     private readonly ILogger _logger;
     private string? _lastActionMessage;
     private string? _displayNameOverride;
@@ -408,7 +410,9 @@ public sealed partial class SessionCardViewModel : ObservableObject
         IWrapUpStateStore? wrapUpStateStore,
         IClipboardService? clipboardService,
         AppSettings? appSettings,
-        Action<SessionCardViewModel>? openEmbeddedTerminal)
+        Action<SessionCardViewModel>? openEmbeddedTerminal,
+        ISessionLifecycleStore? lifecycleStore = null,
+        SessionLifecycleState lifecycle = SessionLifecycleState.Active)
     {
         ArgumentNullException.ThrowIfNull(model);
         ArgumentNullException.ThrowIfNull(timeProvider);
@@ -430,6 +434,8 @@ public sealed partial class SessionCardViewModel : ObservableObject
         _onDeleted = onDeleted;
         _starStore = starStore;
         _isStarred = isStarred;
+        _lifecycleStore = lifecycleStore;
+        _lifecycle = lifecycle;
         _logger = logger ?? NullLogger.Instance;
         _openMergeWizard = openMergeWizard;
         _issueLinks = issueLinks;
@@ -450,6 +456,7 @@ public sealed partial class SessionCardViewModel : ObservableObject
         CancelRenameCommand = new RelayCommand(CancelRename, () => _isEditingTitle);
         DeleteCommand = new AsyncRelayCommand(DeleteAsync, CanDelete);
         ToggleStarCommand = new AsyncRelayCommand(ToggleStarAsync, () => _starStore is not null);
+        ToggleLifecycleCommand = new AsyncRelayCommand(ToggleLifecycleAsync, () => _lifecycleStore is not null);
         MergeIntoCommand = new RelayCommand(InvokeMergeWizard, () => _openMergeWizard is not null);
         WrapUpCommand = new AsyncRelayCommand(WrapUpAsync, CanWrapUp);
     }
@@ -1142,6 +1149,80 @@ public sealed partial class SessionCardViewModel : ObservableObject
         }
         IsStarred = isStarred;
         OnPropertyChanged(nameof(StarTooltip));
+    }
+
+    /// <summary>
+    /// User-controlled lifecycle flag (Active / Closed). Independent of the
+    /// technical <see cref="Status"/> — a "Closed" session may still be running,
+    /// and an "Active" session may have been crashed for weeks. Defaults to
+    /// <see cref="SessionLifecycleState.Active"/>.
+    /// </summary>
+    public SessionLifecycleState Lifecycle
+    {
+        get => _lifecycle;
+        private set
+        {
+            if (SetProperty(ref _lifecycle, value))
+            {
+                OnPropertyChanged(nameof(IsLifecycleClosed));
+                OnPropertyChanged(nameof(LifecyclePillText));
+                OnPropertyChanged(nameof(LifecycleBrush));
+                OnPropertyChanged(nameof(LifecycleTooltip));
+            }
+        }
+    }
+
+    /// <summary>Convenience flag for XAML triggers and filters.</summary>
+    public bool IsLifecycleClosed => _lifecycle == SessionLifecycleState.Closed;
+
+    /// <summary>Pill text shown on the row.</summary>
+    public string LifecyclePillText => IsLifecycleClosed ? "Closed" : "Active";
+
+    /// <summary>
+    /// Brush key looked up against the active theme — Active reuses
+    /// <c>AccentBrush</c>, Closed reuses <c>TextMutedBrush</c>, both already
+    /// defined in every theme. Resolves at bind time via a DynamicResource in XAML.
+    /// </summary>
+    public string LifecycleBrush => IsLifecycleClosed ? "TextMutedBrush" : "AccentBrush";
+
+    /// <summary>Tooltip surfaced on the lifecycle pill.</summary>
+    public string LifecycleTooltip => IsLifecycleClosed
+        ? "Closed — work item wrapped up. Click to reopen."
+        : "Active — work item still in flight. Click to mark closed.";
+
+    /// <summary>
+    /// Bound to the lifecycle pill click. Disabled in unit-test contexts
+    /// that don't wire an <see cref="ISessionLifecycleStore"/>.
+    /// </summary>
+    public IAsyncRelayCommand ToggleLifecycleCommand { get; private set; } = new AsyncRelayCommand(static () => Task.CompletedTask, static () => false);
+
+    private async Task ToggleLifecycleAsync()
+    {
+        if (_lifecycleStore is null)
+        {
+            return;
+        }
+        var next = IsLifecycleClosed ? SessionLifecycleState.Active : SessionLifecycleState.Closed;
+        try
+        {
+            await _lifecycleStore.SetAsync(_model.Id, next, CancellationToken.None).ConfigureAwait(true);
+            ApplyLifecycleState(next);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to toggle lifecycle for {SessionId}.", _model.Id);
+            LastActionMessage = $"Could not update lifecycle: {ex.Message}";
+        }
+    }
+
+    /// <summary>
+    /// Cross-component lifecycle update path — the dashboard view-model calls
+    /// this when <see cref="ISessionLifecycleStore.LifecycleChanged"/> fires
+    /// for this session id.
+    /// </summary>
+    internal void ApplyLifecycleState(SessionLifecycleState state)
+    {
+        Lifecycle = state;
     }
 
     /// <summary>

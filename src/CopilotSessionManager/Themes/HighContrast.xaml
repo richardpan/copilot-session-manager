@@ -24,6 +24,7 @@
     <SolidColorBrush x:Key="LinkBrush" Color="{x:Static win:SystemColors.HotTrackColor}" />
 
     <SolidColorBrush x:Key="SuccessBrush" Color="{x:Static win:SystemColors.HighlightColor}" />
+    <SolidColorBrush x:Key="LifecycleActiveBrush" Color="{x:Static win:SystemColors.HighlightColor}" />
     <SolidColorBrush x:Key="SuccessBorderBrush" Color="{x:Static win:SystemColors.WindowTextColor}" />
     <SolidColorBrush x:Key="DangerBrush" Color="{x:Static win:SystemColors.HighlightColor}" />
     <SolidColorBrush x:Key="ErrorBrush" Color="{x:Static win:SystemColors.HighlightColor}" />
