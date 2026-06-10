@@ -10,7 +10,7 @@ using Xunit;
 namespace CopilotSessionManager.Tests.ViewModels;
 
 /// <summary>
-/// Tests covering the user-controlled Active/Closed lifecycle pill: ctor
+/// Tests covering the user-controlled Open/Closed lifecycle pill: ctor
 /// hydration, toggle persistence, idempotent ApplyLifecycleState, and
 /// command CanExecute when no store is wired.
 /// </summary>
@@ -33,13 +33,13 @@ public class SessionCardViewModelLifecycleTests
         Locks: Array.Empty<SessionLockInfo>());
 
     [Fact]
-    public void Defaults_to_active_when_no_store_wired()
+    public void Defaults_to_open_when_no_store_wired()
     {
-        var card = CreateCard(store: null, initial: SessionLifecycleState.Active);
+        var card = CreateCard(store: null, initial: SessionLifecycleState.Open);
 
-        card.Lifecycle.Should().Be(SessionLifecycleState.Active);
+        card.Lifecycle.Should().Be(SessionLifecycleState.Open);
         card.IsLifecycleClosed.Should().BeFalse();
-        card.LifecyclePillText.Should().Be("Active");
+        card.LifecyclePillText.Should().Be("Open");
         card.ToggleLifecycleCommand.CanExecute(null).Should().BeFalse();
     }
 
@@ -57,7 +57,7 @@ public class SessionCardViewModelLifecycleTests
     public async Task ToggleLifecycleCommand_persists_and_updates_state()
     {
         var store = new FakeStore();
-        var card = CreateCard(store, initial: SessionLifecycleState.Active);
+        var card = CreateCard(store, initial: SessionLifecycleState.Open);
 
         await card.ToggleLifecycleCommand.ExecuteAsync(null);
 
@@ -67,14 +67,14 @@ public class SessionCardViewModelLifecycleTests
 
         await card.ToggleLifecycleCommand.ExecuteAsync(null);
 
-        card.Lifecycle.Should().Be(SessionLifecycleState.Active);
-        store.LastState.Should().Be(SessionLifecycleState.Active);
+        card.Lifecycle.Should().Be(SessionLifecycleState.Open);
+        store.LastState.Should().Be(SessionLifecycleState.Open);
     }
 
     [Fact]
     public async Task Toggle_raises_lifecycle_property_changes()
     {
-        var card = CreateCard(store: new FakeStore(), initial: SessionLifecycleState.Active);
+        var card = CreateCard(store: new FakeStore(), initial: SessionLifecycleState.Open);
         var changes = new System.Collections.Generic.List<string?>();
         card.PropertyChanged += (_, e) => changes.Add(e.PropertyName);
 
@@ -126,7 +126,7 @@ public class SessionCardViewModelLifecycleTests
         public event EventHandler<SessionLifecycleChangedEventArgs>? LifecycleChanged;
 
         public Task<SessionLifecycleState> GetAsync(string sessionId, CancellationToken cancellationToken = default) =>
-            Task.FromResult(LastSessionId == sessionId ? LastState : SessionLifecycleState.Active);
+            Task.FromResult(LastSessionId == sessionId ? LastState : SessionLifecycleState.Open);
 
         public Task<System.Collections.Generic.IReadOnlySet<string>> GetClosedAsync(CancellationToken cancellationToken = default) =>
             Task.FromResult<System.Collections.Generic.IReadOnlySet<string>>(new System.Collections.Generic.HashSet<string>());

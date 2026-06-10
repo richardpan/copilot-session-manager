@@ -48,7 +48,7 @@ public sealed class JsonSessionLifecycleStore : ISessionLifecycleStore
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(sessionId);
         var cache = await EnsureLoadedAsync(cancellationToken).ConfigureAwait(false);
-        return cache.Contains(sessionId) ? SessionLifecycleState.Closed : SessionLifecycleState.Active;
+        return cache.Contains(sessionId) ? SessionLifecycleState.Closed : SessionLifecycleState.Open;
     }
 
     public async Task<IReadOnlySet<string>> GetClosedAsync(CancellationToken cancellationToken = default)

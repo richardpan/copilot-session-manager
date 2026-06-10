@@ -412,7 +412,7 @@ public sealed partial class SessionCardViewModel : ObservableObject
         AppSettings? appSettings,
         Action<SessionCardViewModel>? openEmbeddedTerminal,
         ISessionLifecycleStore? lifecycleStore = null,
-        SessionLifecycleState lifecycle = SessionLifecycleState.Active)
+        SessionLifecycleState lifecycle = SessionLifecycleState.Open)
     {
         ArgumentNullException.ThrowIfNull(model);
         ArgumentNullException.ThrowIfNull(timeProvider);
@@ -1152,10 +1152,10 @@ public sealed partial class SessionCardViewModel : ObservableObject
     }
 
     /// <summary>
-    /// User-controlled lifecycle flag (Active / Closed). Independent of the
+    /// User-controlled lifecycle flag (Open / Closed). Independent of the
     /// technical <see cref="Status"/> — a "Closed" session may still be running,
-    /// and an "Active" session may have been crashed for weeks. Defaults to
-    /// <see cref="SessionLifecycleState.Active"/>.
+    /// and an "Open" session may have been crashed for weeks. Defaults to
+    /// <see cref="SessionLifecycleState.Open"/>.
     /// </summary>
     public SessionLifecycleState Lifecycle
     {
@@ -1176,7 +1176,7 @@ public sealed partial class SessionCardViewModel : ObservableObject
     public bool IsLifecycleClosed => _lifecycle == SessionLifecycleState.Closed;
 
     /// <summary>Pill text shown on the row.</summary>
-    public string LifecyclePillText => IsLifecycleClosed ? "Closed" : "Active";
+    public string LifecyclePillText => IsLifecycleClosed ? "Closed" : "Open";
 
     /// <summary>
     /// Brush key looked up against the active theme — Active reuses
@@ -1188,7 +1188,7 @@ public sealed partial class SessionCardViewModel : ObservableObject
     /// <summary>Tooltip surfaced on the lifecycle pill.</summary>
     public string LifecycleTooltip => IsLifecycleClosed
         ? "Closed — work item wrapped up. Click to reopen."
-        : "Active — work item still in flight. Click to mark closed.";
+        : "Open — work item still in flight. Click to mark closed.";
 
     /// <summary>
     /// Bound to the lifecycle pill click. Disabled in unit-test contexts
@@ -1202,7 +1202,7 @@ public sealed partial class SessionCardViewModel : ObservableObject
         {
             return;
         }
-        var next = IsLifecycleClosed ? SessionLifecycleState.Active : SessionLifecycleState.Closed;
+        var next = IsLifecycleClosed ? SessionLifecycleState.Open : SessionLifecycleState.Closed;
         try
         {
             await _lifecycleStore.SetAsync(_model.Id, next, CancellationToken.None).ConfigureAwait(true);

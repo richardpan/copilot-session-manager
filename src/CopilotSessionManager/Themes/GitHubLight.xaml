@@ -33,7 +33,7 @@
 
     <!-- ── Semantic ─────────────────────────────────────────────── -->
     <SolidColorBrush x:Key="SuccessBrush"        Color="#1A7F37" />
-    <SolidColorBrush x:Key="LifecycleActiveBrush" Color="#116329" />
+    <SolidColorBrush x:Key="LifecycleOpenBrush" Color="#116329" />
     <SolidColorBrush x:Key="SuccessBorderBrush"  Color="#1A7F37" />
     <SolidColorBrush x:Key="DangerBrush"         Color="#CF222E" />
     <SolidColorBrush x:Key="ErrorBrush"          Color="#CF222E" />

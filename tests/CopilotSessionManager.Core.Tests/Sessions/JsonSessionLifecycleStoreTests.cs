@@ -35,7 +35,7 @@ public class JsonSessionLifecycleStoreTests : IDisposable
     public async Task GetAsync_DefaultsActive_ForUnknownId()
     {
         var store = NewStore();
-        (await store.GetAsync("nope")).Should().Be(SessionLifecycleState.Active);
+        (await store.GetAsync("nope")).Should().Be(SessionLifecycleState.Open);
     }
 
     [Fact]
@@ -75,13 +75,13 @@ public class JsonSessionLifecycleStoreTests : IDisposable
             lastArgs = args;
         };
 
-        await store.SetAsync("abc", SessionLifecycleState.Active);
-        await store.SetAsync("abc", SessionLifecycleState.Active); // no-op
+        await store.SetAsync("abc", SessionLifecycleState.Open);
+        await store.SetAsync("abc", SessionLifecycleState.Open); // no-op
 
         raised.Should().Be(1);
         lastArgs!.SessionId.Should().Be("abc");
-        lastArgs.State.Should().Be(SessionLifecycleState.Active);
-        (await store.GetAsync("abc")).Should().Be(SessionLifecycleState.Active);
+        lastArgs.State.Should().Be(SessionLifecycleState.Open);
+        (await store.GetAsync("abc")).Should().Be(SessionLifecycleState.Open);
     }
 
     [Fact]
@@ -91,7 +91,7 @@ public class JsonSessionLifecycleStoreTests : IDisposable
         await store.SetAsync("a", SessionLifecycleState.Closed);
         await store.SetAsync("b", SessionLifecycleState.Closed);
         await store.SetAsync("c", SessionLifecycleState.Closed);
-        await store.SetAsync("b", SessionLifecycleState.Active);
+        await store.SetAsync("b", SessionLifecycleState.Open);
 
         var all = await store.GetClosedAsync();
         all.Should().BeEquivalentTo(new[] { "a", "c" });

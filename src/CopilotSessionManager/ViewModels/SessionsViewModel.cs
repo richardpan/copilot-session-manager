@@ -1228,7 +1228,7 @@ public sealed partial class SessionsViewModel : ObservableObject, IAsyncDisposab
                 var isStarred = newStars.TryGetValue(session.Id, out var s) && s;
                 var lifecycle = newLifecycleClosed.TryGetValue(session.Id, out var closed) && closed
                     ? SessionLifecycleState.Closed
-                    : SessionLifecycleState.Active;
+                    : SessionLifecycleState.Open;
                 var cardLogger = _loggerFactory?.CreateLogger<SessionCardViewModel>();
                 var issueLinks = TryCreateIssueLinks(session);
                 var card = new SessionCardViewModel(

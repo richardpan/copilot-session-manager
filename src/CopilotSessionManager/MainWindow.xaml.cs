@@ -187,16 +187,23 @@ public partial class MainWindow : Window
     private void OnLabelChipClicked(object sender, MouseButtonEventArgs e)
     {
         // Single left-click on the label chip should open the same submenu the
-        // ContextMenu provided previously (#?). Without this handler users had
+        // ContextMenu provided previously. Without this handler users had
         // to right-click — which is non-obvious for a touch-style chip. The
         // ContextMenu is still wired up via Border.ContextMenu so right-click
         // and keyboard menu key continue to work, but a normal click now opens
         // the dropdown anchored to the chip itself.
+        //
+        // We MUST set DataContext on the ContextMenu explicitly — manually
+        // opening a ContextMenu via IsOpen=true skips the WPF code path that
+        // would otherwise inherit DataContext from the PlacementTarget, so
+        // MenuItems further down would see a null DataContext and the click
+        // handler couldn't resolve the source SessionCardViewModel.
         if (sender is not FrameworkElement fe || fe.ContextMenu is null)
         {
             return;
         }
         fe.ContextMenu.PlacementTarget = fe;
+        fe.ContextMenu.DataContext = fe.DataContext;
         fe.ContextMenu.Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom;
         fe.ContextMenu.IsOpen = true;
         e.Handled = true;
@@ -213,14 +220,13 @@ public partial class MainWindow : Window
             return;
         }
 
-        // DataContext on this inner MenuItem isn't always propagated the
-        // first time the "Set label" submenu opens (the custom Popup-based
-        // SubmenuHeader template realizes its child items lazily, and they
-        // can fire Click before DataContext inheritance settles). Walk up
-        // through the parent MenuItem chain to the ContextMenu and pull
-        // the SessionCardViewModel from whichever ancestor has it. This
-        // keeps the first click reliable.
-        var card = FindSessionCardContext(item);
+        // Resolve the source SessionCardViewModel via a chain of fallbacks:
+        // (1) the MenuItem's inherited DataContext (works when ContextMenu was
+        //     opened via right-click OR via OnLabelChipClicked, which now
+        //     propagates DataContext explicitly);
+        // (2) walk up to the ContextMenu and read PlacementTarget.DataContext
+        //     for any edge case where inheritance wasn't yet propagated.
+        var card = (item.DataContext as SessionCardViewModel) ?? FindSessionCardContext(item);
         if (card is null)
         {
             return;
